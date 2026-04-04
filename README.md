@@ -71,10 +71,10 @@ All settings via `.env`:
 
 | Variable | Default | Description |
 |---|---|---|
-| `K2_HOST` | `192.168.178.192` | Printer IP address |
+| `K2_HOST` | `192.168.0.0` | Printer IP address |
 | `K2_SSH_USER` | `root` | SSH user on printer |
 | `K2_SSH_KEY` | `/root/.ssh/id_k2` | Path to SSH private key on host |
-| `MOONRAKER_URL` | `http://192.168.178.192:7125` | Moonraker API URL |
+| `MOONRAKER_URL` | `http://192.168.0.0:7125` | Moonraker API URL |
 | `CFS_JSON_PATH` | `/mnt/UDISK/...` | CFS JSON path on printer |
 | `PORT` | `8080` | Web UI port |
 

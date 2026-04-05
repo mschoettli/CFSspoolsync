@@ -24,7 +24,7 @@ function setupNav() {
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => switchView(btn.dataset.view));
   });
-  document.getElementById('btnRefreshCFS').addEventListener('click', loadCFS);
+  
   document.getElementById('btnSyncK2').addEventListener('click', syncFromK2);
   document.getElementById('btnAddSpool').addEventListener('click', openAddSpoolModal);
   document.getElementById('filterStatus').addEventListener('change', e => {

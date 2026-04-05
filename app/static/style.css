@@ -800,3 +800,26 @@ body {
   .spools-table { font-size: 0.8rem; }
   .spools-table th, .spools-table td { padding: 8px 10px; }
 }
+
+@media (max-width: 680px) {
+  .spools-table thead { display: none; }
+  .spools-table, .spools-table tbody, .spools-table tr, .spools-table td { display: block; width: 100%; }
+  .spools-table tr {
+    background: var(--card);
+    border: none;
+    border-radius: var(--radius);
+    margin-bottom: 8px;
+    padding: 12px 14px;
+    outline: 4px solid var(--bg);
+  }
+  .spools-table td {
+    border: none;
+    padding: 4px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .spools-table td:empty { display: none; }
+  .actions-cell { flex-wrap: wrap; margin-top: 8px; }
+  .weight-mini-bar { width: 60px; }
+}

@@ -22,6 +22,40 @@ Filament management for the Creality K2 Plus / K2 Combo with CFS (Creality Filam
 - Moonraker running on the printer (`http://<printer-ip>:7125`)
 - SSH access from the Docker host to the printer
 
+## Prerequisites
+
+### 1. Install Docker
+
+**Linux (Debian/Ubuntu):**
+```bash
+curl -fsSL https://get.docker.com | sh
+```
+
+**Windows / Mac:** Download [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+
+### 2. Create SSH Key for K2 printer
+
+The app connects to the printer via SSH to read the CFS JSON file. Create a key on the Docker host and copy it to the printer:
+
+```bash
+# Create key (no passphrase)
+ssh-keygen -t ed25519 -f /root/.ssh/id_k2 -N ""
+
+# Copy key to printer (enter printer password once)
+ssh-copy-id -i /root/.ssh/id_k2 root@<printer-ip>
+
+# Test connection
+ssh -i /root/.ssh/id_k2 root@<printer-ip> "echo OK"
+```
+
+> If you get a host key warning (REMOTE HOST IDENTIFICATION HAS CHANGED), run:
+> ```bash
+> ssh-keygen -f '/root/.ssh/known_hosts' -R '<printer-ip>'
+> ```
+> Then retry `ssh-copy-id`.
+
+---
+
 ## Quick Start
 
 ### Option A – Fertig gebautes Image von GitHub (empfohlen)

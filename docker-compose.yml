@@ -5,16 +5,9 @@ services:
     image: ghcr.io/mschoettli/cfsspoolsync:latest
     container_name: cfsspoolsync
     restart: unless-stopped
-    ports:
-      - "${PORT:-8080}:8080"
+    network_mode: host
     volumes:
       - ./data:/app/data
-      - ${K2_SSH_KEY:-/root/.ssh/id_k2}:${K2_SSH_KEY:-/root/.ssh/id_k2}:ro
+      - /root/.ssh/id_k2:/root/.ssh/id_k2:ro
     env_file:
       - .env
-    networks:
-      - cfsspoolsync-net
-
-networks:
-  cfsspoolsync-net:
-    driver: bridge

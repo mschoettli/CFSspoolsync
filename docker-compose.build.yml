@@ -1,8 +1,11 @@
 version: "3.8"
 
+# Lokale Entwicklung – baut das Image direkt aus dem Quellcode
+# Verwendung: docker compose -f docker-compose.build.yml up -d --build
+
 services:
   cfsspoolsync:
-    image: ghcr.io/mschoettli/cfsspoolsync:latest
+    build: .
     container_name: cfsspoolsync
     restart: unless-stopped
     ports:

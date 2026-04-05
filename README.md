@@ -24,44 +24,27 @@ Filament management for the Creality K2 Plus / K2 Combo with CFS (Creality Filam
 
 ## Quick Start
 
-### 1. Clone
+### Option A – Fertig gebautes Image von GitHub (empfohlen)
+
+Kein `git clone`, kein Build nötig – Docker holt das Image direkt von GitHub:
 
 ```bash
-git clone https://github.com/your-username/cfsspoolsync.git
-cd cfsspoolsync
-```
-
-### 2. SSH Key
-
-Create an SSH key on the Docker host and copy it to the printer:
-
-```bash
-ssh-keygen -t ed25519 -f /root/.ssh/id_k2 -N ""
-ssh-copy-id -i /root/.ssh/id_k2 root@<printer-ip>
-```
-
-Test the connection:
-
-```bash
-ssh -i /root/.ssh/id_k2 root@<printer-ip> "echo OK"
-```
-
-### 3. Configure
-
-```bash
+curl -O https://raw.githubusercontent.com/mschoettli/cfsspoolsync/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/mschoettli/cfsspoolsync/main/.env.example
 cp .env.example .env
 nano .env
+docker compose up -d
 ```
 
-Set your printer IP and paths in `.env`.
-
-### 4. Start
+### Option B – Selbst bauen aus dem Quellcode
 
 ```bash
-docker compose up -d --build
+git clone https://github.com/mschoettli/cfsspoolsync.git
+cd cfsspoolsync
+cp .env.example .env
+nano .env
+docker compose -f docker-compose.build.yml up -d --build
 ```
-
-Open the web UI: `http://<docker-host-ip>:8080`
 
 ---
 
@@ -71,10 +54,10 @@ All settings via `.env`:
 
 | Variable | Default | Description |
 |---|---|---|
-| `K2_HOST` | `192.168.0.0` | Printer IP address |
+| `K2_HOST` | `192.168.178.192` | Printer IP address |
 | `K2_SSH_USER` | `root` | SSH user on printer |
 | `K2_SSH_KEY` | `/root/.ssh/id_k2` | Path to SSH private key on host |
-| `MOONRAKER_URL` | `http://192.168.0.0:7125` | Moonraker API URL |
+| `MOONRAKER_URL` | `http://192.168.178.192:7125` | Moonraker API URL |
 | `CFS_JSON_PATH` | `/mnt/UDISK/...` | CFS JSON path on printer |
 | `PORT` | `8080` | Web UI port |
 

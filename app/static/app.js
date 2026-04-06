@@ -243,22 +243,23 @@ function renderSpools() {
     return;
   }
 
-  el.innerHTML = `
-    <table class="spools-table">
-      <thead>
-        <tr>
-          <th>Filament</th>
-          <th>Hersteller</th>
-          <th>Verbleibend</th>
-          <th>Temp.</th>
-          <th>Status</th>
-          <th>Aktionen</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${list.map(s => renderSpoolRow(s)).join('')}
-      </tbody>
-    </table>`;
+  const aktiv = list.filter(s => s.status === 'aktiv').sort((a,b) => (a.cfs_slot||0) - (b.cfs_slot||0));
+  const lager = list.filter(s => s.status === 'lager');
+  const leer  = list.filter(s => s.status === 'leer');
+
+  const thead = `<thead><tr>
+    <th>Filament</th><th>Hersteller</th><th>Verbleibend</th>
+    <th>Temp.</th><th>Status</th><th>Aktionen</th>
+  </tr></thead>`;
+
+  const sep = (label) => `<tr><td colspan="6" style="padding:16px 14px 6px;font-size:0.75rem;font-weight:600;color:var(--text-mid);border-top:2px solid var(--border-hi);border-bottom:1px solid var(--border)">${label}</td></tr>`;
+
+  let rows = '';
+  if (aktiv.length) rows += sep('CFS Slots') + aktiv.map(s => renderSpoolRow(s)).join('');
+  if (lager.length) rows += sep('Lager') + lager.map(s => renderSpoolRow(s)).join('');
+  if (leer.length)  rows += sep('Leer') + leer.map(s => renderSpoolRow(s)).join('');
+
+  el.innerHTML = `<table class="spools-table">${thead}<tbody>${rows}</tbody></table>`;
 
   el.querySelectorAll('.btn-edit-spool').forEach(btn =>
     btn.addEventListener('click', () => openEditModal(parseInt(btn.dataset.id))));
@@ -274,7 +275,7 @@ function renderSpoolRow(s) {
   const pct  = s.initial_weight > 0 ? (s.remaining_weight / s.initial_weight) * 100 : 0;
   const cls  = pct > 50 ? 'high' : pct > 20 ? 'medium' : 'low';
 
-  const slotLabel = s.cfs_slot ? `Spule ${s.cfs_slot}` : '';
+  const slotLabel = s.cfs_slot ? `Slot ${s.cfs_slot}` : '';
 
   let actions = `<button class="btn btn-ghost btn-sm btn-edit-spool" data-id="${s.id}">Bearbeiten</button>`;
   if (s.status === 'lager') {
@@ -307,7 +308,7 @@ function renderSpoolRow(s) {
       <td class="monospace" style="font-size:0.72rem;color:var(--text-mid)">${s.nozzle_min}–${s.nozzle_max}°C</td>
       <td>
         <span class="spool-status-badge ${s.status}">
-          ${s.status === 'aktiv' ? `Slot ${slotLabel}` : s.status}
+          ${s.status === 'aktiv' ? slotLabel : s.status === 'lager' ? 'Lager' : s.status === 'leer' ? 'Leer' : s.status}
         </span>
       </td>
       <td><div class="actions-cell">${actions}</div></td>

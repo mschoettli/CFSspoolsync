@@ -428,9 +428,14 @@ async function markEmpty(id) {
 }
 
 // ── Modal: Add Spool ──────────────────────────────────────────────────────
+let _addSpoolFormSetup = false;
 function openAddSpoolModal() {
+  _addSpoolFormSetup = false;
   openModal('Neue Spule hinzufügen', buildAddSpoolForm());
-  setupAddSpoolForm();
+  if (!_addSpoolFormSetup) {
+    _addSpoolFormSetup = true;
+    setupAddSpoolForm();
+  }
 }
 
 function buildAddSpoolForm() {
@@ -442,10 +447,11 @@ function buildAddSpoolForm() {
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-ghost btn-sm" id="btnReadFromK2" disabled>Von K2 lesen</button>
-        <label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0" title="Etikett fotografieren">
-          📷 Etikett scannen
-          <input type="file" id="labelImageInput" accept="image/*" capture="environment" style="display:none">
-        </label>
+        <button class="btn btn-ghost btn-sm" id="btnScanLabel" type="button">📷 Etikett scannen</button>
+        <input type="file" id="labelImageInput" accept="image/*" style="display:none">
+        <video id="labelVideo" style="display:none;width:100%;border-radius:8px;margin-top:8px" autoplay playsinline></video>
+        <canvas id="labelCanvas" style="display:none"></canvas>
+        <button class="btn btn-primary btn-sm" id="btnCapture" type="button" style="display:none;margin-top:8px">📸 Foto aufnehmen</button>
       </div>
       <span id="k2ReadStatus" style="font-size:0.72rem;color:var(--text-muted);margin-top:6px;display:block"></span>
     </div>
@@ -553,9 +559,50 @@ function setupAddSpoolForm() {
   document.getElementById('btnCancelSpool').addEventListener('click', closeModal);
 
   // ── Label image scan ──
+  document.getElementById('btnScanLabel').addEventListener('click', async () => {
+    const video = document.getElementById('labelVideo');
+    const captureBtn = document.getElementById('btnCapture');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      video.srcObject = stream;
+      video.style.display = 'block';
+      captureBtn.style.display = 'inline-block';
+      captureBtn.onclick = async () => {
+        const canvas = document.getElementById('labelCanvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        stream.getTracks().forEach(t => t.stop());
+        video.style.display = 'none';
+        captureBtn.style.display = 'none';
+        const statusEl = document.getElementById('k2ReadStatus');
+        statusEl.textContent = '📷 Bild wird analysiert…';
+        statusEl.style.color = 'var(--text-muted)';
+        canvas.toBlob(async (blob) => {
+          try {
+            const fd = new FormData();
+            fd.append('file', blob, 'label.jpg');
+            const res = await fetch('/api/scan-label', { method: 'POST', body: fd });
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+            fillFormFromOCR(data);
+            statusEl.textContent = '✓ Etikett erkannt: ' + (data.material || '?') + ' ' + (data.brand || '');
+            statusEl.style.color = 'var(--accent)';
+          } catch(err) {
+            statusEl.textContent = '✗ ' + err.message;
+            statusEl.style.color = 'var(--warn)';
+          }
+        }, 'image/jpeg', 0.95);
+      };
+    } catch(err) {
+      document.getElementById('labelImageInput').click();
+    }
+  });
+
   document.getElementById('labelImageInput').addEventListener('change', async e => {
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file) { console.log('No file'); return; }
+    console.log('File size:', file.size, 'type:', file.type);
     const statusEl = document.getElementById('k2ReadStatus');
     statusEl.textContent = '📷 Bild wird analysiert…';
     statusEl.style.color = 'var(--text-muted)';

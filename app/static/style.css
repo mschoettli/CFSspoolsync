@@ -55,6 +55,16 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
+  gap: 24px;
+}
+
+#header #nav {
+  display: flex;
+  padding: 0;
+  background: none;
+  border: none;
+  flex: 1;
+  justify-content: flex-start;
 }
 
 .logo {
@@ -117,12 +127,7 @@ body {
 .status-temp  { color: var(--text-mid); }
 
 /* ── Navigation ────────────────────────────────────────────────────────────── */
-#nav {
-  display: flex;
-  padding: 0 28px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
+
 
 .nav-btn {
   font-family: var(--font-ui);

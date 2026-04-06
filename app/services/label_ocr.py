@@ -131,17 +131,34 @@ def ocr_image(image_bytes: bytes) -> Optional[str]:
         import io
 
         img = Image.open(io.BytesIO(image_bytes))
+        try:
+            from PIL import ImageOps
+            img = ImageOps.exif_transpose(img)
+        except Exception:
+            pass
 
-        # Upscale small images for better OCR
+        # Upscale for better OCR
         w, h = img.size
-        if w < 800:
-            scale = 800 / w
+        scale = max(1, 1200 / max(w, h))
+        if scale > 1:
             img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
 
         # Convert to grayscale
         img = img.convert("L")
 
-        text = pytesseract.image_to_string(img, config="--psm 6")
+        # Increase contrast
+        from PIL import ImageEnhance, ImageFilter
+        img = ImageEnhance.Contrast(img).enhance(2.0)
+        img = ImageEnhance.Sharpness(img).enhance(2.0)
+        img = img.filter(ImageFilter.SHARPEN)
+
+        # Try multiple PSM modes and take best result
+        configs = ["--psm 6", "--psm 4", "--psm 3"]
+        texts = []
+        for cfg in configs:
+            t = pytesseract.image_to_string(img, config=cfg)
+            texts.append(t)
+        text = max(texts, key=lambda t: len(t.strip()))
         logger.info(f"OCR extracted {len(text)} chars")
         return text
 

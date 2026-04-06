@@ -167,7 +167,7 @@ def get_cfs_state(db: Session = Depends(get_db)):
         "slots": [
             {
                 "slot": i,
-                "key": ["T1A", "T1B", "T1C", "T1D"][i - 1],
+                "key": f"Slot {i}",
                 "spool": slot_map.get(i),
             }
             for i in range(1, 5)

@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.database import Base, engine, get_db
 from app.models import Spool, PrintJob
 from app.services import moonraker, ssh_client
+from app.services.label_ocr import ocr_image, parse_label
 
 logging.basicConfig(
     level=logging.INFO,
@@ -343,6 +344,21 @@ def list_jobs(limit: int = Query(30, le=100), db: Session = Depends(get_db)):
             }
         )
     return result
+
+
+@app.post("/api/scan-label")
+async def scan_label(file: UploadFile = File(...)):
+    """Upload a photo of a filament spool label and extract filament data via OCR."""
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(400, "Bild zu gross (max 10 MB)")
+
+    text = ocr_image(content)
+    if text is None:
+        raise HTTPException(503, "OCR fehlgeschlagen – Tesseract nicht verfügbar")
+
+    data = parse_label(text)
+    return data
 
 
 # ─── Static frontend (must be last) ──────────────────────────────────────────

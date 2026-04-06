@@ -13,23 +13,28 @@
 
 <!-- ── Header ─────────────────────────────────────────────────────────────── -->
 <header id="header">
-  <div class="header-left">
-    <div class="logo">
-      <svg width="26" height="26" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">
-        <circle cx="14" cy="14" r="13" fill="#222736" stroke="#3a4155" stroke-width="1"/>
-        <circle cx="14" cy="14" r="10" fill="none" stroke="#2dd4a0" stroke-width="1.5" opacity="0.25"/>
-        <circle cx="14" cy="14" r="7.5" fill="none" stroke="#2dd4a0" stroke-width="1.5" opacity="0.55"/>
-        <circle cx="14" cy="14" r="5" fill="none" stroke="#2dd4a0" stroke-width="1.5" opacity="0.85"/>
-        <circle cx="14" cy="14" r="2.5" fill="#1a1f2e"/>
-        <circle cx="14" cy="14" r="1.2" fill="#2dd4a0"/>
-        <line x1="14" y1="1" x2="14" y2="7" stroke="#2dd4a0" stroke-width="1" stroke-dasharray="2 2" opacity="0.6"/>
-        <line x1="14" y1="21" x2="14" y2="27" stroke="#2dd4a0" stroke-width="1" stroke-dasharray="2 2" opacity="0.6"/>
-        <line x1="1" y1="14" x2="7" y2="14" stroke="#2dd4a0" stroke-width="1" stroke-dasharray="2 2" opacity="0.6"/>
-        <line x1="21" y1="14" x2="27" y2="14" stroke="#2dd4a0" stroke-width="1" stroke-dasharray="2 2" opacity="0.6"/>
-      </svg>
-      <span class="logo-text"><span style="color:#f0f4ff">CFS</span><em>spoolsync</em></span>
-    </div>
+  <div class="logo">
+    <svg width="26" height="26" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">
+      <circle cx="14" cy="14" r="13" fill="#222736" stroke="#3a4155" stroke-width="1"/>
+      <circle cx="14" cy="14" r="10" fill="none" stroke="#2dd4a0" stroke-width="1.5" opacity="0.25"/>
+      <circle cx="14" cy="14" r="7.5" fill="none" stroke="#2dd4a0" stroke-width="1.5" opacity="0.55"/>
+      <circle cx="14" cy="14" r="5" fill="none" stroke="#2dd4a0" stroke-width="1.5" opacity="0.85"/>
+      <circle cx="14" cy="14" r="2.5" fill="#1a1f2e"/>
+      <circle cx="14" cy="14" r="1.2" fill="#2dd4a0"/>
+      <line x1="14" y1="1" x2="14" y2="7" stroke="#2dd4a0" stroke-width="1" stroke-dasharray="2 2" opacity="0.6"/>
+      <line x1="14" y1="21" x2="14" y2="27" stroke="#2dd4a0" stroke-width="1" stroke-dasharray="2 2" opacity="0.6"/>
+      <line x1="1" y1="14" x2="7" y2="14" stroke="#2dd4a0" stroke-width="1" stroke-dasharray="2 2" opacity="0.6"/>
+      <line x1="21" y1="14" x2="27" y2="14" stroke="#2dd4a0" stroke-width="1" stroke-dasharray="2 2" opacity="0.6"/>
+    </svg>
+    <span class="logo-text"><span style="color:#f0f4ff">CFS</span><em>spoolsync</em></span>
   </div>
+
+  <nav id="nav">
+    <button class="nav-btn active" data-view="cfs">Spulen</button>
+    <button class="nav-btn" data-view="lager">Lager</button>
+    <button class="nav-btn" data-view="jobs">Druckjobs</button>
+  </nav>
+
   <div class="printer-status" id="printerStatus">
     <span class="status-dot" id="statusDot"></span>
     <span class="status-label" id="statusLabel">Verbinde…</span>
@@ -37,13 +42,6 @@
     <span class="status-temp" id="statusTemps"></span>
   </div>
 </header>
-
-<!-- ── Navigation ─────────────────────────────────────────────────────────── -->
-<nav id="nav">
-  <button class="nav-btn active" data-view="cfs">Spulen</button>
-  <button class="nav-btn" data-view="lager">Lager</button>
-  <button class="nav-btn" data-view="jobs">Druckjobs</button>
-</nav>
 
 <!-- ── Main ───────────────────────────────────────────────────────────────── -->
 <main id="main">

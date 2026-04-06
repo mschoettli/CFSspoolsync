@@ -350,6 +350,7 @@ def list_jobs(limit: int = Query(30, le=100), db: Session = Depends(get_db)):
 async def scan_label(file: UploadFile = File(...)):
     """Upload a photo of a filament spool label and extract filament data via OCR."""
     content = await file.read()
+    with open("/tmp/browser_upload.jpg", "wb") as _f: _f.write(content)
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(400, "Bild zu gross (max 10 MB)")
 

@@ -24,7 +24,7 @@ function setupNav() {
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => switchView(btn.dataset.view));
   });
-  
+  document.getElementById('btnRefreshCFS').addEventListener('click', loadCFS);
   document.getElementById('btnSyncK2').addEventListener('click', syncFromK2);
   document.getElementById('btnAddSpool').addEventListener('click', openAddSpoolModal);
   document.getElementById('filterStatus').addEventListener('change', e => {
@@ -436,12 +436,18 @@ function openAddSpoolModal() {
 function buildAddSpoolForm() {
   return `
     <div class="k2-read-box">
-      <p>Optional: Daten automatisch vom K2 lesen</p>
-      <div class="k2-slot-selector">
-        ${[1,2,3,4].map(n => `<button class="slot-btn" data-slot="${n}">T1${'ABCD'[n-1]}</button>`).join('')}
+      <p>Daten automatisch einlesen</p>
+      <div class="k2-slot-selector" style="margin-bottom:10px">
+        ${[1,2,3,4].map(n => `<button class="slot-btn" data-slot="${n}">Spule ${n}</button>`).join('')}
       </div>
-      <button class="btn btn-ghost btn-sm" id="btnReadFromK2" disabled>Von K2 lesen</button>
-      <span id="k2ReadStatus" style="font-size:0.72rem;color:var(--text-muted);margin-left:8px"></span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" id="btnReadFromK2" disabled>Von K2 lesen</button>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0" title="Etikett fotografieren">
+          📷 Etikett scannen
+          <input type="file" id="labelImageInput" accept="image/*" capture="environment" style="display:none">
+        </label>
+      </div>
+      <span id="k2ReadStatus" style="font-size:0.72rem;color:var(--text-muted);margin-top:6px;display:block"></span>
     </div>
 
     <form id="addSpoolForm">
@@ -546,6 +552,28 @@ function setupAddSpoolForm() {
 
   document.getElementById('btnCancelSpool').addEventListener('click', closeModal);
 
+  // ── Label image scan ──
+  document.getElementById('labelImageInput').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const statusEl = document.getElementById('k2ReadStatus');
+    statusEl.textContent = '📷 Bild wird analysiert…';
+    statusEl.style.color = 'var(--text-muted)';
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/scan-label', { method: 'POST', body: fd });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      fillFormFromOCR(data);
+      statusEl.textContent = '✓ Etikett erkannt';
+      statusEl.style.color = 'var(--accent)';
+    } catch (err) {
+      statusEl.textContent = '✗ Scan fehlgeschlagen: ' + err.message;
+      statusEl.style.color = 'var(--warn)';
+    }
+  });
+
   document.getElementById('addSpoolForm').addEventListener('submit', async e => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -588,7 +616,21 @@ function fillFormFromK2(data) {
   set('remaining_weight', data.remaining_grams);
 }
 
-// ── Modal: Edit Spool ─────────────────────────────────────────────────────
+function fillFormFromOCR(data) {
+  const f = document.getElementById('addSpoolForm');
+  const set = (name, val) => { if (val !== undefined && val !== null && val !== '' && val !== 0) f.querySelector(`[name="${name}"]`).value = val; };
+  set('material',        data.material);
+  set('color',           data.color);
+  set('brand',           data.brand);
+  set('nozzle_min',      data.nozzle_min);
+  set('nozzle_max',      data.nozzle_max);
+  set('bed_temp',        data.bed_max || data.bed_min);
+  set('diameter',        data.diameter);
+  set('initial_weight',  data.weight_g);
+  set('remaining_weight', data.weight_g);
+}
+
+
 function openEditModal(id) {
   const s = state.spools.find(x => x.id === id);
   if (!s) return;

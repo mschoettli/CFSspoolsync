@@ -57,16 +57,18 @@ function switchView(name) {
 // ── Load functions ─────────────────────────────────────────────────────────
 async function loadAll() {
   await Promise.all([loadPrinterStatus(), loadCFS(), loadSpools()]);
-  renderDashboardStats();
+  renderCfsMeta();
 }
 
 async function loadPrinterStatus() {
   try {
     state.printer = await apiFetch('/api/printer/status');
     renderPrinterStatus();
+    renderCfsMeta();
   } catch {
     state.printer = { reachable: false };
     renderPrinterStatus();
+    renderCfsMeta();
   }
 }
 
@@ -75,8 +77,12 @@ async function loadCFS() {
     const data = await apiFetch('/api/cfs');
     state.cfs = data.slots;
     renderCFS();
-    renderDashboardStats();
+    state.lastSyncAt = new Date().toISOString();
+    state.lastSyncStatus = 'ok';
+    renderCfsMeta();
   } catch (e) {
+    state.lastSyncStatus = 'error';
+    renderCfsMeta();
     showToast('CFS laden fehlgeschlagen', 'error');
   }
 }
@@ -86,7 +92,6 @@ async function loadSpools() {
   try {
     state.spools = await apiFetch('/api/spools');
     renderSpools();
-    renderDashboardStats();
   } catch (e) {
     showToast('Spulen laden fehlgeschlagen', 'error');
   }
@@ -157,22 +162,20 @@ function renderCFS() {
 }
 
 function renderInitialPlaceholders() {
-  const stats = document.getElementById('dashboardStats');
   const slots = document.getElementById('slotsGrid');
-  if (stats) {
-    stats.innerHTML = Array.from({ length: 3 }).map(() => `
-      <div class="stat-card skeleton">
-        <div class="stat-label">Lädt</div>
-        <div class="stat-value">--</div>
-      </div>
-    `).join('');
-  }
   if (slots) {
     slots.innerHTML = Array.from({ length: 4 }).map(() => `
       <div class="slot-card skeleton">
         <div class="slot-card-inner" style="height:180px"></div>
       </div>
     `).join('');
+  }
+  const meta = document.getElementById('cfsMeta');
+  if (meta) {
+    meta.innerHTML = `
+      <div class="meta-card skeleton"><div style="height:100px"></div></div>
+      <div class="meta-card skeleton"><div style="height:86px"></div></div>
+    `;
   }
 }
 
@@ -209,30 +212,32 @@ function renderJobsSkeleton() {
   `;
 }
 
-function renderDashboardStats() {
-  const el = document.getElementById('dashboardStats');
+function renderCfsMeta() {
+  const el = document.getElementById('cfsMeta');
   if (!el) return;
 
-  const active = state.spools.filter(s => s.status === 'aktiv');
-  const low = active.filter(s => {
-    const pct = s.initial_weight > 0 ? (s.remaining_weight / s.initial_weight) * 100 : 0;
-    return pct <= 20;
-  });
-  const totalRemaining = active.reduce((sum, spool) => sum + spool.remaining_weight, 0);
+  const printer = state.printer || {};
+  const statusClass = state.lastSyncStatus === 'ok' ? 'ok' : state.lastSyncStatus === 'error' ? 'error' : 'idle';
+  const statusLabel = state.lastSyncStatus === 'error'
+    ? 'Sync-Fehler'
+    : state.lastSyncStatus === 'ok'
+      ? 'Aktualisiert'
+      : 'Wartet auf Sync';
+  const syncLabel = state.lastSyncAt ? fmtDate(state.lastSyncAt) : 'Noch kein Abruf';
 
   el.innerHTML = `
-    <div class="stat-card">
-      <div class="stat-label">Aktive Slots</div>
-      <div class="stat-value">${active.length} / 4</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Verbleibend Gesamt</div>
-      <div class="stat-value">${totalRemaining.toFixed(0)} g</div>
-    </div>
-    <div class="stat-card ${low.length ? 'is-alert' : ''}">
-      <div class="stat-label">Niedrige Spulen</div>
-      <div class="stat-value">${low.length}</div>
-    </div>
+    <article class="meta-card">
+      <div class="meta-title">Printer</div>
+      <div class="meta-value">${esc((printer.state || 'offline').toUpperCase())}</div>
+      <div class="meta-line">Datei: ${printer.filename ? esc(printer.filename) : '—'}</div>
+      <div class="meta-line">Extruder: ${(printer.extruder_temp || 0).toFixed(0)}°C · Bett: ${(printer.bed_temp || 0).toFixed(0)}°C</div>
+    </article>
+    <article class="meta-card">
+      <div class="meta-title">Datenstand</div>
+      <div class="meta-pill ${statusClass}">${statusLabel}</div>
+      <div class="meta-line">Letzter Abruf: ${syncLabel}</div>
+      <div class="meta-note">Nutze „Sync mit K2“, wenn Gewichte nach einem extern gestarteten Drucklauf aktualisiert werden sollen.</div>
+    </article>
   `;
 }
 
@@ -516,8 +521,12 @@ async function syncFromK2() {
       showToast(`${res.synced} Spule(n) aktualisiert`, 'success');
       console.info('[Sync]\n' + lines);
     }
+    state.lastSyncAt = new Date().toISOString();
+    state.lastSyncStatus = 'ok';
     await Promise.all([loadCFS(), loadSpools()]);
   } catch (e) {
+    state.lastSyncStatus = 'error';
+    renderCfsMeta();
     showToast('Sync fehlgeschlagen: ' + e.message, 'error');
   } finally {
     btn.disabled = false;

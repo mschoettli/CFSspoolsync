@@ -9,4 +9,6 @@ export const state = {
   filterStatus: "",
   jobsStatusFilter: "",
   jobsSortBy: "recent",
+  lastSyncAt: null,
+  lastSyncStatus: "idle",
 };

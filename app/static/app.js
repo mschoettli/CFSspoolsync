@@ -8,6 +8,7 @@ import { state } from '/js/state.js';
 document.addEventListener('DOMContentLoaded', () => {
   setupNav();
   setupModalClose();
+  renderInitialPlaceholders();
   loadAll();
   startPolling({ loadPrinterStatus, loadCFS });
 });
@@ -44,6 +45,7 @@ function switchView(name) {
 // ── Load functions ─────────────────────────────────────────────────────────
 async function loadAll() {
   await Promise.all([loadPrinterStatus(), loadCFS(), loadSpools()]);
+  renderDashboardStats();
 }
 
 async function loadPrinterStatus() {
@@ -61,6 +63,7 @@ async function loadCFS() {
     const data = await apiFetch('/api/cfs');
     state.cfs = data.slots;
     renderCFS();
+    renderDashboardStats();
   } catch (e) {
     showToast('CFS laden fehlgeschlagen', 'error');
   }
@@ -70,6 +73,7 @@ async function loadSpools() {
   try {
     state.spools = await apiFetch('/api/spools');
     renderSpools();
+    renderDashboardStats();
   } catch (e) {
     showToast('Spulen laden fehlgeschlagen', 'error');
   }
@@ -136,6 +140,53 @@ function renderCFS() {
   grid.querySelectorAll('.btn-assign-slot').forEach(btn => {
     btn.addEventListener('click', () => openAssignModal(parseInt(btn.dataset.slot)));
   });
+}
+
+function renderInitialPlaceholders() {
+  const stats = document.getElementById('dashboardStats');
+  const slots = document.getElementById('slotsGrid');
+  if (stats) {
+    stats.innerHTML = Array.from({ length: 3 }).map(() => `
+      <div class="stat-card skeleton">
+        <div class="stat-label">Lädt</div>
+        <div class="stat-value">--</div>
+      </div>
+    `).join('');
+  }
+  if (slots) {
+    slots.innerHTML = Array.from({ length: 4 }).map(() => `
+      <div class="slot-card skeleton">
+        <div class="slot-card-inner" style="height:180px"></div>
+      </div>
+    `).join('');
+  }
+}
+
+function renderDashboardStats() {
+  const el = document.getElementById('dashboardStats');
+  if (!el) return;
+
+  const active = state.spools.filter(s => s.status === 'aktiv');
+  const low = active.filter(s => {
+    const pct = s.initial_weight > 0 ? (s.remaining_weight / s.initial_weight) * 100 : 0;
+    return pct <= 20;
+  });
+  const totalRemaining = active.reduce((sum, spool) => sum + spool.remaining_weight, 0);
+
+  el.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Aktive Slots</div>
+      <div class="stat-value">${active.length} / 4</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Verbleibend Gesamt</div>
+      <div class="stat-value">${totalRemaining.toFixed(0)} g</div>
+    </div>
+    <div class="stat-card ${low.length ? 'is-alert' : ''}">
+      <div class="stat-label">Niedrige Spulen</div>
+      <div class="stat-value">${low.length}</div>
+    </div>
+  `;
 }
 
 function renderSlotCard(slot) {
@@ -869,9 +920,10 @@ function closeModal() {
 
 // ── Toast ──────────────────────────────────────────────────────────────────
 function showToast(msg, type = 'info') {
+  const icon = { success: '✓', error: '⚠', info: 'i' }[type] || 'i';
   const el = document.createElement('div');
   el.className = `toast ${type}`;
-  el.textContent = msg;
+  el.innerHTML = `<span class="toast-icon">${icon}</span><span>${esc(msg)}</span>`;
   document.getElementById('toastContainer').appendChild(el);
   requestAnimationFrame(() => { requestAnimationFrame(() => el.classList.add('show')); });
   setTimeout(() => {

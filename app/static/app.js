@@ -1,23 +1,15 @@
 /* ── CFS Filament Tracker – Frontend App ──────────────────────────────────── */
 
-const API = '';  // same origin
-
-// ── State ──────────────────────────────────────────────────────────────────
-const state = {
-  view: 'cfs',
-  cfs: [],          // [{slot, key, spool}]
-  spools: [],       // all spools
-  jobs: [],
-  printer: {},
-  filterStatus: '',
-};
+import { apiFetch, uploadLabelImage } from '/js/api.js';
+import { startPolling } from '/js/polling.js';
+import { state } from '/js/state.js';
 
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   setupNav();
   setupModalClose();
   loadAll();
-  startPolling();
+  startPolling({ loadPrinterStatus, loadCFS });
 });
 
 function setupNav() {
@@ -41,32 +33,12 @@ function setupModalClose() {
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 }
 
-function startPolling() {
-  // Printer status: every 10s
-  setInterval(loadPrinterStatus, 10_000);
-  // CFS state: every 30s
-  setInterval(loadCFS, 30_000);
-}
-
 // ── View switching ─────────────────────────────────────────────────────────
 function switchView(name) {
   state.view = name;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === name));
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${name}`));
   if (name === 'jobs') loadJobs();
-}
-
-// ── API helpers ────────────────────────────────────────────────────────────
-async function apiFetch(path, opts = {}) {
-  const res = await fetch(API + path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || res.statusText);
-  }
-  return res.json();
 }
 
 // ── Load functions ─────────────────────────────────────────────────────────
@@ -581,11 +553,7 @@ function setupAddSpoolForm() {
         statusEl.style.color = 'var(--text-muted)';
         canvas.toBlob(async (blob) => {
           try {
-            const fd = new FormData();
-            fd.append('file', blob, 'label.jpg');
-            const res = await fetch('/api/scan-label', { method: 'POST', body: fd });
-            if (!res.ok) throw new Error(await res.text());
-            const data = await res.json();
+            const data = await uploadLabelImage(blob);
             fillFormFromOCR(data);
             statusEl.textContent = '✓ Etikett erkannt: ' + (data.material || '?') + ' ' + (data.brand || '');
             statusEl.style.color = 'var(--accent)';
@@ -608,11 +576,7 @@ function setupAddSpoolForm() {
     statusEl.textContent = '📷 Bild wird analysiert…';
     statusEl.style.color = 'var(--text-muted)';
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch('/api/scan-label', { method: 'POST', body: fd });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
+      const data = await uploadLabelImage(file);
       fillFormFromOCR(data);
       statusEl.textContent = '✓ Etikett erkannt';
       statusEl.style.color = 'var(--accent)';

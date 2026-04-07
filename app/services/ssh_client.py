@@ -1,8 +1,10 @@
-import os
+"""SSH client utilities for reading CFS slot information from K2."""
+
 import json
-import math
 import logging
-from typing import Optional, Dict, Any
+import math
+import os
+from typing import Any, Optional
 
 import paramiko
 
@@ -17,10 +19,11 @@ CFS_JSON_PATH = os.getenv(
 )
 
 SLOT_TO_KEY = {1: "Spule 1", 2: "Spule 2", 3: "Spule 3", 4: "Spule 4"}
-SLOT_TO_ID  = {1: "A",   2: "B",   3: "C",   4: "D"}
+SLOT_TO_ID = {1: "A", 2: "B", 3: "C", 4: "D"}
 
 
 def _get_client() -> paramiko.SSHClient:
+    """Create an SSH client connected to the configured K2 host."""
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     client.connect(
@@ -33,101 +36,111 @@ def _get_client() -> paramiko.SSHClient:
     return client
 
 
-def read_cfs_json() -> Optional[Dict[str, Any]]:
+def read_cfs_json() -> Optional[dict[str, Any]]:
+    """Read and parse the raw CFS JSON file from the printer."""
     try:
         client = _get_client()
         _, stdout, stderr = client.exec_command(f"cat '{CFS_JSON_PATH}'", timeout=10)
         raw = stdout.read().decode("utf-8").strip()
         err = stderr.read().decode("utf-8").strip()
         client.close()
+
         if err:
-            logger.warning(f"SSH stderr: {err}")
+            logger.warning("SSH stderr: %s", err)
         if not raw:
-            logger.error("CFS JSON leer oder nicht gefunden")
+            logger.error("CFS JSON empty or not found")
             return None
         return json.loads(raw)
     except paramiko.AuthenticationException:
-        logger.error("SSH Authentifizierung fehlgeschlagen")
+        logger.error("SSH authentication failed")
         return None
     except Exception as exc:
-        logger.error(f"SSH Lesefehler: {exc}")
+        logger.error("SSH read error: %s", exc)
         return None
 
 
-def _parse_color(raw) -> str:
-    """K2 uses a 7-char format with leading 0: #0FFFFFF → #FFFFFF"""
+def _parse_color(raw: Any) -> str:
+    """Normalize K2 color format values to canonical #RRGGBB."""
     if not raw:
         return "#888888"
-    s = str(raw).strip().lstrip("#")
-    if len(s) == 7 and s[0] == "0":
-        s = s[1:]
-    if len(s) == 6:
+
+    value = str(raw).strip().lstrip("#")
+    if len(value) == 7 and value[0] == "0":
+        value = value[1:]
+
+    if len(value) == 6:
         try:
-            int(s, 16)
-            return f"#{s.upper()}"
+            int(value, 16)
+            return f"#{value.upper()}"
         except ValueError:
             pass
+
     return "#888888"
 
 
 def meters_to_grams(meters: float, diameter_mm: float, density: float) -> float:
+    """Convert filament length to grams based on diameter and density."""
     if meters <= 0 or diameter_mm <= 0 or density <= 0:
         return 0.0
+
     radius_cm = (diameter_mm / 2.0) / 10.0
     length_cm = meters * 100.0
-    return math.pi * radius_cm ** 2 * length_cm * density
+    return math.pi * radius_cm**2 * length_cm * density
 
 
-def _get_slot_list(data: Dict[str, Any]) -> list:
-    """Real K2 structure: Material → info[0] → list → [{materialId: A/B/C/D, ...}]"""
+def _get_slot_list(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the slot list from the known K2 JSON structure."""
     try:
         return data["Material"]["info"][0]["list"]
     except (KeyError, IndexError, TypeError):
-        logger.error("CFS JSON Struktur unbekannt – 'Material.info[0].list' nicht gefunden")
+        logger.error("CFS JSON structure invalid, expected Material.info[0].list")
         return []
 
 
-def parse_slot(data: Dict[str, Any], slot_num: int) -> Optional[Dict]:
+def parse_slot(data: dict[str, Any], slot_num: int) -> Optional[dict[str, Any]]:
+    """Parse one slot from the CFS JSON payload."""
     entries = _get_slot_list(data)
     if not entries:
         return None
 
     target_id = SLOT_TO_ID.get(slot_num)
-    entry = next((e for e in entries if e.get("materialId") == target_id), None)
+    entry = next((item for item in entries if item.get("materialId") == target_id), None)
     if entry is None:
         return None
 
-    material   = entry.get("materialType", "").strip()
+    material = entry.get("materialType", "").strip()
     remain_len = float(entry.get("remainLen", 0) or 0)
-    diameter   = float(entry.get("diameter", 1.75) or 1.75)
-    density    = float(entry.get("density", 1.24) or 1.24)
+    diameter = float(entry.get("diameter", 1.75) or 1.75)
+    density = float(entry.get("density", 1.24) or 1.24)
 
     return {
-        "slot":            slot_num,
-        "key":             SLOT_TO_KEY[slot_num],
-        "material":        material,
-        "color":           _parse_color(entry.get("color", "")),
-        "brand":           entry.get("brand", "").strip(),
-        "name":            entry.get("name", "").strip(),
-        "nozzle_min":      int(entry.get("minTemp", 190) or 190),
-        "nozzle_max":      int(entry.get("maxTemp", 230) or 230),
-        "remain_len":      remain_len,
-        "diameter":        diameter,
-        "density":         density,
+        "slot": slot_num,
+        "key": SLOT_TO_KEY[slot_num],
+        "material": material,
+        "color": _parse_color(entry.get("color", "")),
+        "brand": entry.get("brand", "").strip(),
+        "name": entry.get("name", "").strip(),
+        "nozzle_min": int(entry.get("minTemp", 190) or 190),
+        "nozzle_max": int(entry.get("maxTemp", 230) or 230),
+        "remain_len": remain_len,
+        "diameter": diameter,
+        "density": density,
         "remaining_grams": round(meters_to_grams(remain_len, diameter, density), 1),
-        "serial_num":      entry.get("serialNum", "").strip(),
-        "loaded":          bool(material),
+        "serial_num": entry.get("serialNum", "").strip(),
+        "loaded": bool(material),
     }
 
 
-def get_all_slots() -> Dict[int, Optional[Dict]]:
+def get_all_slots() -> dict[int, Optional[dict[str, Any]]]:
+    """Return parsed data for all known CFS slots."""
     data = read_cfs_json()
     if data is None:
         return {i: None for i in range(1, 5)}
     return {i: parse_slot(data, i) for i in range(1, 5)}
 
 
-def get_slot(slot_num: int) -> Optional[Dict]:
+def get_slot(slot_num: int) -> Optional[dict[str, Any]]:
+    """Return parsed data for one CFS slot."""
     data = read_cfs_json()
     if data is None:
         return None

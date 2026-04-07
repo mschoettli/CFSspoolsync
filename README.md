@@ -1,6 +1,6 @@
 # CFSspoolsync
 
-Filament management for the Creality K2 Plus / K2 Combo with CFS (Creality Filament System).
+Filament management for Creality K2 Plus / K2 Combo with CFS.
 
 ![License](https://img.shields.io/badge/license-GPL%20v3-blue)
 ![Docker](https://img.shields.io/badge/docker-compose-blue)
@@ -8,135 +8,50 @@ Filament management for the Creality K2 Plus / K2 Combo with CFS (Creality Filam
 
 ## Features
 
-- Live CFS slot view (4 slots) with color, material, weight and temperatures
-- Automatic consumption tracking via Moonraker polling (every 10 seconds)
+- Live CFS slot view (4 slots) with material, color, and temperatures
 - Storage management for all spools
-- Print job history with per-slot consumption
+- Print job history with per-slot consumption tracking
 - SSH-based live sync from K2 CFS JSON
-- Dark UI with teal accent
-
-## Requirements
-
-- Docker + Docker Compose
-- Creality K2 Plus or K2 Combo with CFS
-- Moonraker running on the printer (`http://<printer-ip>:7125`)
-- SSH access from the Docker host to the printer
-
-## Prerequisites
-
-### 1. Install Docker
-
-**Linux (Debian/Ubuntu):**
-```bash
-curl -fsSL https://get.docker.com | sh
-```
-
-**Windows / Mac:** Download [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-
-### 2. Create SSH Key for K2 printer
-
-The app connects to the printer via SSH to read the CFS JSON file. Create a key on the Docker host and copy it to the printer:
-
-```bash
-# Create key (no passphrase)
-ssh-keygen -t ed25519 -f /root/.ssh/id_k2 -N ""
-
-# Copy key to printer (enter printer password once)
-ssh-copy-id -i /root/.ssh/id_k2 root@<printer-ip>
-
-# Test connection
-ssh -i /root/.ssh/id_k2 root@<printer-ip> "echo OK"
-```
-
-> If you get a host key warning (REMOTE HOST IDENTIFICATION HAS CHANGED), run:
-> ```bash
-> ssh-keygen -f '/root/.ssh/known_hosts' -R '<printer-ip>'
-> ```
-> Then retry `ssh-copy-id`.
-
----
+- Label OCR to pre-fill spool metadata
 
 ## Quick Start
 
-### Option A – Fertig gebautes Image von GitHub (empfohlen)
-
-Kein `git clone`, kein Build nötig – Docker holt das Image direkt von GitHub:
+1. Copy environment template:
 
 ```bash
-curl -O https://raw.githubusercontent.com/mschoettli/cfsspoolsync/main/docker-compose.yml
-curl -O https://raw.githubusercontent.com/mschoettli/cfsspoolsync/main/.env.example
 cp .env.example .env
-nano .env
+```
+
+2. Edit `.env` values for your printer (`K2_HOST`, `K2_SSH_KEY`, `MOONRAKER_URL`).
+
+3. Start with prebuilt image:
+
+```bash
 docker compose up -d
 ```
 
-### Option B – Selbst bauen aus dem Quellcode
+Alternative local build:
 
 ```bash
-git clone https://github.com/mschoettli/cfsspoolsync.git
-cd cfsspoolsync
-cp .env.example .env
-nano .env
 docker compose -f docker-compose.build.yml up -d --build
 ```
 
----
+The UI is available on `http://localhost:${PORT:-8080}`.
 
-## Configuration
+## Documentation
 
-All settings via `.env`:
-
-| Variable | Default | Description |
-|---|---|---|
-| `K2_HOST` | `192.168.178.192` | Printer IP address |
-| `K2_SSH_USER` | `root` | SSH user on printer |
-| `K2_SSH_KEY` | `/root/.ssh/id_k2` | Path to SSH private key on host |
-| `MOONRAKER_URL` | `http://192.168.178.192:7125` | Moonraker API URL |
-| `CFS_JSON_PATH` | `/mnt/UDISK/...` | CFS JSON path on printer |
-| `PORT` | `8080` | Web UI port |
-
----
-
-## Usage
-
-### Add a new spool
-
-1. Go to **Lager** → **+ Neue Spule**
-2. Select a CFS slot (T1A–T1D) → **Von K2 lesen** to auto-fill data
-3. Enter the initial weight manually
-4. Save
-
-### Load spool into CFS slot
-
-- From the **Spulen** tab: click an empty slot → **+ Spule einlegen**
-- Or from **Lager**: click **Einlegen** on any stored spool
-
-### Sync weights from K2
-
-Click **⟳ Sync mit K2** on the Spulen tab to pull current `remainLen` values from the printer and update all active spools.
-
-### Consumption tracking
-
-Moonraker is polled every 10 seconds. On print start a snapshot is taken; on print end the consumed grams are calculated and deducted automatically.
-
-**Formula:**
-```
-grams = π × (diameter_mm / 20)² × (meters × 100) × density_g_cm³
-```
-
----
+- [Architecture](docs/architecture.md)
+- [Public API](docs/api.md)
+- [Deployment](docs/deployment.md)
+- [Development](docs/development.md)
 
 ## Tech Stack
 
-- **Backend**: Python 3.12 / FastAPI
-- **Database**: SQLite (WAL mode)
-- **Frontend**: Vanilla HTML / CSS / JS (Single Page App)
-- **Deployment**: Docker Compose
-
----
+- Backend: FastAPI + SQLAlchemy
+- Database: SQLite (WAL mode)
+- Frontend: Vanilla HTML/CSS/JS
+- Runtime: Docker Compose
 
 ## License
 
-GNU General Public License v3.0 – see [LICENSE](LICENSE)
-
-Copyright (C) 2026 mschoettli
+GNU General Public License v3.0. See [LICENSE](LICENSE).

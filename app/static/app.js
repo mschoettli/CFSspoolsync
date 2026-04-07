@@ -64,9 +64,11 @@ async function loadPrinterStatus() {
   try {
     state.printer = await apiFetch('/api/printer/status');
     renderPrinterStatus();
+    if (state.cfs.length) renderCFS();
   } catch {
     state.printer = { reachable: false };
     renderPrinterStatus();
+    if (state.cfs.length) renderCFS();
   }
 }
 
@@ -74,6 +76,7 @@ async function loadCFS() {
   try {
     const data = await apiFetch('/api/cfs');
     state.cfs = data.slots;
+    await loadJobs(false);
     renderCFS();
   } catch (e) {
     showToast('CFS laden fehlgeschlagen', 'error');
@@ -90,13 +93,13 @@ async function loadSpools() {
   }
 }
 
-async function loadJobs() {
+async function loadJobs(render = true) {
   if (state.view === 'jobs') renderJobsSkeleton();
   try {
     state.jobs = await apiFetch('/api/jobs?limit=30');
-    renderJobs();
+    if (render || state.view === 'jobs') renderJobs();
   } catch {
-    showToast('Jobs laden fehlgeschlagen', 'error');
+    if (render || state.view === 'jobs') showToast('Jobs laden fehlgeschlagen', 'error');
   }
 }
 
@@ -154,14 +157,6 @@ function renderPrinterStatus() {
 function renderCFS() {
   const grid = document.getElementById('slotsGrid');
   grid.innerHTML = state.cfs.map(slot => renderSlotCard(slot)).join('');
-
-  // Attach events
-  grid.querySelectorAll('.btn-remove-slot').forEach(btn => {
-    btn.addEventListener('click', () => removeFromSlot(parseInt(btn.dataset.slot)));
-  });
-  grid.querySelectorAll('.btn-assign-slot').forEach(btn => {
-    btn.addEventListener('click', () => openAssignModal(parseInt(btn.dataset.slot)));
-  });
 }
 
 function renderInitialPlaceholders() {
@@ -211,6 +206,7 @@ function renderJobsSkeleton() {
 function renderSlotCard(slot) {
   const s = slot.spool;
   const barColor = s ? filamentColor(s.color) : '#2c2c35';
+  const liveMeta = getSlotLiveJobMeta(slot);
 
   if (!s) {
     return `
@@ -223,9 +219,6 @@ function renderSlotCard(slot) {
           </div>
           <div class="slot-empty">
             <span class="slot-empty-label">Kein Filament</span>
-            <button class="btn btn-outline btn-sm btn-assign-slot" data-slot="${slot.slot}">
-              + Spule einlegen
-            </button>
           </div>
         </div>
       </div>`;
@@ -234,6 +227,8 @@ function renderSlotCard(slot) {
   const pct  = s.initial_weight > 0 ? (s.remaining_weight / s.initial_weight) * 100 : 0;
   const cls  = pct > 50 ? 'high' : pct > 20 ? 'medium' : 'low';
   const pctW = Math.max(2, Math.min(100, pct)).toFixed(1);
+  const remainingLabel = formatRemainingWeight(s.remaining_weight);
+  const kpiPct = `${pct.toFixed(0)}%`;
 
   return `
     <div class="slot-card">
@@ -255,23 +250,61 @@ function renderSlotCard(slot) {
         <div class="weight-section">
           <div class="weight-label">
             <span class="weight-label-left">Verbleibend</span>
-            <span style="font-size:0.7rem;color:var(--text);font-weight:400">${s.remaining_weight.toFixed(0)} g <span class="weight-total">/ ${s.initial_weight.toFixed(0)} g · ${pct.toFixed(0)}%</span></span>
+            <span class="weight-kpi">${remainingLabel}</span>
+          </div>
+          <div class="weight-subline">
+            <span class="weight-total">/ ${s.initial_weight.toFixed(0)} g</span>
+            <span class="weight-percent">${kpiPct}</span>
           </div>
           <div class="progress-bar">
             <div class="progress-fill ${cls}" style="width:${pctW}%"></div>
           </div>
         </div>
-
-        <div class="temps">
-          <span class="temp-item"><span class="temp-icon">🌡</span>${s.nozzle_min}–${s.nozzle_max}°C</span>
-          <span class="temp-item"><span class="temp-icon">🛏</span>${s.bed_temp}°C</span>
-        </div>
-
-        <button class="btn btn-danger btn-sm btn-full btn-remove-slot" data-slot="${slot.slot}">
-          Aus Slot entfernen
-        </button>
+        ${liveMeta ? renderLiveJobMeta(liveMeta) : ''}
       </div>
     </div>`;
+}
+
+function getRunningJob() {
+  return state.jobs.find(job => job.status === 'running') || null;
+}
+
+function getRunningJobSpoolIds(job) {
+  if (!job || !job.slots) return new Set();
+  return new Set(
+    Object.values(job.slots)
+      .map(slot => slot?.spool_id)
+      .filter(id => Number.isInteger(id))
+  );
+}
+
+function getSlotLiveJobMeta(slot) {
+  if (!slot.spool) return null;
+  const runningJob = getRunningJob();
+  if (!runningJob) return null;
+  const activeSpoolIds = getRunningJobSpoolIds(runningJob);
+  if (!activeSpoolIds.has(slot.spool.id)) return null;
+  if (state.printer.state !== 'printing') return null;
+
+  return {
+    remaining: fmtRemainingSeconds(state.printer.remaining_seconds),
+    nozzle: typeof state.printer.extruder_temp === 'number'
+      ? `${state.printer.extruder_temp.toFixed(0)}°C`
+      : '—',
+    bed: typeof state.printer.bed_temp === 'number'
+      ? `${state.printer.bed_temp.toFixed(0)}°C`
+      : '—',
+  };
+}
+
+function renderLiveJobMeta(meta) {
+  return `
+    <div class="slot-live-meta">
+      <span class="slot-live-item">Rest: <strong>${meta.remaining}</strong></span>
+      <span class="slot-live-item">Nozzle: <strong>${meta.nozzle}</strong></span>
+      <span class="slot-live-item">Bed: <strong>${meta.bed}</strong></span>
+    </div>
+  `;
 }
 
 // ── Render: Spools ─────────────────────────────────────────────────────────
@@ -1095,4 +1128,18 @@ function fmtDuration(start, end) {
   const h = Math.floor(ms / 3_600_000);
   const m = Math.floor((ms % 3_600_000) / 60_000);
   return h > 0 ? `${h}h ${m}min` : `${m}min`;
+}
+
+function fmtRemainingSeconds(seconds) {
+  if (typeof seconds !== 'number' || !isFinite(seconds) || seconds <= 0) return '—';
+  const total = Math.round(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  if (h > 0) return `${h}h ${m.toString().padStart(2, '0')}m`;
+  return `${Math.max(1, m)}m`;
+}
+
+function formatRemainingWeight(weight) {
+  if (typeof weight !== 'number' || !isFinite(weight)) return '—';
+  return `${weight.toFixed(0)} g`;
 }

@@ -1,5 +1,7 @@
 """Pydantic schemas for printer status responses."""
 
+from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -14,3 +16,4 @@ class PrinterStatusOut(BaseModel):
     extruder_target: float
     bed_temp: float
     bed_target: float
+    remaining_seconds: Optional[float]

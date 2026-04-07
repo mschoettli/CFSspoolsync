@@ -278,6 +278,7 @@ body {
   overflow: hidden;
   box-shadow: var(--shadow-sm);
   transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+  min-height: 258px;
 }
 
 .slot-card:hover {
@@ -287,7 +288,7 @@ body {
 }
 
 .color-bar { height: 4px; }
-.slot-card-inner { padding: 16px; }
+.slot-card-inner { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 
 .slot-header {
   display: flex;
@@ -330,7 +331,7 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 2px;
 }
 
 .color-swatch {
@@ -351,19 +352,36 @@ body {
   font-size: 0.78rem;
 }
 
-.weight-section { margin-bottom: 10px; }
+.weight-section { margin-bottom: 0; }
 .weight-label {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-  font-size: 0.76rem;
+  align-items: baseline;
+  margin-bottom: 2px;
+  font-size: 0.8rem;
 }
 .weight-label-left { color: var(--text-mid); }
+.weight-kpi {
+  font-family: var(--font-data);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.weight-subline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 7px;
+}
 .weight-total { color: var(--text-muted); font-size: 0.72rem; }
+.weight-percent {
+  font-family: var(--font-data);
+  color: var(--text-mid);
+  font-size: 0.74rem;
+}
 
 .progress-bar {
-  height: 7px;
+  height: 10px;
   border-radius: 999px;
   background: rgba(92, 114, 145, 0.32);
   overflow: hidden;
@@ -385,13 +403,33 @@ body {
 .temp-item { display: inline-flex; align-items: center; gap: 5px; }
 
 .slot-empty {
-  padding: 20px 0 8px;
+  padding: 30px 0 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
 }
 .slot-empty-label { color: var(--text-muted); }
+
+.slot-live-meta {
+  margin-top: 2px;
+  border: 1px solid rgba(39, 198, 149, 0.34);
+  background: rgba(39, 198, 149, 0.09);
+  border-radius: 10px;
+  padding: 7px 9px;
+  display: grid;
+  gap: 3px;
+}
+
+.slot-live-item {
+  font-size: 0.72rem;
+  color: var(--text-mid);
+}
+
+.slot-live-item strong {
+  color: var(--text);
+  font-weight: 700;
+}
 
 .inventory-layout {
   display: grid;

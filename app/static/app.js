@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupNav();
   setupModalClose();
   renderInitialPlaceholders();
+  renderK2SyncMeta();
   loadAll();
   startPolling({ loadPrinterStatus, loadCFS });
 });
@@ -57,18 +58,15 @@ function switchView(name) {
 // ── Load functions ─────────────────────────────────────────────────────────
 async function loadAll() {
   await Promise.all([loadPrinterStatus(), loadCFS(), loadSpools()]);
-  renderCfsMeta();
 }
 
 async function loadPrinterStatus() {
   try {
     state.printer = await apiFetch('/api/printer/status');
     renderPrinterStatus();
-    renderCfsMeta();
   } catch {
     state.printer = { reachable: false };
     renderPrinterStatus();
-    renderCfsMeta();
   }
 }
 
@@ -77,12 +75,7 @@ async function loadCFS() {
     const data = await apiFetch('/api/cfs');
     state.cfs = data.slots;
     renderCFS();
-    state.lastSyncAt = new Date().toISOString();
-    state.lastSyncStatus = 'ok';
-    renderCfsMeta();
   } catch (e) {
-    state.lastSyncStatus = 'error';
-    renderCfsMeta();
     showToast('CFS laden fehlgeschlagen', 'error');
   }
 }
@@ -140,11 +133,21 @@ function renderPrinterStatus() {
     label.textContent = info.label;
   }
 
-  if (p.extruder_temp > 0 || p.bed_temp > 0) {
-    temps.textContent = `🌡 ${p.extruder_temp.toFixed(0)}°C  🛏 ${p.bed_temp.toFixed(0)}°C`;
-  } else {
-    temps.textContent = '';
+  const tempParts = [];
+  if (typeof p.extruder_temp === 'number' && p.extruder_temp > 0) {
+    tempParts.push(`🌡 ${p.extruder_temp.toFixed(0)}°C`);
   }
+  if (typeof p.bed_temp === 'number' && p.bed_temp > 0) {
+    tempParts.push(`🛏 ${p.bed_temp.toFixed(0)}°C`);
+  }
+
+  const humidity = [p.cfs_humidity, p.humidity, p.chamber_humidity]
+    .find(v => typeof v === 'number' && Number.isFinite(v) && v >= 0);
+  if (typeof humidity === 'number') {
+    tempParts.push(`💧 ${humidity.toFixed(0)}%`);
+  }
+
+  temps.textContent = tempParts.join('  ');
 }
 
 // ── Render: CFS Slots ──────────────────────────────────────────────────────
@@ -169,13 +172,6 @@ function renderInitialPlaceholders() {
         <div class="slot-card-inner" style="height:180px"></div>
       </div>
     `).join('');
-  }
-  const meta = document.getElementById('cfsMeta');
-  if (meta) {
-    meta.innerHTML = `
-      <div class="meta-card skeleton"><div style="height:100px"></div></div>
-      <div class="meta-card skeleton"><div style="height:86px"></div></div>
-    `;
   }
 }
 
@@ -209,35 +205,6 @@ function renderJobsSkeleton() {
         </article>
       `).join('')}
     </div>
-  `;
-}
-
-function renderCfsMeta() {
-  const el = document.getElementById('cfsMeta');
-  if (!el) return;
-
-  const printer = state.printer || {};
-  const statusClass = state.lastSyncStatus === 'ok' ? 'ok' : state.lastSyncStatus === 'error' ? 'error' : 'idle';
-  const statusLabel = state.lastSyncStatus === 'error'
-    ? 'Sync-Fehler'
-    : state.lastSyncStatus === 'ok'
-      ? 'Aktualisiert'
-      : 'Wartet auf Sync';
-  const syncLabel = state.lastSyncAt ? fmtDate(state.lastSyncAt) : 'Noch kein Abruf';
-
-  el.innerHTML = `
-    <article class="meta-card">
-      <div class="meta-title">Printer</div>
-      <div class="meta-value">${esc((printer.state || 'offline').toUpperCase())}</div>
-      <div class="meta-line">Datei: ${printer.filename ? esc(printer.filename) : '—'}</div>
-      <div class="meta-line">Extruder: ${(printer.extruder_temp || 0).toFixed(0)}°C · Bett: ${(printer.bed_temp || 0).toFixed(0)}°C</div>
-    </article>
-    <article class="meta-card">
-      <div class="meta-title">Datenstand</div>
-      <div class="meta-pill ${statusClass}">${statusLabel}</div>
-      <div class="meta-line">Letzter Abruf: ${syncLabel}</div>
-      <div class="meta-note">Nutze „Sync mit K2“, wenn Gewichte nach einem extern gestarteten Drucklauf aktualisiert werden sollen.</div>
-    </article>
   `;
 }
 
@@ -544,15 +511,37 @@ async function syncFromK2() {
     }
     state.lastSyncAt = new Date().toISOString();
     state.lastSyncStatus = 'ok';
+    renderK2SyncMeta();
     await Promise.all([loadCFS(), loadSpools()]);
   } catch (e) {
     state.lastSyncStatus = 'error';
-    renderCfsMeta();
+    renderK2SyncMeta();
     showToast('Sync fehlgeschlagen: ' + e.message, 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = '⟳ Sync mit K2';
   }
+}
+
+function renderK2SyncMeta() {
+  const el = document.getElementById('k2SyncMeta');
+  if (!el) return;
+
+  if (!state.lastSyncAt) {
+    el.textContent = 'Letzter K2-Sync: noch nie';
+    el.classList.remove('error');
+    return;
+  }
+
+  const syncAt = fmtDate(state.lastSyncAt);
+  if (state.lastSyncStatus === 'error') {
+    el.textContent = `Letzter K2-Sync fehlgeschlagen (${syncAt})`;
+    el.classList.add('error');
+    return;
+  }
+
+  el.textContent = `Letzter K2-Sync: ${syncAt}`;
+  el.classList.remove('error');
 }
 
 async function removeFromSlot(slotNum) {

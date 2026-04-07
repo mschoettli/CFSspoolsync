@@ -30,7 +30,7 @@
   </div>
 
   <nav id="nav">
-    <button class="nav-btn active" data-view="cfs" type="button">Spulen</button>
+    <button class="nav-btn active" data-view="cfs" type="button">CFS</button>
     <button class="nav-btn" data-view="lager" type="button">Lager</button>
     <button class="nav-btn" data-view="jobs" type="button">Druckjobs</button>
   </nav>
@@ -55,15 +55,10 @@
       </div>
       <div class="header-actions">
         <button class="btn btn-primary btn-sm" id="btnSyncK2" type="button" title="Gewichte aus K2 CFS-JSON übernehmen">⟳ Sync mit K2</button>
+        <span class="sync-meta" id="k2SyncMeta">Letzter K2-Sync: noch nie</span>
       </div>
     </div>
-    <div class="cfs-shell">
-      <div class="slots-grid" id="slotsGrid"></div>
-      <aside class="cfs-sidepanel" id="cfsMetaPanel">
-        <h3>Systemkontext</h3>
-        <div id="cfsMeta"></div>
-      </aside>
-    </div>
+    <div class="slots-grid" id="slotsGrid"></div>
   </section>
 
   <!-- Lager View -->
@@ -135,7 +130,7 @@
 <nav class="mobile-bottom-nav" aria-label="Mobile Navigation">
   <button class="mobile-nav-btn active" data-view="cfs" type="button">
     <span class="mobile-nav-icon">◉</span>
-    <span>Spulen</span>
+    <span>CFS</span>
   </button>
   <button class="mobile-nav-btn" data-view="lager" type="button">
     <span class="mobile-nav-icon">◫</span>

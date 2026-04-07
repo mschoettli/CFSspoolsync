@@ -224,8 +224,8 @@ body {
 .btn-outline { border-color: rgba(79, 209, 166, 0.4); color: #6de2ba; }
 .btn-outline:hover { background: rgba(79, 209, 166, 0.14); }
 
-.btn-danger { border-color: rgba(255, 140, 140, 0.4); color: #ffadad; }
-.btn-danger:hover { background: rgba(255, 140, 140, 0.16); }
+.btn-danger { border-color: rgba(80, 200, 120, 0.4); color: #50c878; }
+.btn-danger:hover { background: rgba(80, 200, 120, 0.16); }
 
 .select-filter,
 .form-select,
@@ -316,9 +316,9 @@ body {
 }
 
 .meta-pill.error {
-  color: #ffb0b0;
-  background: rgba(255, 140, 140, 0.16);
-  border: 1px solid rgba(255, 140, 140, 0.42);
+  color: #50c878;
+  background: rgba(80, 200, 120, 0.16);
+  border: 1px solid rgba(80, 200, 120, 0.42);
 }
 
 .meta-pill.idle {
@@ -440,7 +440,7 @@ body {
 .progress-fill { height: 100%; border-radius: inherit; transition: width .35s ease; }
 .progress-fill.high { background: linear-gradient(90deg, #56dcaf, #6be6be); }
 .progress-fill.medium { background: linear-gradient(90deg, #31cd9b, #6fe5c1); }
-.progress-fill.low { background: linear-gradient(90deg, #ff8c8c, #ffb0b0); }
+.progress-fill.low { background: linear-gradient(90deg, #50c878, #50c878); }
 
 .temps {
   display: flex;
@@ -569,9 +569,9 @@ body {
   background: rgba(79, 209, 166, 0.16);
 }
 .spool-status-badge.leer {
-  color: #ffadad;
-  border: 1px solid rgba(255, 140, 140, 0.5);
-  background: rgba(255, 140, 140, 0.18);
+  color: #50c878;
+  border: 1px solid rgba(80, 200, 120, 0.5);
+  background: rgba(80, 200, 120, 0.18);
 }
 
 .actions-cell {
@@ -670,9 +670,9 @@ body {
 }
 
 .job-status-badge.finished { color: #72e8be; background: rgba(79, 209, 166, 0.16); border: 1px solid rgba(79, 209, 166, 0.4); }
-.job-status-badge.running { color: #ffe3a1; background: rgba(255, 210, 122, 0.16); border: 1px solid rgba(255, 210, 122, 0.38); }
+.job-status-badge.running { color: #50c878; background: rgba(80, 200, 120, 0.16); border: 1px solid rgba(80, 200, 120, 0.38); }
 .job-status-badge.cancelled,
-.job-status-badge.error { color: #ffb0b0; background: rgba(255, 140, 140, 0.16); border: 1px solid rgba(255, 140, 140, 0.38); }
+.job-status-badge.error { color: #50c878; background: rgba(80, 200, 120, 0.16); border: 1px solid rgba(80, 200, 120, 0.38); }
 
 .modal-overlay {
   position: fixed;

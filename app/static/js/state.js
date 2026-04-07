@@ -7,4 +7,6 @@ export const state = {
   jobs: [],
   printer: {},
   filterStatus: "",
+  jobsStatusFilter: "",
+  jobsSortBy: "recent",
 };

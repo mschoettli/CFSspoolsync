@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function setupNav() {
-  document.querySelectorAll('.nav-btn').forEach(btn => {
+  document.querySelectorAll('.nav-btn, .mobile-nav-btn').forEach(btn => {
     btn.addEventListener('click', () => switchView(btn.dataset.view));
   });
   
@@ -23,6 +23,14 @@ function setupNav() {
   document.getElementById('filterStatus').addEventListener('change', e => {
     state.filterStatus = e.target.value;
     renderSpools();
+  });
+  document.getElementById('jobsStatusFilter').addEventListener('change', e => {
+    state.jobsStatusFilter = e.target.value;
+    renderJobs();
+  });
+  document.getElementById('jobsSortBy').addEventListener('change', e => {
+    state.jobsSortBy = e.target.value;
+    renderJobs();
   });
 }
 
@@ -37,9 +45,13 @@ function setupModalClose() {
 // ── View switching ─────────────────────────────────────────────────────────
 function switchView(name) {
   state.view = name;
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+  document.querySelectorAll('.nav-btn, .mobile-nav-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === name),
+  );
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${name}`));
+  renderViewSkeleton(name);
   if (name === 'jobs') loadJobs();
+  if (name === 'lager') loadSpools();
 }
 
 // ── Load functions ─────────────────────────────────────────────────────────
@@ -70,6 +82,7 @@ async function loadCFS() {
 }
 
 async function loadSpools() {
+  if (state.view === 'lager') renderSpoolsSkeleton();
   try {
     state.spools = await apiFetch('/api/spools');
     renderSpools();
@@ -80,6 +93,7 @@ async function loadSpools() {
 }
 
 async function loadJobs() {
+  if (state.view === 'jobs') renderJobsSkeleton();
   try {
     state.jobs = await apiFetch('/api/jobs?limit=30');
     renderJobs();
@@ -160,6 +174,39 @@ function renderInitialPlaceholders() {
       </div>
     `).join('');
   }
+}
+
+function renderViewSkeleton(name) {
+  if (name === 'lager') renderSpoolsSkeleton();
+  if (name === 'jobs') renderJobsSkeleton();
+}
+
+function renderSpoolsSkeleton() {
+  const el = document.getElementById('spoolsList');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="inventory-cards">
+      ${Array.from({ length: 5 }).map(() => `
+        <article class="inventory-card skeleton">
+          <div style="height:120px"></div>
+        </article>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderJobsSkeleton() {
+  const el = document.getElementById('jobsList');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="jobs-list">
+      ${Array.from({ length: 4 }).map(() => `
+        <article class="job-card skeleton">
+          <div style="height:92px"></div>
+        </article>
+      `).join('')}
+    </div>
+  `;
 }
 
 function renderDashboardStats() {
@@ -266,23 +313,30 @@ function renderSpools() {
     return;
   }
 
-  const aktiv = list.filter(s => s.status === 'aktiv').sort((a,b) => (a.cfs_slot||0) - (b.cfs_slot||0));
+  const aktiv = list.filter(s => s.status === 'aktiv').sort((a, b) => (a.cfs_slot || 0) - (b.cfs_slot || 0));
   const lager = list.filter(s => s.status === 'lager');
   const leer  = list.filter(s => s.status === 'leer');
 
   const thead = `<thead><tr>
     <th>Filament</th><th>Hersteller</th><th>Verbleibend</th>
-    <th>Temp.</th><th>Status</th><th>Aktionen</th>
+    <th>Temp.</th><th>Slot</th><th>Status</th><th>Aktionen</th>
   </tr></thead>`;
 
-  const sep = (label) => `<tr><td colspan="6" style="padding:16px 14px 6px;font-size:0.75rem;font-weight:600;color:var(--text-mid);border-top:2px solid var(--border-hi);border-bottom:1px solid var(--border)">${label}</td></tr>`;
+  const sep = (label) => `<tr><td colspan="7" style="padding:16px 14px 6px;font-size:0.75rem;font-weight:600;color:var(--text-mid);border-top:2px solid var(--border-hi);border-bottom:1px solid var(--border)">${label}</td></tr>`;
 
   let rows = '';
   if (aktiv.length) rows += sep('CFS Slots') + aktiv.map(s => renderSpoolRow(s)).join('');
   if (lager.length) rows += sep('Lager') + lager.map(s => renderSpoolRow(s)).join('');
   if (leer.length)  rows += sep('Leer') + leer.map(s => renderSpoolRow(s)).join('');
 
-  el.innerHTML = `<table class="spools-table">${thead}<tbody>${rows}</tbody></table>`;
+  el.innerHTML = `
+    <div class="inventory-table-wrap">
+      <table class="spools-table">${thead}<tbody>${rows}</tbody></table>
+    </div>
+    <div class="inventory-cards">
+      ${list.map(s => renderSpoolCard(s)).join('')}
+    </div>
+  `;
 
   el.querySelectorAll('.btn-edit-spool').forEach(btn =>
     btn.addEventListener('click', () => openEditModal(parseInt(btn.dataset.id))));
@@ -329,6 +383,7 @@ function renderSpoolRow(s) {
         </div>
       </td>
       <td class="monospace" style="font-size:0.72rem;color:var(--text-mid)">${s.nozzle_min}–${s.nozzle_max}°C</td>
+      <td class="spool-brand-label">${s.cfs_slot ? `T1${'ABCD'[s.cfs_slot - 1]}` : '—'}</td>
       <td>
         <span class="spool-status-badge ${s.status}">
           ${s.status === 'aktiv' ? slotLabel : s.status === 'lager' ? 'Lager' : s.status === 'leer' ? 'Leer' : s.status}
@@ -338,15 +393,71 @@ function renderSpoolRow(s) {
     </tr>`;
 }
 
+function renderSpoolCard(s) {
+  const pct = s.initial_weight > 0 ? (s.remaining_weight / s.initial_weight) * 100 : 0;
+  const cls = pct > 50 ? 'high' : pct > 20 ? 'medium' : 'low';
+  const slotLabel = s.cfs_slot ? `T1${'ABCD'[s.cfs_slot - 1]}` : '—';
+
+  let actions = `<button class="btn btn-ghost btn-sm btn-edit-spool" data-id="${s.id}">Bearbeiten</button>`;
+  if (s.status === 'lager') {
+    actions += `
+      <button class="btn btn-outline btn-sm btn-assign-from-lager" data-id="${s.id}">Einlegen</button>
+      <button class="btn btn-danger btn-sm btn-delete-spool" data-id="${s.id}">Löschen</button>
+    `;
+  }
+  if (s.status === 'lager' || s.status === 'aktiv') {
+    actions += `<button class="btn btn-ghost btn-sm btn-mark-empty" data-id="${s.id}">Leer</button>`;
+  }
+
+  return `
+    <article class="inventory-card">
+      <div class="inventory-card-head">
+        <div class="spool-name-cell">
+          <div class="spool-color-dot" style="background:${s.color}"></div>
+          <div>
+            <div class="spool-material-label">${esc(s.material)}</div>
+            <div class="spool-brand-label">${esc(s.brand || '—')}</div>
+          </div>
+        </div>
+        <span class="spool-status-badge ${s.status}">
+          ${s.status === 'aktiv' ? slotLabel : s.status === 'lager' ? 'Lager' : 'Leer'}
+        </span>
+      </div>
+      <div class="inventory-card-meta">
+        <span>${s.remaining_weight.toFixed(0)}g / ${s.initial_weight.toFixed(0)}g</span>
+        <span>${pct.toFixed(0)}%</span>
+      </div>
+      <div class="weight-mini-bar">
+        <div class="weight-mini-fill ${cls}" style="width:${Math.max(2, Math.min(100, pct)).toFixed(0)}%"></div>
+      </div>
+      <div class="inventory-card-meta">
+        <span>Düse ${s.nozzle_min}–${s.nozzle_max}°C</span>
+        <span>Bett ${s.bed_temp}°C</span>
+      </div>
+      <div class="inventory-card-actions">${actions}</div>
+    </article>
+  `;
+}
+
 // ── Render: Jobs ───────────────────────────────────────────────────────────
 function renderJobs() {
   const el = document.getElementById('jobsList');
-  if (!state.jobs.length) {
+  let list = [...state.jobs];
+  if (state.jobsStatusFilter) {
+    list = list.filter(job => job.status === state.jobsStatusFilter);
+  }
+  if (state.jobsSortBy === 'consumed') {
+    list.sort((a, b) => (b.total_consumed_g || 0) - (a.total_consumed_g || 0));
+  } else {
+    list.sort((a, b) => new Date(b.started_at || 0) - new Date(a.started_at || 0));
+  }
+
+  if (!list.length) {
     el.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🖨</div>Noch keine Druckjobs erfasst</div>`;
     return;
   }
 
-  el.innerHTML = `<div class="jobs-list">${state.jobs.map(renderJobCard).join('')}</div>`;
+  el.innerHTML = `<div class="jobs-list">${list.map(renderJobCard).join('')}</div>`;
 }
 
 function renderJobCard(j) {

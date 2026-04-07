@@ -188,7 +188,7 @@ function renderSpoolsSkeleton() {
   const el = document.getElementById('spoolsList');
   if (!el) return;
   el.innerHTML = `
-    <div class="inventory-cards">
+    <div class="inventory-loading-grid">
       ${Array.from({ length: 5 }).map(() => `
         <article class="inventory-card skeleton">
           <div style="height:120px"></div>
@@ -320,28 +320,20 @@ function renderSpools() {
 
   const aktiv = list.filter(s => s.status === 'aktiv').sort((a, b) => (a.cfs_slot || 0) - (b.cfs_slot || 0));
   const lager = list.filter(s => s.status === 'lager');
-  const leer  = list.filter(s => s.status === 'leer');
+  const leer = list.filter(s => s.status === 'leer');
 
-  const thead = `<thead><tr>
-    <th>Filament</th><th>Hersteller</th><th>Verbleibend</th>
-    <th>Temp.</th><th>Slot</th><th>Status</th><th>Aktionen</th>
-  </tr></thead>`;
+  const sections = [];
+  if (!state.filterStatus || state.filterStatus === 'aktiv') {
+    sections.push(renderInventorySection('Aktive Filamente', aktiv, 'active'));
+  }
+  if (!state.filterStatus || state.filterStatus === 'lager') {
+    sections.push(renderInventorySection('Lager Filamente', lager, 'storage'));
+  }
+  if (state.filterStatus === 'leer' || (!state.filterStatus && leer.length > 0)) {
+    sections.push(renderInventorySection('Leere Filamente', leer, 'empty'));
+  }
 
-  const sep = (label) => `<tr><td colspan="7" style="padding:16px 14px 6px;font-size:0.75rem;font-weight:600;color:var(--text-mid);border-top:2px solid var(--border-hi);border-bottom:1px solid var(--border)">${label}</td></tr>`;
-
-  let rows = '';
-  if (aktiv.length) rows += sep('CFS Slots') + aktiv.map(s => renderSpoolRow(s)).join('');
-  if (lager.length) rows += sep('Lager') + lager.map(s => renderSpoolRow(s)).join('');
-  if (leer.length)  rows += sep('Leer') + leer.map(s => renderSpoolRow(s)).join('');
-
-  el.innerHTML = `
-    <div class="inventory-table-wrap">
-      <table class="spools-table">${thead}<tbody>${rows}</tbody></table>
-    </div>
-    <div class="inventory-cards">
-      ${list.map(s => renderSpoolCard(s)).join('')}
-    </div>
-  `;
+  el.innerHTML = `<div class="inventory-layout">${sections.join('')}</div>`;
 
   el.querySelectorAll('.btn-edit-spool').forEach(btn =>
     btn.addEventListener('click', () => openEditModal(parseInt(btn.dataset.id))));
@@ -351,6 +343,35 @@ function renderSpools() {
     btn.addEventListener('click', () => openAssignSpoolModal(parseInt(btn.dataset.id))));
   el.querySelectorAll('.btn-mark-empty').forEach(btn =>
     btn.addEventListener('click', () => markEmpty(parseInt(btn.dataset.id))));
+}
+
+function renderInventorySection(title, items, tone) {
+  return `
+    <section class="inventory-section ${tone}">
+      <header class="inventory-section-head">
+        <h3>${title}</h3>
+        <span class="inventory-count">${items.length}</span>
+      </header>
+      ${
+        items.length
+          ? `
+            <div class="inventory-table-wrap">
+              <table class="spools-table">
+                <thead><tr>
+                  <th>Filament</th><th>Hersteller</th><th>Verbleibend</th>
+                  <th>Temp.</th><th>Slot</th><th>Status</th><th>Aktionen</th>
+                </tr></thead>
+                <tbody>${items.map(renderSpoolRow).join('')}</tbody>
+              </table>
+            </div>
+            <div class="inventory-cards">
+              ${items.map(renderSpoolCard).join('')}
+            </div>
+          `
+          : '<div class="empty-state compact">Keine Filamente in diesem Bereich</div>'
+      }
+    </section>
+  `;
 }
 
 function renderSpoolRow(s) {

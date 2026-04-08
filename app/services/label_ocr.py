@@ -58,7 +58,30 @@ COLOR_ALIASES = {
     "emerald green": "emerald",
     "space gray": "gray",
     "cool grey": "grey",
+    "weiß": "white",
+    "weiss": "white",
+    "schwarz": "black",
+    "grau": "gray",
+    "grun": "green",
+    "grün": "green",
+    "blau": "blue",
+    "rot": "red",
+    "natur": "natural",
+    "naturlich": "natural",
+    "natürlich": "natural",
+    "klar": "transparent",
 }
+
+BRAND_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("Bambu Lab", re.compile(r"\bBAMBU\s*LAB\b", re.IGNORECASE)),
+    ("Prusament", re.compile(r"\bPRUSAMENT\b", re.IGNORECASE)),
+    ("Polymaker", re.compile(r"\bPOLYMAKER\b", re.IGNORECASE)),
+    ("Overture", re.compile(r"\bOVERTURE\b", re.IGNORECASE)),
+    ("Sunlu", re.compile(r"\bSUNLU\b", re.IGNORECASE)),
+    ("eSUN", re.compile(r"\bE[\s\-]?SUN\b", re.IGNORECASE)),
+    ("Anycubic", re.compile(r"\bANYCUBIC\b", re.IGNORECASE)),
+    ("Creality", re.compile(r"\bCREALITY\b", re.IGNORECASE)),
+]
 
 DEFAULT_FIELDS = {
     "brand": "",
@@ -179,16 +202,37 @@ def _parse_brand(normalized_text: str) -> Optional[tuple[str, str]]:
         Optional[tuple[str, str]]:
             Pair of parsed brand and source snippet.
     """
+    for canonical, pattern in BRAND_PATTERNS:
+        known = pattern.search(normalized_text)
+        if known:
+            return canonical, known.group(0)
+
     lines = [line.strip() for line in normalized_text.splitlines() if line.strip()]
+    excluded_tokens = {
+        "color",
+        "colour",
+        "temp",
+        "temperature",
+        "weight",
+        "net",
+        "diameter",
+        "bed",
+        "nozzle",
+        "printing",
+        "made in",
+    }
     for line in lines[:6]:
         clean = re.sub(r"[^A-Za-z0-9 ]", "", line).strip()
         if len(clean) < 3 or len(clean) > 28:
+            continue
+        lower_clean = clean.lower()
+        if any(token in lower_clean for token in excluded_tokens):
             continue
         if re.search(r"\b(\d+(?:\.\d+)?)\s*(mm|g|kg|c)\b", clean, re.IGNORECASE):
             continue
         if any(pattern.search(clean) for _, pattern in MATERIAL_PATTERNS):
             continue
-        if clean.upper() == clean or clean.istitle():
+        if re.fullmatch(r"[A-Z0-9 ]+", clean) or clean.istitle():
             return clean.title(), line
     return None
 
@@ -248,10 +292,18 @@ def _parse_color(normalized_text: str) -> Optional[tuple[str, str, str]]:
         Optional[tuple[str, str, str]]:
             Color name, hex value and source snippet.
     """
-    label_match = re.search(r"\bcolou?r\s*[:\-]?\s*([A-Za-z][A-Za-z ]{1,24})", normalized_text, re.IGNORECASE)
+    label_match = re.search(
+        r"\b(?:colou?r|farbe)\s*[:\-]?\s*([A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß ]{1,24})",
+        normalized_text,
+        re.IGNORECASE,
+    )
     candidates: list[tuple[str, str]] = []
     if label_match:
-        candidates.append((label_match.group(1).strip().lower(), label_match.group(0)))
+        label_value = label_match.group(1).strip().lower()
+        if any(pattern.search(label_value) for _, pattern in MATERIAL_PATTERNS):
+            label_value = ""
+        if label_value:
+            candidates.append((label_value, label_match.group(0)))
 
     lower_text = normalized_text.lower()
     for alias, canonical in COLOR_ALIASES.items():

@@ -687,6 +687,10 @@ function buildAddSpoolForm() {
             <strong id="detectedWeight">-</strong>
           </div>
         </div>
+        <div id="ocrReviewPanel" class="ocr-review-panel ocr-review-empty">
+          <div class="ocr-review-title">OCR Review</div>
+          <div class="ocr-review-empty-text">Noch kein Scan vorhanden.</div>
+        </div>
 
         <div class="spool-form-card">
           <h4>Basis</h4>
@@ -801,6 +805,20 @@ function setupAddSpoolForm() {
     document.getElementById('detectedWeight').textContent = Number.isFinite(initial) ? `${initial.toFixed(0)} g` : '-';
   };
 
+  const applyOCRResult = (data, statusEl) => {
+    fillFormFromOCR(data);
+    renderOCRReview(data);
+    refreshDetectedStrip();
+    const warnings = Array.isArray(data?.warnings) ? data.warnings.filter(Boolean) : [];
+    if (warnings.length) {
+      statusEl.textContent = `OK Etikett erkannt (${warnings.length} Hinweis${warnings.length > 1 ? 'e' : ''})`;
+      statusEl.style.color = 'var(--text-mid)';
+      return;
+    }
+    statusEl.textContent = 'OK Etikett erkannt';
+    statusEl.style.color = 'var(--accent)';
+  };
+
   setStep('source');
   refreshDetectedStrip();
 
@@ -866,10 +884,7 @@ function setupAddSpoolForm() {
           }
           try {
             const data = await uploadLabelImage(blob);
-            fillFormFromOCR(data);
-            refreshDetectedStrip();
-            statusEl.textContent = 'OK Etikett erkannt';
-            statusEl.style.color = 'var(--accent)';
+            applyOCRResult(data, statusEl);
           } catch (err) {
             statusEl.textContent = 'Fehler: ' + err.message;
             statusEl.style.color = 'var(--warn)';
@@ -890,10 +905,7 @@ function setupAddSpoolForm() {
     statusEl.style.color = 'var(--text-muted)';
     try {
       const data = await uploadLabelImage(file);
-      fillFormFromOCR(data);
-      refreshDetectedStrip();
-      statusEl.textContent = 'OK Etikett erkannt';
-      statusEl.style.color = 'var(--accent)';
+      applyOCRResult(data, statusEl);
     } catch (err) {
       statusEl.textContent = 'Scan fehlgeschlagen: ' + err.message;
       statusEl.style.color = 'var(--warn)';
@@ -969,21 +981,140 @@ function fillFormFromK2(data) {
   set('remaining_weight', data.remaining_grams);
 }
 
+function getLegacyFieldMeta(data) {
+  const fieldMap = {
+    material: data.material,
+    brand: data.brand,
+    color: data.color,
+    nozzle_min: data.nozzle_min,
+    nozzle_max: data.nozzle_max,
+    bed_max: data.bed_max,
+    bed_min: data.bed_min,
+    diameter: data.diameter,
+    weight_g: data.weight_g,
+  };
+  const meta = {};
+  Object.entries(fieldMap).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      meta[key] = { value, confidence: 0.45, source: 'legacy' };
+    }
+  });
+  return meta;
+}
+
+function confidenceClass(score) {
+  if (typeof score !== 'number' || Number.isNaN(score)) return 'unknown';
+  if (score >= 0.8) return 'high';
+  if (score >= 0.55) return 'medium';
+  return 'low';
+}
+
+function renderOCRReview(data) {
+  const panel = document.getElementById('ocrReviewPanel');
+  if (!panel) return;
+  const fieldMeta = data?.field_meta || getLegacyFieldMeta(data || {});
+  const fields = [
+    ['material', 'Material'],
+    ['brand', 'Brand'],
+    ['weight_g', 'Gewicht'],
+    ['nozzle_min', 'Nozzle Min'],
+    ['nozzle_max', 'Nozzle Max'],
+    ['bed_max', 'Bed'],
+    ['diameter', 'Durchmesser'],
+    ['color', 'Farbe'],
+  ];
+  const rows = fields
+    .map(([key, label]) => {
+      const entry = fieldMeta[key];
+      if (!entry) return '';
+      const cls = confidenceClass(entry.confidence);
+      const score = typeof entry.confidence === 'number' ? `${Math.round(entry.confidence * 100)}%` : 'n/a';
+      const value = entry.source === 'default' ? '—' : (entry.value ?? '—');
+      return `
+        <div class="ocr-review-row">
+          <span class="ocr-review-key">${label}</span>
+          <span class="ocr-review-val">${esc(String(value))}</span>
+          <span class="ocr-review-badge ${cls}">${score}</span>
+        </div>`;
+    })
+    .filter(Boolean);
+
+  const warnings = Array.isArray(data?.warnings) ? data.warnings : [];
+  panel.classList.remove('ocr-review-empty');
+  panel.innerHTML = `
+    <div class="ocr-review-title">OCR Review</div>
+    <div class="ocr-review-grid">${rows.join('')}</div>
+    ${
+      warnings.length
+        ? `<div class="ocr-review-warnings">${warnings.map(w => `<div>${esc(w)}</div>`).join('')}</div>`
+        : ''
+    }
+  `;
+}
+
 function fillFormFromOCR(data) {
   const f = document.getElementById('addSpoolForm');
-  const set = (name, val) => { if (val !== undefined && val !== null && val !== '' && val !== 0) f.querySelector(`[name="${name}"]`).value = val; };
-  set('material',        data.material);
-  set('color',           data.color);
-  set('brand',           data.brand);
-  set('nozzle_min',      data.nozzle_min);
-  set('nozzle_max',      data.nozzle_max);
-  set('bed_temp',        data.bed_max || data.bed_min);
-  set('diameter',        data.diameter);
-  set('initial_weight',  data.weight_g);
-  const remainingInput = f.querySelector('[name="remaining_weight"]');
-  const currentRemaining = parseFloat(remainingInput.value);
-  if (!remainingInput.value || Number.isNaN(currentRemaining) || currentRemaining <= 0) {
-    set('remaining_weight', data.weight_g);
+  if (!f || !data) return;
+  const set = (name, val) => {
+    const input = f.querySelector(`[name="${name}"]`);
+    if (!input) return;
+    if (val === undefined || val === null || val === '') return;
+    input.value = val;
+  };
+
+  const fieldMeta = data.field_meta || getLegacyFieldMeta(data);
+  const getValue = (key, fallback) => {
+    const metaEntry = fieldMeta[key];
+    if (
+      metaEntry
+      && metaEntry.source
+      && metaEntry.source !== 'default'
+      && metaEntry.value !== undefined
+      && metaEntry.value !== null
+      && metaEntry.value !== ''
+    ) {
+      return metaEntry.value;
+    }
+    if (fallback === undefined || fallback === null || fallback === '') return null;
+    if (typeof fallback === 'number' && fallback === 0) return null;
+    if (typeof fallback === 'string' && fallback === '0') return null;
+    if (typeof fallback === 'string' && fallback === '#888888') return null;
+    return fallback;
+  };
+
+  const weightValue = getValue('weight_g', data.weight_g);
+  const bedValue = getValue('bed_max', data.bed_max || data.bed_min);
+  const nozzleMin = getValue('nozzle_min', data.nozzle_min);
+  const nozzleMax = getValue('nozzle_max', data.nozzle_max);
+  const diameter = getValue('diameter', data.diameter);
+  const material = getValue('material', data.material);
+  const color = getValue('color', data.color);
+  const brand = getValue('brand', data.brand);
+
+  if (material) {
+    set('material', material);
+  }
+  if (color) {
+    set('color', color);
+  }
+  if (brand) {
+    set('brand', brand);
+  }
+  if (typeof nozzleMin === 'number' && nozzleMin > 0) {
+    set('nozzle_min', nozzleMin);
+  }
+  if (typeof nozzleMax === 'number' && nozzleMax > 0) {
+    set('nozzle_max', nozzleMax);
+  }
+  if (typeof bedValue === 'number' && bedValue > 0) {
+    set('bed_temp', bedValue);
+  }
+  if (typeof diameter === 'number' && diameter > 0) {
+    set('diameter', diameter);
+  }
+  if (typeof weightValue === 'number' && weightValue > 0) {
+    set('initial_weight', weightValue);
+    set('remaining_weight', weightValue);
   }
 }
 

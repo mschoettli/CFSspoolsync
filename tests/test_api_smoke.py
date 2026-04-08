@@ -10,6 +10,7 @@ os.environ["DATABASE_URL"] = f"sqlite:///{Path(gettempdir()) / 'cfsspoolsync_tes
 os.environ["DISABLE_MOONRAKER_POLLING"] = "1"
 
 from app.main import app
+from app.routers import ocr as ocr_router
 
 
 client = TestClient(app)
@@ -88,3 +89,28 @@ def test_cfs_route_shape() -> None:
     assert len(payload["slots"]) == 4
     for slot in payload["slots"]:
         assert set(slot.keys()) == {"slot", "key", "spool"}
+
+
+def test_scan_label_response_contains_meta(monkeypatch) -> None:
+    """Validate OCR endpoint returns compatibility fields plus metadata.
+
+    Returns:
+    --------
+        None:
+            Asserts expanded response shape for scan label endpoint.
+    """
+    monkeypatch.setattr(
+        ocr_router,
+        "ocr_image",
+        lambda _: "SUNLU PLA+ Color: White Printing Temp: 200-220C Net Weight: 1KG 1.75mm",
+    )
+    response = client.post(
+        "/api/scan-label",
+        files={"file": ("label.jpg", b"fake-image", "image/jpeg")},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    for key in ["material", "weight_g", "field_meta", "warnings", "raw_text"]:
+        assert key in payload
+    assert isinstance(payload["field_meta"], dict)
+    assert isinstance(payload["warnings"], list)

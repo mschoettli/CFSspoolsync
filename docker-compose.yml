@@ -7,7 +7,7 @@ services:
       - "${PORT:-8080}:8080"
     volumes:
       - ./data:/app/data
-      - ${K2_SSH_KEY:-/root/.ssh/id_k2}:${K2_SSH_KEY:-/root/.ssh/id_k2}:ro
+      - ${K2_SSH_KEY_HOST:-./secrets/id_k2}:${K2_SSH_KEY:-/root/.ssh/id_k2}:ro
     env_file:
       - .env
     healthcheck:

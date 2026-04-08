@@ -10,6 +10,8 @@ os.environ["DATABASE_URL"] = f"sqlite:///{Path(gettempdir()) / 'cfsspoolsync_tes
 os.environ["DISABLE_MOONRAKER_POLLING"] = "1"
 
 from app.main import app
+from app.database import SessionLocal
+from app.models import PrintJob
 from app.routers import ocr as ocr_router
 
 
@@ -130,3 +132,26 @@ def test_scan_label_response_contains_meta(monkeypatch) -> None:
     assert payload["field_meta"]["brand"]["source"] == "ocr+db-match"
     assert payload["field_meta"]["brand"]["match_source"] in {"db", "static"}
     assert "match_applied" in payload["field_meta"]["brand"]
+
+
+def test_jobs_route_returns_only_one_running_job() -> None:
+    """Ensure jobs API suppresses duplicate running jobs in list output.
+
+    Returns:
+    --------
+        None:
+            Asserts only one running job is returned.
+    """
+    db = SessionLocal()
+    try:
+        db.add(PrintJob(filename="same_file.gcode", status="running"))
+        db.add(PrintJob(filename="same_file.gcode", status="running"))
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/jobs?limit=30")
+    assert response.status_code == 200
+    payload = response.json()
+    running = [job for job in payload if job.get("status") == "running"]
+    assert len(running) <= 1

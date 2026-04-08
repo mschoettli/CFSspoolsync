@@ -136,6 +136,7 @@ async def _on_print_started() -> None:
     db = SessionLocal()
     try:
         slots = await asyncio.to_thread(get_all_slots)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         filename = ""
         try:
@@ -148,8 +149,38 @@ async def _on_print_started() -> None:
         except Exception:
             logger.debug("Could not read filename for print start event")
 
+        running_jobs = (
+            db.query(PrintJob)
+            .filter(PrintJob.status == "running")
+            .order_by(PrintJob.started_at.desc(), PrintJob.id.desc())
+            .all()
+        )
+        if running_jobs:
+            same_file = next(
+                (
+                    job
+                    for job in running_jobs
+                    if filename
+                    and job.filename
+                    and job.filename.strip() == filename.strip()
+                ),
+                None,
+            )
+            if same_file is not None:
+                _current_job_id = same_file.id
+                logger.info(
+                    "[Moonraker] Reusing existing running job #%s for %s",
+                    same_file.id,
+                    same_file.filename,
+                )
+                return
+
+            for stale_job in running_jobs:
+                stale_job.status = "cancelled"
+                stale_job.finished_at = stale_job.finished_at or now
+
         job = PrintJob(
-            started_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            started_at=now,
             status="running",
             filename=filename,
         )
@@ -189,20 +220,37 @@ async def _on_print_ended(final_state: str) -> None:
     """Finalize the current print job and apply measured filament consumption."""
     global _current_job_id
 
-    if _current_job_id is None:
-        logger.warning("[Moonraker] Print ended but no active job was tracked")
-        return
-
     from app.database import SessionLocal
     from app.models import PrintJob, Spool
     from app.services.ssh_client import get_all_slots, meters_to_grams
 
     db = SessionLocal()
     try:
+        if _current_job_id is None:
+            fallback_job = (
+                db.query(PrintJob)
+                .filter(PrintJob.status == "running")
+                .order_by(PrintJob.started_at.desc(), PrintJob.id.desc())
+                .first()
+            )
+            if not fallback_job:
+                logger.warning("[Moonraker] Print ended but no active job was tracked")
+                return
+            _current_job_id = fallback_job.id
+
         job = db.query(PrintJob).filter(PrintJob.id == _current_job_id).first()
         if not job:
-            logger.error("Job #%s not found", _current_job_id)
-            return
+            fallback_job = (
+                db.query(PrintJob)
+                .filter(PrintJob.status == "running")
+                .order_by(PrintJob.started_at.desc(), PrintJob.id.desc())
+                .first()
+            )
+            if not fallback_job:
+                logger.error("Job #%s not found", _current_job_id)
+                return
+            job = fallback_job
+            _current_job_id = job.id
 
         slots = await asyncio.to_thread(get_all_slots)
 
@@ -220,29 +268,48 @@ async def _on_print_ended(final_state: str) -> None:
 
             spool_id = getattr(job, f"slot_{letter}_spool_id")
             before_len = getattr(job, f"snap_{letter}_before")
-            if not spool_id or before_len is None:
-                continue
-
-            consumed_m = before_len - after_len
-            if consumed_m <= 0:
+            if not spool_id:
                 continue
 
             spool = db.query(Spool).filter(Spool.id == spool_id).first()
             if not spool:
                 continue
 
-            consumed_g = meters_to_grams(consumed_m, spool.diameter, spool.density)
-            new_weight = max(0.0, spool.remaining_weight - consumed_g)
-            setattr(job, f"slot_{letter}_after", new_weight)
-            spool.remaining_weight = round(new_weight, 1)
+            measured_weight = round(
+                max(
+                    0.0,
+                    meters_to_grams(after_len, spool.diameter, spool.density),
+                ),
+                1,
+            )
+            previous_weight = spool.remaining_weight
+            setattr(job, f"slot_{letter}_after", measured_weight)
+            spool.remaining_weight = measured_weight
             spool.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
-            logger.info(
-                "[Moonraker] Slot %s: -%.1fg -> %.1fg left",
-                letter.upper(),
-                consumed_g,
-                new_weight,
-            )
+            if before_len is not None:
+                consumed_m = before_len - after_len
+                if consumed_m > 0:
+                    consumed_g = meters_to_grams(consumed_m, spool.diameter, spool.density)
+                    logger.info(
+                        "[Moonraker] Slot %s: -%.1fg -> %.1fg left",
+                        letter.upper(),
+                        consumed_g,
+                        measured_weight,
+                    )
+                else:
+                    logger.info(
+                        "[Moonraker] Slot %s: measured %.1fg (prev %.1fg)",
+                        letter.upper(),
+                        measured_weight,
+                        previous_weight,
+                    )
+            else:
+                logger.info(
+                    "[Moonraker] Slot %s: measured %.1fg (no start snapshot)",
+                    letter.upper(),
+                    measured_weight,
+                )
 
         db.commit()
         logger.info("[Moonraker] Job #%s completed (%s)", job.id, job.status)

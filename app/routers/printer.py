@@ -48,7 +48,7 @@ def _pick_env_metric(status: dict, metric: str):
             continue
 
         lower = str(name).lower()
-        if not any(token in lower for token in ("cfs", "chamber", "box", "cabinet")):
+        if not any(token in lower for token in ("cfs", "ams")):
             continue
 
         value = _to_float(payload.get(metric))

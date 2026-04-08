@@ -21,7 +21,13 @@ def list_jobs(limit: int = Query(30, le=100), db: Session = Depends(get_db)):
     )
 
     result = []
+    running_seen = False
     for job in jobs:
+        if job.status == "running":
+            if running_seen:
+                continue
+            running_seen = True
+
         consumed = 0.0
         for letter in "abcd":
             before = getattr(job, f"slot_{letter}_before")

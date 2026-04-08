@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderInitialPlaceholders();
   renderK2SyncMeta();
   loadAll();
-  startPolling({ loadPrinterStatus, loadCFS });
+  startPolling({ loadPrinterStatus, loadCFS, loadSpools });
 });
 
 function setupNav() {
@@ -130,25 +130,27 @@ function renderPrinterStatus() {
   dot.className = `status-dot ${info.cls}`;
 
   if (p.state === 'printing' && p.filename) {
-    const short = p.filename.length > 24 ? '…' + p.filename.slice(-22) : p.filename;
-    label.textContent = `${info.label} · ${short}`;
+    const formatted = formatPrinterFilenameForStatus(p.filename);
+    label.textContent = `${info.label} · ${formatted}`;
+    label.title = `${info.label} · ${formatted}`;
   } else {
     label.textContent = info.label;
+    label.title = info.label;
   }
 
   const tempParts = [];
-  const cfsTemp = [
-    p.cfs_temp,
-    p.cfs_temperature,
-    p.chamber_temp,
-    p.temperature,
-  ].find(v => typeof v === 'number' && Number.isFinite(v));
+  const cfsTemp = typeof p.cfs_temp === 'number' && Number.isFinite(p.cfs_temp)
+    ? p.cfs_temp
+    : null;
   if (typeof cfsTemp === 'number') {
     tempParts.push(`🌡 ${cfsTemp.toFixed(0)}°C`);
   }
 
-  const humidity = [p.cfs_humidity, p.humidity, p.chamber_humidity, p.cfs_rh]
-    .find(v => typeof v === 'number' && Number.isFinite(v) && v >= 0);
+  const humidity = typeof p.cfs_humidity === 'number'
+    && Number.isFinite(p.cfs_humidity)
+    && p.cfs_humidity >= 0
+    ? p.cfs_humidity
+    : null;
   if (typeof humidity === 'number') {
     tempParts.push(`💧 ${humidity.toFixed(0)}%`);
   }
@@ -292,9 +294,7 @@ function getCurrentPrintingSpoolId(runningJob) {
     const slotSpoolId = runningJob.slots?.[letter]?.spool_id;
     if (Number.isInteger(slotSpoolId)) return slotSpoolId;
   }
-
-  const orderedSpoolIds = getRunningJobSpoolIds(runningJob);
-  return orderedSpoolIds.length ? orderedSpoolIds[0] : null;
+  return null;
 }
 
 function getSlotLiveJobMeta(slot) {
@@ -356,8 +356,6 @@ function renderSpools() {
     btn.addEventListener('click', () => openEditModal(parseInt(btn.dataset.id))));
   el.querySelectorAll('.btn-delete-spool').forEach(btn =>
     btn.addEventListener('click', () => deleteSpool(parseInt(btn.dataset.id))));
-  el.querySelectorAll('.btn-assign-from-lager').forEach(btn =>
-    btn.addEventListener('click', () => openAssignSpoolModal(parseInt(btn.dataset.id))));
   el.querySelectorAll('.btn-mark-empty').forEach(btn =>
     btn.addEventListener('click', () => markEmpty(parseInt(btn.dataset.id))));
 }
@@ -409,7 +407,6 @@ function renderSpoolRow(s) {
   let actions = `<button class="btn btn-ghost btn-sm btn-edit-spool" data-id="${s.id}">Bearbeiten</button>`;
   if (s.status === 'lager') {
     actions += `
-      <button class="btn btn-outline btn-sm btn-assign-from-lager" data-id="${s.id}">Einlegen</button>
       <button class="btn btn-danger btn-sm btn-delete-spool" data-id="${s.id}">Löschen</button>`;
   }
   if (s.status === 'lager' || s.status === 'aktiv') {
@@ -456,7 +453,6 @@ function renderSpoolCard(s) {
   let actions = `<button class="btn btn-ghost btn-sm btn-edit-spool" data-id="${s.id}">Bearbeiten</button>`;
   if (s.status === 'lager') {
     actions += `
-      <button class="btn btn-outline btn-sm btn-assign-from-lager" data-id="${s.id}">Einlegen</button>
       <button class="btn btn-danger btn-sm btn-delete-spool" data-id="${s.id}">Löschen</button>
     `;
   }
@@ -1470,7 +1466,34 @@ function fmtRemainingSeconds(seconds) {
   return `0h ${Math.max(1, m).toString().padStart(2, '0')}min`;
 }
 
+function formatPrinterFilenameForStatus(filename) {
+  const baseName = String(filename || '')
+    .split(/[\\/]/)
+    .pop()
+    .replace(/\.(gcode|gco|gc)$/i, '');
+  const materialTokens = new Set([
+    'PLA', 'PLA+', 'PETG', 'PET', 'ABS', 'ASA', 'PA', 'NYLON', 'PC',
+    'TPU', 'TPE', 'PVA', 'HIPS', 'PP', 'POM', 'CF', 'PETGCF', 'PLACF',
+  ]);
+  const cleanedParts = baseName
+    .split(/[_\s-]+/)
+    .map(part => part.trim())
+    .filter(Boolean)
+    .filter(part => !/^\d+$/.test(part))
+    .filter(part => !/^\d+h\d+m(\d+s)?$/i.test(part))
+    .filter(part => !/^\d+m\d+s$/i.test(part))
+    .filter(part => !/^\d+s$/i.test(part))
+    .filter(part => {
+      const normalized = part.toUpperCase().replace(/[^A-Z0-9+]/g, '');
+      return !materialTokens.has(normalized);
+    });
+  if (!cleanedParts.length) return baseName || 'Unbekannter Druck';
+  return cleanedParts.join(' ');
+}
+
 function formatRemainingWeight(weight) {
   if (typeof weight !== 'number' || !isFinite(weight)) return '—';
   return `${weight.toFixed(0)} g`;
 }
+
+

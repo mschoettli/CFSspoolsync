@@ -123,7 +123,8 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: max-content;
+  min-width: 0;
+  max-width: min(44vw, 560px);
   font-size: 0.78rem;
   color: var(--text-mid);
 }
@@ -143,8 +144,18 @@ body {
   50% { transform: scale(1.18); opacity: 0.55; }
 }
 
-.status-label { color: var(--text); font-weight: 600; }
+.status-label {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.68rem;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
 .status-sep { color: var(--line-strong); }
+.status-temp { flex: 0 0 auto; }
 
 #main {
   max-width: var(--max-width);
@@ -566,6 +577,7 @@ body {
   background: #50C878;
   box-shadow: 0 0 0 1px rgba(80, 200, 120, 0.4), 0 0 10px rgba(80, 200, 120, 0.55);
   flex: 0 0 auto;
+  margin-left: 6px;
 }
 
 .weight-mini-bar {
@@ -1199,42 +1211,54 @@ body {
   #header {
     padding: 0 12px;
     height: 62px;
+    gap: 10px;
+  }
+
+  .logo svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .logo-text {
+    font-size: 0.92rem;
   }
 
   #header #nav { display: none; }
   .mobile-bottom-nav { display: grid; }
 
   .printer-status {
-    font-size: 0.7rem;
-    gap: 4px;
-    flex-wrap: wrap;
+    font-size: 0.68rem;
+    gap: 6px;
+    flex-wrap: nowrap;
     justify-content: flex-end;
     text-align: right;
     min-width: 0;
-    max-width: 58vw;
+    max-width: 54vw;
   }
   .status-label {
-    display: inline-block;
-    max-width: 100%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    display: none;
   }
   .status-sep { display: none; }
   .status-temp {
-    display: block;
-    width: 100%;
-    font-size: 0.66rem;
+    display: inline-block;
+    width: auto;
+    max-width: calc(54vw - 16px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.72rem;
     color: var(--text-muted);
   }
 
   #main {
-    padding: 16px 12px 98px;
+    padding: 14px 12px 108px;
   }
 
   .view-header {
     flex-direction: column;
     align-items: stretch;
+    gap: 10px;
+    margin-bottom: 12px;
   }
 
   .view-actions,
@@ -1242,19 +1266,59 @@ body {
     width: 100%;
     justify-content: flex-start;
     flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  #view-cfs .header-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .view-actions .select-filter,
+  .view-actions .btn,
+  .header-actions .btn,
+  .header-actions .sync-meta {
+    width: 100%;
   }
 
   .sync-meta {
     width: 100%;
     white-space: normal;
+    font-size: 0.72rem;
   }
 
   .btn,
   .select-filter {
     height: 40px;
+    font-size: 0.8rem;
   }
 
   .slots-grid { grid-template-columns: 1fr; }
+
+  .slot-card {
+    min-height: 0;
+  }
+
+  .slot-card-inner {
+    padding: 12px;
+    gap: 7px;
+  }
+
+  .filament-material {
+    font-size: 0.94rem;
+  }
+
+  .weight-kpi {
+    font-size: 1rem;
+  }
+
+  .slot-live-meta {
+    padding: 7px 9px;
+  }
+
+  .slot-live-item {
+    font-size: 0.76rem;
+  }
 
   .inventory-table-wrap { display: none; }
   .inventory-cards {
@@ -1270,19 +1334,73 @@ body {
     padding: 10px;
   }
 
+  .inventory-section-head h3 {
+    font-size: 0.94rem;
+  }
+
+  .inventory-card {
+    padding: 11px;
+  }
+
+  .inventory-card-head {
+    align-items: flex-start;
+  }
+
+  .inventory-card-meta {
+    font-size: 0.74rem;
+  }
+
+  .inventory-card-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .inventory-card-actions .btn {
+    width: 100%;
+  }
+
+  .inventory-card-actions .spool-printing-dot {
+    justify-self: end;
+    align-self: center;
+    margin-left: 0;
+  }
+
   .job-card {
     grid-template-columns: 1fr;
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .job-filename {
+    font-size: 0.74rem;
+    word-break: break-word;
+  }
+
+  .job-meta {
+    font-size: 0.7rem;
   }
 
   .job-consumed {
     text-align: left;
     border-top: 1px solid rgba(104, 125, 155, 0.26);
-    padding-top: 10px;
+    padding-top: 8px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .job-consumed-val {
+    font-size: 1rem;
+  }
+
+  .job-consumed-label {
+    font-size: 0.68rem;
   }
 
   .modal {
     width: 100%;
-    max-height: 95vh;
+    max-height: 92vh;
     border-radius: 18px 18px 0 0;
     align-self: end;
   }
@@ -1321,7 +1439,7 @@ body {
 
   .form-actions-sticky {
     bottom: 0;
-    padding-bottom: 6px;
+    padding-bottom: calc(6px + env(safe-area-inset-bottom));
   }
 
   #toastContainer {
@@ -1333,6 +1451,30 @@ body {
   .toast {
     min-width: 0;
     width: 100%;
+  }
+}
+
+@media (max-width: 430px) {
+  #header {
+    height: 58px;
+    padding: 0 10px;
+  }
+
+  .logo-text {
+    display: none;
+  }
+
+  .printer-status {
+    max-width: 62vw;
+  }
+
+  .status-temp {
+    max-width: calc(62vw - 12px);
+    font-size: 0.7rem;
+  }
+
+  .inventory-card-actions {
+    grid-template-columns: 1fr;
   }
 }
 

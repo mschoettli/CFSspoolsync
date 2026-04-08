@@ -184,6 +184,12 @@ body {
   gap: 10px;
 }
 
+#view-cfs .view-header,
+#view-lager .view-header,
+#view-jobs .view-header {
+  justify-content: flex-end;
+}
+
 #view-cfs .header-actions {
   flex-direction: row-reverse;
 }

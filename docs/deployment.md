@@ -57,5 +57,6 @@ docker compose ps
 
 - **Container unhealthy**: inspect logs with `docker compose logs -f`.
 - **K2 unreachable**: verify host/IP, firewall, SSH key, and Moonraker URL.
-- **OCR errors**: confirm image quality and Tesseract availability in container.
+- **OCR errors**: confirm image quality and OCR runtime dependencies in container. The app
+  uses PaddleOCR first and falls back to Tesseract automatically when unavailable.
 - **Permission issue on mounted key**: ensure host path exists and is readable.

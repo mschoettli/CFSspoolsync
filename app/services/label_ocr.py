@@ -3,10 +3,13 @@
 import logging
 import re
 import unicodedata
+from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+BRAND_APPLY_THRESHOLD = 0.65
+OCR_FALLBACK_MIN_SCORE = 35.0
 
 MATERIAL_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("PETG-CF", re.compile(r"\bPETG\s*[-+ ]\s*CF\b", re.IGNORECASE)),
@@ -82,6 +85,7 @@ BRAND_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("eSUN", re.compile(r"\bE[\s\-]?SUN\b", re.IGNORECASE)),
     ("Anycubic", re.compile(r"\bANYCUBIC\b", re.IGNORECASE)),
     ("Creality", re.compile(r"\bCREALITY\b", re.IGNORECASE)),
+    ("Geeetech", re.compile(r"\bGEE+\s*[\+\-]?\s*TECH\b", re.IGNORECASE)),
 ]
 
 STATIC_BRAND_CANONICALS = [
@@ -93,6 +97,7 @@ STATIC_BRAND_CANONICALS = [
     "eSUN",
     "Anycubic",
     "Creality",
+    "Geeetech",
 ]
 
 DEFAULT_FIELDS = {
@@ -240,6 +245,15 @@ def _parse_brand(normalized_text: str) -> Optional[tuple[str, str]]:
         lower_clean = clean.lower()
         if any(token in lower_clean for token in excluded_tokens):
             continue
+        alnum = re.sub(r"\s+", "", clean)
+        if alnum:
+            digit_ratio = sum(ch.isdigit() for ch in alnum) / len(alnum)
+            if digit_ratio >= 0.2:
+                continue
+        if re.search(r"\b\d{3,}[-_][A-Z0-9\-]{3,}\b", clean, re.IGNORECASE):
+            continue
+        if re.search(r"\b[A-Z]{2,}\d{3,}[A-Z0-9]*\b", clean):
+            continue
         if re.search(r"\b(\d+(?:\.\d+)?)\s*(mm|g|kg|c)\b", clean, re.IGNORECASE):
             continue
         if any(pattern.search(clean) for _, pattern in MATERIAL_PATTERNS):
@@ -347,18 +361,26 @@ def _extract_temperature_range(normalized_text: str, keywords: str) -> Optional[
         Optional[tuple[int, int, str]]:
             Min temp, max temp and source snippet.
     """
-    pattern = re.compile(
-        rf"(?:{keywords})\s*temp[^\d]{{0,18}}(\d{{2,3}})\s*(?:°?\s*C)?\s*(?:-|to)\s*(\d{{2,3}})",
-        re.IGNORECASE,
-    )
-    match = pattern.search(normalized_text)
-    if not match:
-        return None
-    low = int(match.group(1))
-    high = int(match.group(2))
-    if low > high:
-        low, high = high, low
-    return low, high, match.group(0)
+    patterns = [
+        re.compile(
+            rf"(?:{keywords})\s*temp(?:erature)?\s*[:\-]?\s*(\d{{2,3}})\s*(?:°?\s*C)?\s*(?:-|to|~)\s*(\d{{2,3}})\s*(?:°?\s*C)?",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            rf"(?:{keywords})[^\d]{{0,20}}(\d{{2,3}})\s*(?:°?\s*C)?\s*(?:-|to|~)\s*(\d{{2,3}})\s*(?:°?\s*C)?",
+            re.IGNORECASE,
+        ),
+    ]
+    for pattern in patterns:
+        match = pattern.search(normalized_text)
+        if not match:
+            continue
+        low = int(match.group(1))
+        high = int(match.group(2))
+        if low > high:
+            low, high = high, low
+        return low, high, match.group(0)
+    return None
 
 
 def _parse_temperature_fallback(
@@ -619,22 +641,26 @@ def apply_db_similarity_matching(
     if brand_ocr:
         brand_match, brand_score, brand_source = _best_match(brand_ocr, brand_candidates)
         parsed["canonical_brand"] = brand_match
-        parsed["brand"] = brand_match
+        brand_match_applied = brand_score >= BRAND_APPLY_THRESHOLD
+        final_brand = brand_match if brand_match_applied else brand_ocr
+        parsed["brand"] = final_brand
         entry = field_meta.get("brand", {})
         entry.update(
             {
-                "value": brand_match,
+                "value": final_brand,
                 "source": "ocr+db-match",
                 "confidence": max(float(entry.get("confidence", 0.0)), brand_score),
                 "ocr_value": brand_ocr,
                 "matched_value": brand_match,
                 "match_score": round(brand_score, 3),
                 "match_source": brand_source,
+                "match_applied": brand_match_applied,
+                "match_threshold": BRAND_APPLY_THRESHOLD,
             }
         )
         field_meta["brand"] = entry
-        if brand_score < 0.6:
-            warnings.append("Brand auto-korrigiert mit niedriger Sicherheit")
+        if not brand_match_applied:
+            warnings.append("Brand-Match unsicher, OCR-Wert beibehalten")
 
     material_ocr = str(parsed.get("material") or "").strip()
     if material_ocr:
@@ -783,7 +809,7 @@ def parse_label(text: str) -> dict:
 
 
 def ocr_image(image_bytes: bytes) -> Optional[str]:
-    """Run Tesseract OCR on image bytes and return best extracted text.
+    """Run hybrid OCR and return extracted text for legacy callers.
 
     Args:
     -----
@@ -795,34 +821,265 @@ def ocr_image(image_bytes: bytes) -> Optional[str]:
         Optional[str]:
             Highest-quality OCR candidate text.
     """
-    try:
-        import io
+    result = ocr_image_with_engine(image_bytes)
+    return None if result is None else result.text
 
-        from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+
+@dataclass
+class OCRResult:
+    """OCR output with source engine and quality score."""
+
+    text: str
+    engine: str
+    score: float
+
+
+class OCREngine:
+    """Base OCR engine contract."""
+
+    name = "unknown"
+
+    def extract_text(self, image) -> list[str]:
+        """Extract text candidates from one image variant.
+
+        Args:
+        -----
+            image:
+                PIL image input.
+
+        Returns:
+        --------
+            list[str]:
+                Candidate OCR outputs for scoring.
+        """
+        raise NotImplementedError
+
+
+class TesseractOCREngine(OCREngine):
+    """Tesseract-based OCR engine."""
+
+    name = "tesseract"
+
+    def extract_text(self, image) -> list[str]:
+        """Extract OCR candidates using different Tesseract PSM modes.
+
+        Args:
+        -----
+            image:
+                PIL image input.
+
+        Returns:
+        --------
+            list[str]:
+                OCR candidates.
+        """
         import pytesseract
 
-        image = Image.open(io.BytesIO(image_bytes))
-        image = ImageOps.exif_transpose(image)
-
-        width, height = image.size
-        scale = max(1, 1400 / max(width, height))
-        if scale > 1:
-            image = image.resize((int(width * scale), int(height * scale)), Image.LANCZOS)
-
-        image = image.convert("L")
-        image = ImageEnhance.Contrast(image).enhance(2.2)
-        image = ImageEnhance.Sharpness(image).enhance(1.8)
-        image = image.filter(ImageFilter.SHARPEN)
-
-        candidates = [
+        return [
             pytesseract.image_to_string(image, config="--oem 3 --psm 6"),
             pytesseract.image_to_string(image, config="--oem 3 --psm 4"),
             pytesseract.image_to_string(image, config="--oem 3 --psm 11"),
         ]
-        text = max(candidates, key=_score_ocr_text)
 
-        logger.info("OCR extracted %s chars", len(text))
-        return text
+
+class PaddleOCREngine(OCREngine):
+    """PaddleOCR-based engine for robust printed text extraction."""
+
+    name = "paddle"
+
+    def __init__(self) -> None:
+        """Initialize PaddleOCR model lazily.
+
+        Raises:
+        -------
+            RuntimeError:
+                Raised when PaddleOCR is unavailable.
+        """
+        try:
+            from paddleocr import PaddleOCR
+        except Exception as exc:
+            raise RuntimeError("PaddleOCR not available") from exc
+        self._ocr = PaddleOCR(use_angle_cls=True, lang="en", use_gpu=False, show_log=False)
+
+    def extract_text(self, image) -> list[str]:
+        """Extract text candidates from PaddleOCR output lines.
+
+        Args:
+        -----
+            image:
+                PIL image input.
+
+        Returns:
+        --------
+            list[str]:
+                One joined-text candidate.
+        """
+        import numpy as np
+
+        result = self._ocr.ocr(np.array(image), cls=True)
+        if not result:
+            return []
+        lines: list[str] = []
+        for block in result:
+            if not block:
+                continue
+            for line in block:
+                if not line or len(line) < 2:
+                    continue
+                text = str(line[1][0]).strip()
+                if text:
+                    lines.append(text)
+        return ["\n".join(lines)] if lines else []
+
+
+def _crop_bright_label_region(image):
+    """Try to crop image to a bright label-like bounding box.
+
+    Args:
+    -----
+        image:
+            PIL image.
+
+    Returns:
+    --------
+        PIL.Image:
+            Cropped or original image.
+    """
+    gray = image.convert("L")
+    # Keep only very bright pixels, then extract bounding box.
+    mask = gray.point(lambda p: 255 if p >= 180 else 0)
+    bbox = mask.getbbox()
+    if not bbox:
+        return image
+    x1, y1, x2, y2 = bbox
+    if (x2 - x1) < image.width * 0.25 or (y2 - y1) < image.height * 0.2:
+        return image
+    pad_x = int((x2 - x1) * 0.04)
+    pad_y = int((y2 - y1) * 0.06)
+    left = max(0, x1 - pad_x)
+    top = max(0, y1 - pad_y)
+    right = min(image.width, x2 + pad_x)
+    bottom = min(image.height, y2 + pad_y)
+    return image.crop((left, top, right, bottom))
+
+
+def _build_image_variants(image):
+    """Build OCR-friendly preprocessed image variants.
+
+    Args:
+    -----
+        image:
+            Source PIL image.
+
+    Returns:
+    --------
+        list:
+            Prepared PIL variants.
+    """
+    from PIL import ImageEnhance, ImageFilter, ImageOps
+
+    base = ImageOps.exif_transpose(image)
+    width, height = base.size
+    scale = max(1.0, 1600 / max(width, height))
+    if scale > 1.0:
+        from PIL import Image
+
+        base = base.resize((int(width * scale), int(height * scale)), Image.Resampling.LANCZOS)
+
+    cropped = _crop_bright_label_region(base)
+    variants = [base, cropped]
+    prepared = []
+    for variant in variants:
+        gray = variant.convert("L")
+        sharp = ImageEnhance.Sharpness(gray).enhance(1.8)
+        contrast = ImageEnhance.Contrast(sharp).enhance(2.2).filter(ImageFilter.SHARPEN)
+        threshold = contrast.point(lambda p: 255 if p > 148 else 0)
+        prepared.extend([contrast, threshold])
+    return prepared
+
+
+def _best_engine_result(engine: OCREngine, variants: list) -> Optional[OCRResult]:
+    """Run one OCR engine on prepared variants and return best scored text.
+
+    Args:
+    -----
+        engine (OCREngine):
+            OCR backend instance.
+        variants (list):
+            Preprocessed PIL image variants.
+
+    Returns:
+    --------
+        Optional[OCRResult]:
+            Best OCR result for the engine.
+    """
+    best_result: Optional[OCRResult] = None
+    for image in variants:
+        try:
+            candidates = engine.extract_text(image)
+        except Exception as exc:
+            logger.debug("OCR engine %s failed on variant: %s", engine.name, exc)
+            continue
+        for text in candidates:
+            score = _score_ocr_text(text)
+            if best_result is None or score > best_result.score:
+                best_result = OCRResult(text=text, engine=engine.name, score=score)
+    return best_result
+
+
+def ocr_image_with_engine(image_bytes: bytes) -> Optional[OCRResult]:
+    """Run hybrid OCR and return best text with engine metadata.
+
+    Args:
+    -----
+        image_bytes (bytes):
+            Encoded image content.
+
+    Returns:
+    --------
+        Optional[OCRResult]:
+            Best OCR result and selected engine.
+    """
+    try:
+        import io
+        from PIL import Image
+
+        image = Image.open(io.BytesIO(image_bytes))
+        variants = _build_image_variants(image)
     except Exception as exc:
-        logger.error("OCR error: %s", exc)
+        logger.error("OCR preprocessing error: %s", exc)
         return None
+
+    paddle_result: Optional[OCRResult] = None
+    try:
+        paddle_result = _best_engine_result(PaddleOCREngine(), variants)
+    except Exception as exc:
+        logger.info("PaddleOCR unavailable, fallback to Tesseract: %s", exc)
+
+    if paddle_result and paddle_result.score >= OCR_FALLBACK_MIN_SCORE:
+        logger.info(
+            "OCR extracted %s chars via %s (score %.1f)",
+            len(paddle_result.text),
+            paddle_result.engine,
+            paddle_result.score,
+        )
+        return paddle_result
+
+    tesseract_result = _best_engine_result(TesseractOCREngine(), variants)
+    if tesseract_result:
+        logger.info(
+            "OCR extracted %s chars via %s (score %.1f)",
+            len(tesseract_result.text),
+            tesseract_result.engine,
+            tesseract_result.score,
+        )
+        return tesseract_result
+
+    if paddle_result:
+        logger.info(
+            "OCR used low-score %s output (score %.1f) due to missing fallback",
+            paddle_result.engine,
+            paddle_result.score,
+        )
+        return paddle_result
+    return None

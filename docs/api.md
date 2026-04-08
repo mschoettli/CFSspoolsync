@@ -80,6 +80,9 @@ Response keys:
 - `extruder_target`
 - `bed_temp`
 - `bed_target`
+- `remaining_seconds`
+- `cfs_temp`
+- `cfs_humidity`
 
 ## Jobs
 
@@ -95,3 +98,5 @@ Returns parsed fields like:
 - `brand`, `material`, `color`
 - `nozzle_min`, `nozzle_max`, `bed_min`, `bed_max`
 - `diameter`, `weight_g`, `raw_text`
+- `ocr_engine` (`paddle` or `tesseract`)
+- `field_meta` with per-field confidence and optional match metadata (`match_score`, `match_source`, `match_applied`)

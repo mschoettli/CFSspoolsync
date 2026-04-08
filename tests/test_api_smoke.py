@@ -108,8 +108,11 @@ def test_scan_label_response_contains_meta(monkeypatch) -> None:
 
     monkeypatch.setattr(
         ocr_router,
-        "ocr_image",
-        lambda _: "BAM8U LAB PLAA Color: WeisS Printing Temp: 200-220C Net Weight: 1KG 1.75mm",
+        "ocr_image_with_engine",
+        lambda _: type("OCR", (), {
+            "text": "BAM8U LAB PLAA Color: WeisS Printing Temp: 200-220C Net Weight: 1KG 1.75mm",
+            "engine": "tesseract",
+        })(),
     )
     response = client.post(
         "/api/scan-label",
@@ -117,11 +120,13 @@ def test_scan_label_response_contains_meta(monkeypatch) -> None:
     )
     assert response.status_code == 200
     payload = response.json()
-    for key in ["material", "weight_g", "field_meta", "warnings", "raw_text"]:
+    for key in ["material", "weight_g", "field_meta", "warnings", "raw_text", "ocr_engine"]:
         assert key in payload
     assert isinstance(payload["field_meta"], dict)
     assert isinstance(payload["warnings"], list)
     assert payload["brand"] == "Bambu Lab"
     assert payload["material"] == "PLA"
+    assert payload["ocr_engine"] == "tesseract"
     assert payload["field_meta"]["brand"]["source"] == "ocr+db-match"
     assert payload["field_meta"]["brand"]["match_source"] in {"db", "static"}
+    assert "match_applied" in payload["field_meta"]["brand"]

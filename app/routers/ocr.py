@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Spool
-from app.services.label_ocr import apply_db_similarity_matching, ocr_image, parse_label
+from app.services.label_ocr import (
+    apply_db_similarity_matching,
+    ocr_image_with_engine,
+    parse_label,
+)
 
 router = APIRouter(prefix="/api", tags=["ocr"])
 
@@ -19,11 +23,12 @@ async def scan_label(file: UploadFile = File(...), db: Session = Depends(get_db)
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(400, "Bild zu gross (max 10 MB)")
 
-    text = await asyncio.to_thread(ocr_image, content)
-    if text is None:
-        raise HTTPException(503, "OCR fehlgeschlagen – Tesseract nicht verfügbar")
+    ocr_result = await asyncio.to_thread(ocr_image_with_engine, content)
+    if ocr_result is None:
+        raise HTTPException(503, "OCR fehlgeschlagen - PaddleOCR und Tesseract nicht verfugbar")
 
-    parsed = parse_label(text)
+    parsed = parse_label(ocr_result.text)
+    parsed["ocr_engine"] = ocr_result.engine
 
     spool_rows = db.query(Spool.brand, Spool.material, Spool.color).all()
     db_brands = sorted(

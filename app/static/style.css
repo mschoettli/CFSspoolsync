@@ -288,7 +288,7 @@ body {
   overflow: hidden;
   box-shadow: var(--shadow-sm);
   transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
-  min-height: 258px;
+  min-height: 216px;
 }
 
 .slot-card:hover {
@@ -298,13 +298,13 @@ body {
 }
 
 .color-bar { height: 4px; }
-.slot-card-inner { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.slot-card-inner { padding: 13px; display: flex; flex-direction: column; gap: 8px; }
 
 .slot-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .slot-key {
@@ -340,26 +340,26 @@ body {
 .filament-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   margin-bottom: 2px;
 }
 
 .color-swatch {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   border-radius: 999px;
   border: 2px solid rgba(242, 246, 255, 0.24);
 }
 
 .filament-material {
-  font-size: 1.06rem;
+  font-size: 0.98rem;
   font-weight: 700;
   margin-bottom: 1px;
 }
 
 .filament-brand {
   color: var(--text-mid);
-  font-size: 0.78rem;
+  font-size: 0.74rem;
 }
 
 .weight-section { margin-bottom: 0; }
@@ -373,7 +373,7 @@ body {
 .weight-label-left { color: var(--text-mid); }
 .weight-kpi {
   font-family: var(--font-data);
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: var(--text);
 }
@@ -381,7 +381,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 7px;
+  margin-bottom: 5px;
 }
 .weight-total { color: var(--text-muted); font-size: 0.72rem; }
 .weight-percent {
@@ -391,7 +391,7 @@ body {
 }
 
 .progress-bar {
-  height: 10px;
+  height: 9px;
   border-radius: 999px;
   background: rgba(92, 114, 145, 0.32);
   overflow: hidden;
@@ -422,17 +422,16 @@ body {
 .slot-empty-label { color: var(--text-muted); }
 
 .slot-live-meta {
-  margin-top: 2px;
+  margin-top: 3px;
   border: 1px solid rgba(39, 198, 149, 0.34);
   background: rgba(39, 198, 149, 0.09);
   border-radius: 10px;
-  padding: 7px 9px;
-  display: grid;
-  gap: 3px;
+  padding: 6px 9px;
+  display: block;
 }
 
 .slot-live-item {
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   color: var(--text-mid);
 }
 
@@ -557,6 +556,16 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  align-items: center;
+}
+
+.spool-printing-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #50C878;
+  box-shadow: 0 0 0 1px rgba(80, 200, 120, 0.4), 0 0 10px rgba(80, 200, 120, 0.55);
+  flex: 0 0 auto;
 }
 
 .weight-mini-bar {
@@ -600,6 +609,7 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  align-items: center;
 }
 
 .jobs-list { display: grid; gap: 10px; }
@@ -835,6 +845,29 @@ body {
   margin-bottom: 8px;
 }
 
+.ocr-review-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ocr-review-head .ocr-review-title {
+  margin-bottom: 0;
+}
+
+.ocr-review-engine {
+  border-radius: 999px;
+  padding: 2px 8px;
+  border: 1px solid rgba(80, 200, 120, 0.4);
+  background: rgba(80, 200, 120, 0.18);
+  color: #b7f8d1;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
 .ocr-review-empty-text {
   color: var(--text-muted);
   font-size: 0.78rem;
@@ -874,6 +907,16 @@ body {
 .ocr-review-arrow {
   color: var(--text-muted);
   font-size: 0.72rem;
+}
+
+.ocr-review-note {
+  margin-left: 4px;
+  border-radius: 999px;
+  padding: 1px 7px;
+  border: 1px solid rgba(255, 140, 140, 0.55);
+  background: rgba(255, 140, 140, 0.14);
+  color: #ffd4d4;
+  font-size: 0.64rem;
 }
 
 .ocr-review-badge {

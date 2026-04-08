@@ -273,20 +273,36 @@ function getRunningJob() {
 }
 
 function getRunningJobSpoolIds(job) {
-  if (!job || !job.slots) return new Set();
-  return new Set(
-    Object.values(job.slots)
-      .map(slot => slot?.spool_id)
-      .filter(id => Number.isInteger(id))
-  );
+  if (!job || !job.slots) return [];
+  return ['a', 'b', 'c', 'd']
+    .map(letter => job.slots?.[letter]?.spool_id)
+    .filter(id => Number.isInteger(id));
+}
+
+function getCurrentPrintingSpoolId(runningJob) {
+  if (!runningJob) return null;
+
+  if (Number.isInteger(state.printer?.active_spool_id)) {
+    return state.printer.active_spool_id;
+  }
+
+  const activeSlot = state.printer?.active_cfs_slot ?? state.printer?.cfs_active_slot;
+  if (Number.isInteger(activeSlot) && activeSlot >= 1 && activeSlot <= 4) {
+    const letter = 'abcd'[activeSlot - 1];
+    const slotSpoolId = runningJob.slots?.[letter]?.spool_id;
+    if (Number.isInteger(slotSpoolId)) return slotSpoolId;
+  }
+
+  const orderedSpoolIds = getRunningJobSpoolIds(runningJob);
+  return orderedSpoolIds.length ? orderedSpoolIds[0] : null;
 }
 
 function getSlotLiveJobMeta(slot) {
   if (!slot.spool) return null;
   const runningJob = getRunningJob();
   if (!runningJob) return null;
-  const activeSpoolIds = getRunningJobSpoolIds(runningJob);
-  if (!activeSpoolIds.has(slot.spool.id)) return null;
+  const currentSpoolId = getCurrentPrintingSpoolId(runningJob);
+  if (!Number.isInteger(currentSpoolId) || slot.spool.id !== currentSpoolId) return null;
   if (state.printer.state !== 'printing') return null;
 
   return {
@@ -303,9 +319,7 @@ function getSlotLiveJobMeta(slot) {
 function renderLiveJobMeta(meta) {
   return `
     <div class="slot-live-meta">
-      <span class="slot-live-item">Rest: <strong>${meta.remaining}</strong></span>
-      <span class="slot-live-item">Nozzle: <strong>${meta.nozzle}</strong></span>
-      <span class="slot-live-item">Bed: <strong>${meta.bed}</strong></span>
+      <span class="slot-live-item">Restlaufzeit: <strong>${meta.remaining}</strong></span>
     </div>
   `;
 }
@@ -377,6 +391,15 @@ function renderInventorySection(title, items, tone) {
   `;
 }
 
+function isCurrentlyPrintingSpool(spoolId) {
+  if (!Number.isInteger(spoolId)) return false;
+  if (state.printer?.state !== 'printing') return false;
+  const runningJob = getRunningJob();
+  if (!runningJob) return false;
+  const currentSpoolId = getCurrentPrintingSpoolId(runningJob);
+  return Number.isInteger(currentSpoolId) && currentSpoolId === spoolId;
+}
+
 function renderSpoolRow(s) {
   const pct  = s.initial_weight > 0 ? (s.remaining_weight / s.initial_weight) * 100 : 0;
   const cls  = pct > 50 ? 'high' : pct > 20 ? 'medium' : 'low';
@@ -391,6 +414,9 @@ function renderSpoolRow(s) {
   }
   if (s.status === 'lager' || s.status === 'aktiv') {
     actions += `<button class="btn btn-ghost btn-sm btn-mark-empty" data-id="${s.id}" style="color:var(--text-muted)">Leer</button>`;
+  }
+  if (isCurrentlyPrintingSpool(s.id)) {
+    actions += `<span class="spool-printing-dot" title="Aktuell im Druck" aria-label="Aktuell im Druck"></span>`;
   }
 
   return `
@@ -436,6 +462,9 @@ function renderSpoolCard(s) {
   }
   if (s.status === 'lager' || s.status === 'aktiv') {
     actions += `<button class="btn btn-ghost btn-sm btn-mark-empty" data-id="${s.id}">Leer</button>`;
+  }
+  if (isCurrentlyPrintingSpool(s.id)) {
+    actions += `<span class="spool-printing-dot" title="Aktuell im Druck" aria-label="Aktuell im Druck"></span>`;
   }
 
   return `
@@ -1437,12 +1466,11 @@ function fmtRemainingSeconds(seconds) {
   const total = Math.round(seconds);
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
-  if (h > 0) return `${h}h ${m.toString().padStart(2, '0')}m`;
-  return `${Math.max(1, m)}m`;
+  if (h > 0) return `${h}h ${m.toString().padStart(2, '0')}min`;
+  return `0h ${Math.max(1, m).toString().padStart(2, '0')}min`;
 }
 
 function formatRemainingWeight(weight) {
   if (typeof weight !== 'number' || !isFinite(weight)) return '—';
   return `${weight.toFixed(0)} g`;
 }
-

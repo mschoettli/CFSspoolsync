@@ -12,7 +12,7 @@ Filament management for Creality K2 Plus / K2 Combo with CFS.
 - Storage management for all spools
 - Print job history with per-slot consumption tracking
 - SSH-based live sync from K2 CFS JSON
-- Label OCR to pre-fill spool metadata
+- Hybrid label OCR (PaddleOCR with Tesseract fallback) to pre-fill spool metadata
 
 ## Quick Start
 

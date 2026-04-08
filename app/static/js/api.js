@@ -61,7 +61,16 @@ export async function uploadLabelImage(file) {
   const response = await fetch("/api/scan-label", { method: "POST", body: fd });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || "OCR request failed");
+    let detail = "OCR request failed";
+    if (text) {
+      try {
+        const payload = JSON.parse(text);
+        detail = payload.detail || payload.message || detail;
+      } catch {
+        detail = text;
+      }
+    }
+    throw new Error(detail);
   }
 
   return response.json();

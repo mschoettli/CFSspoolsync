@@ -45,7 +45,7 @@ def parse_label(text: str) -> dict:
         "bed_min": 0,
         "bed_max": 0,
         "diameter": 1.75,
-        "weight_g": 1000,
+        "weight_g": None,
         "raw_text": text,
     }
 

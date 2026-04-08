@@ -616,6 +616,25 @@ async function markEmpty(id) {
 
 // ── Modal: Add Spool ──────────────────────────────────────────────────────
 let _addSpoolFormSetup = false;
+let _labelScanStream = null;
+
+function stopLabelScanStream() {
+  if (_labelScanStream) {
+    _labelScanStream.getTracks().forEach(track => track.stop());
+    _labelScanStream = null;
+  }
+  const video = document.getElementById('labelVideo');
+  if (video) {
+    video.srcObject = null;
+    video.style.display = 'none';
+  }
+  const captureBtn = document.getElementById('btnCapture');
+  if (captureBtn) {
+    captureBtn.style.display = 'none';
+    captureBtn.onclick = null;
+  }
+}
+
 function openAddSpoolModal() {
   _addSpoolFormSetup = false;
   openModal('Neue Spule hinzufügen', buildAddSpoolForm());
@@ -731,26 +750,27 @@ function setupAddSpoolForm() {
   document.getElementById('btnReadFromK2').addEventListener('click', async () => {
     if (!selectedSlot) return;
     const statusEl = document.getElementById('k2ReadStatus');
-    statusEl.textContent = 'Lese…';
+    statusEl.textContent = 'Lese...';
     try {
       const data = await apiFetch(`/api/cfs/slot/${selectedSlot}/read`);
       fillFormFromK2(data);
-      statusEl.textContent = '✓ Daten geladen';
+      statusEl.textContent = 'OK Daten geladen';
       statusEl.style.color = 'var(--accent)';
     } catch (e) {
-      statusEl.textContent = '✗ ' + e.message;
+      statusEl.textContent = 'Fehler: ' + e.message;
       statusEl.style.color = 'var(--warn)';
     }
   });
 
   document.getElementById('btnCancelSpool').addEventListener('click', closeModal);
 
-  // ── Label image scan ──
   document.getElementById('btnScanLabel').addEventListener('click', async () => {
     const video = document.getElementById('labelVideo');
     const captureBtn = document.getElementById('btnCapture');
     try {
+      stopLabelScanStream();
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      _labelScanStream = stream;
       video.srcObject = stream;
       video.style.display = 'block';
       captureBtn.style.display = 'inline-block';
@@ -759,44 +779,49 @@ function setupAddSpoolForm() {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video, 0, 0);
-        stream.getTracks().forEach(t => t.stop());
-        video.style.display = 'none';
-        captureBtn.style.display = 'none';
+        stopLabelScanStream();
         const statusEl = document.getElementById('k2ReadStatus');
-        statusEl.textContent = '📷 Bild wird analysiert…';
+        statusEl.textContent = 'Bild wird analysiert...';
         statusEl.style.color = 'var(--text-muted)';
         canvas.toBlob(async (blob) => {
+          if (!blob) {
+            statusEl.textContent = 'Fehler: Bild konnte nicht verarbeitet werden';
+            statusEl.style.color = 'var(--warn)';
+            return;
+          }
           try {
             const data = await uploadLabelImage(blob);
             fillFormFromOCR(data);
-            statusEl.textContent = '✓ Etikett erkannt: ' + (data.material || '?') + ' ' + (data.brand || '');
+            statusEl.textContent = 'OK Etikett erkannt: ' + (data.material || '?') + ' ' + (data.brand || '');
             statusEl.style.color = 'var(--accent)';
-          } catch(err) {
-            statusEl.textContent = '✗ ' + err.message;
+          } catch (err) {
+            statusEl.textContent = 'Fehler: ' + err.message;
             statusEl.style.color = 'var(--warn)';
           }
         }, 'image/jpeg', 0.95);
       };
-    } catch(err) {
+    } catch (err) {
+      stopLabelScanStream();
       document.getElementById('labelImageInput').click();
     }
   });
 
   document.getElementById('labelImageInput').addEventListener('change', async e => {
     const file = e.target.files[0];
-    if (!file) { console.log('No file'); return; }
-    console.log('File size:', file.size, 'type:', file.type);
+    if (!file) return;
     const statusEl = document.getElementById('k2ReadStatus');
-    statusEl.textContent = '📷 Bild wird analysiert…';
+    statusEl.textContent = 'Bild wird analysiert...';
     statusEl.style.color = 'var(--text-muted)';
     try {
       const data = await uploadLabelImage(file);
       fillFormFromOCR(data);
-      statusEl.textContent = '✓ Etikett erkannt';
+      statusEl.textContent = 'OK Etikett erkannt';
       statusEl.style.color = 'var(--accent)';
     } catch (err) {
-      statusEl.textContent = '✗ Scan fehlgeschlagen: ' + err.message;
+      statusEl.textContent = 'Scan fehlgeschlagen: ' + err.message;
       statusEl.style.color = 'var(--warn)';
+    } finally {
+      e.target.value = '';
     }
   });
 
@@ -804,23 +829,47 @@ function setupAddSpoolForm() {
     e.preventDefault();
     const fd = new FormData(e.target);
     const payload = {
-      material:         fd.get('material'),
-      color:            fd.get('color'),
-      brand:            fd.get('brand') || '',
-      name:             fd.get('name') || '',
-      initial_weight:   parseFloat(fd.get('initial_weight')),
+      material: String(fd.get('material') || '').trim(),
+      color: fd.get('color'),
+      brand: fd.get('brand') || '',
+      name: fd.get('name') || '',
+      initial_weight: parseFloat(fd.get('initial_weight')),
       remaining_weight: fd.get('remaining_weight') ? parseFloat(fd.get('remaining_weight')) : null,
-      nozzle_min:       parseInt(fd.get('nozzle_min')),
-      nozzle_max:       parseInt(fd.get('nozzle_max')),
-      bed_temp:         parseInt(fd.get('bed_temp')),
-      diameter:         parseFloat(fd.get('diameter')),
-      density:          parseFloat(fd.get('density')),
-      serial_num:       fd.get('serial_num') || '',
-      notes:            fd.get('notes') || '',
+      nozzle_min: parseInt(fd.get('nozzle_min')),
+      nozzle_max: parseInt(fd.get('nozzle_max')),
+      bed_temp: parseInt(fd.get('bed_temp')),
+      diameter: parseFloat(fd.get('diameter')),
+      density: parseFloat(fd.get('density')),
+      serial_num: fd.get('serial_num') || '',
+      notes: fd.get('notes') || '',
     };
+
     try {
+      if (!payload.material) throw new Error('Material ist erforderlich');
+      if (!Number.isFinite(payload.initial_weight) || payload.initial_weight <= 0) {
+        throw new Error('Anfangsgewicht muss > 0 sein');
+      }
+      if (payload.remaining_weight !== null && !Number.isFinite(payload.remaining_weight)) {
+        throw new Error('Aktuell verbleibend ist ungueltig');
+      }
+      if (payload.remaining_weight !== null && payload.remaining_weight > payload.initial_weight) {
+        throw new Error('Aktuell verbleibend darf nicht groesser als Anfangsgewicht sein');
+      }
+      if (
+        !Number.isFinite(payload.nozzle_min)
+        || !Number.isFinite(payload.nozzle_max)
+        || !Number.isFinite(payload.bed_temp)
+        || !Number.isFinite(payload.diameter)
+        || !Number.isFinite(payload.density)
+      ) {
+        throw new Error('Bitte alle numerischen Felder gueltig ausfuellen');
+      }
+      if (payload.nozzle_min > payload.nozzle_max) {
+        throw new Error('Duese min darf nicht groesser als Duese max sein');
+      }
+
       await apiFetch('/api/spools', { method: 'POST', body: JSON.stringify(payload) });
-      showToast('Spule hinzugefügt', 'success');
+      showToast('Spule hinzugefuegt', 'success');
       closeModal();
       await loadSpools();
     } catch (err) {
@@ -853,7 +902,11 @@ function fillFormFromOCR(data) {
   set('bed_temp',        data.bed_max || data.bed_min);
   set('diameter',        data.diameter);
   set('initial_weight',  data.weight_g);
-  set('remaining_weight', data.weight_g);
+  const remainingInput = f.querySelector('[name="remaining_weight"]');
+  const currentRemaining = parseFloat(remainingInput.value);
+  if (!remainingInput.value || Number.isNaN(currentRemaining) || currentRemaining <= 0) {
+    set('remaining_weight', data.weight_g);
+  }
 }
 
 
@@ -865,7 +918,7 @@ function openEditModal(id) {
     e.preventDefault();
     const fd = new FormData(e.target);
     const payload = {
-      material:         fd.get('material'),
+      material:         String(fd.get('material') || '').trim(),
       color:            fd.get('color'),
       brand:            fd.get('brand'),
       name:             fd.get('name'),
@@ -879,6 +932,28 @@ function openEditModal(id) {
       notes:            fd.get('notes'),
     };
     try {
+      if (!payload.material) throw new Error('Material ist erforderlich');
+      if (!Number.isFinite(payload.initial_weight) || payload.initial_weight <= 0) {
+        throw new Error('Anfangsgewicht muss > 0 sein');
+      }
+      if (!Number.isFinite(payload.remaining_weight) || payload.remaining_weight < 0) {
+        throw new Error('Aktuell verbleibend muss >= 0 sein');
+      }
+      if (payload.remaining_weight > payload.initial_weight) {
+        throw new Error('Aktuell verbleibend darf nicht groesser als Anfangsgewicht sein');
+      }
+      if (
+        !Number.isFinite(payload.nozzle_min)
+        || !Number.isFinite(payload.nozzle_max)
+        || !Number.isFinite(payload.bed_temp)
+        || !Number.isFinite(payload.diameter)
+        || !Number.isFinite(payload.density)
+      ) {
+        throw new Error('Bitte alle numerischen Felder gueltig ausfuellen');
+      }
+      if (payload.nozzle_min > payload.nozzle_max) {
+        throw new Error('Duese min darf nicht groesser als Duese max sein');
+      }
       await apiFetch(`/api/spools/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
       showToast('Gespeichert', 'success');
       closeModal();
@@ -1077,6 +1152,7 @@ function openModal(title, body) {
 }
 
 function closeModal() {
+  stopLabelScanStream();
   document.getElementById('modalOverlay').classList.add('hidden');
   document.getElementById('modalBody').innerHTML = '';
 }

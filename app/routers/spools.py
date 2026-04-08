@@ -29,7 +29,9 @@ def list_spools(
 def create_spool(payload: SpoolCreate, db: Session = Depends(get_db)):
     """Create a spool entry in storage."""
     data = payload.model_dump()
-    remaining = data.pop("remaining_weight") or data["initial_weight"]
+    remaining = data.pop("remaining_weight")
+    if remaining is None:
+        remaining = data["initial_weight"]
     spool = Spool(**data, remaining_weight=remaining, status="lager")
     db.add(spool)
     db.commit()
@@ -53,7 +55,18 @@ def update_spool(spool_id: int, payload: SpoolUpdate, db: Session = Depends(get_
     if not spool:
         raise HTTPException(404, "Spule nicht gefunden")
 
-    for field, value in payload.model_dump(exclude_none=True).items():
+    updates = payload.model_dump(exclude_none=True)
+    new_initial = updates.get("initial_weight", spool.initial_weight)
+    new_remaining = updates.get("remaining_weight", spool.remaining_weight)
+    new_nozzle_min = updates.get("nozzle_min", spool.nozzle_min)
+    new_nozzle_max = updates.get("nozzle_max", spool.nozzle_max)
+
+    if new_remaining > new_initial:
+        raise HTTPException(422, "remaining_weight darf nicht groesser als initial_weight sein")
+    if new_nozzle_min > new_nozzle_max:
+        raise HTTPException(422, "nozzle_min darf nicht groesser als nozzle_max sein")
+
+    for field, value in updates.items():
         setattr(spool, field, value)
     spool.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 

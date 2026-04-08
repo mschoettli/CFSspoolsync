@@ -37,6 +37,8 @@ def test_printer_status_route_returns_shape() -> None:
         "extruder_target",
         "bed_temp",
         "bed_target",
+        "cfs_temp",
+        "cfs_humidity",
     ]:
         assert key in payload
 
@@ -99,10 +101,15 @@ def test_scan_label_response_contains_meta(monkeypatch) -> None:
         None:
             Asserts expanded response shape for scan label endpoint.
     """
+    client.post(
+        "/api/spools",
+        json={"material": "PLA", "brand": "Bambu Lab", "color": "#FFFFFF", "initial_weight": 1000},
+    )
+
     monkeypatch.setattr(
         ocr_router,
         "ocr_image",
-        lambda _: "SUNLU PLA+ Color: White Printing Temp: 200-220C Net Weight: 1KG 1.75mm",
+        lambda _: "BAM8U LAB PLAA Color: WeisS Printing Temp: 200-220C Net Weight: 1KG 1.75mm",
     )
     response = client.post(
         "/api/scan-label",
@@ -114,3 +121,7 @@ def test_scan_label_response_contains_meta(monkeypatch) -> None:
         assert key in payload
     assert isinstance(payload["field_meta"], dict)
     assert isinstance(payload["warnings"], list)
+    assert payload["brand"] == "Bambu Lab"
+    assert payload["material"] == "PLA"
+    assert payload["field_meta"]["brand"]["source"] == "ocr+db-match"
+    assert payload["field_meta"]["brand"]["match_source"] in {"db", "static"}

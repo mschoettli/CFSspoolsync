@@ -3,6 +3,7 @@
 import logging
 import re
 import unicodedata
+from difflib import SequenceMatcher
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,17 @@ BRAND_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("eSUN", re.compile(r"\bE[\s\-]?SUN\b", re.IGNORECASE)),
     ("Anycubic", re.compile(r"\bANYCUBIC\b", re.IGNORECASE)),
     ("Creality", re.compile(r"\bCREALITY\b", re.IGNORECASE)),
+]
+
+STATIC_BRAND_CANONICALS = [
+    "Bambu Lab",
+    "Prusament",
+    "Polymaker",
+    "Overture",
+    "Sunlu",
+    "eSUN",
+    "Anycubic",
+    "Creality",
 ]
 
 DEFAULT_FIELDS = {
@@ -437,6 +449,259 @@ def _score_ocr_text(candidate: str) -> float:
     keyword_score = sum(bool(re.search(pattern, normalized, re.IGNORECASE)) for pattern in quality_hits)
     alnum_chars = sum(ch.isalnum() for ch in normalized)
     return keyword_score * 25 + min(alnum_chars, 500) * 0.1
+
+
+def normalize_match_token(value: str) -> str:
+    """Normalize string tokens for fuzzy matching.
+
+    Args:
+    -----
+        value (str):
+            Raw candidate token.
+
+    Returns:
+    --------
+        str:
+            Normalized token.
+    """
+    if not value:
+        return ""
+    normalized = unicodedata.normalize("NFKD", value)
+    normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    normalized = normalized.lower()
+    normalized = normalized.replace("0", "o").replace("1", "l")
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized
+
+
+def _token_overlap_score(a: str, b: str) -> float:
+    """Compute token-overlap score between two normalized strings.
+
+    Args:
+    -----
+        a (str):
+            Normalized source token.
+        b (str):
+            Normalized candidate token.
+
+    Returns:
+    --------
+        float:
+            Overlap score in range [0, 1].
+    """
+    a_tokens = set(a.split())
+    b_tokens = set(b.split())
+    if not a_tokens or not b_tokens:
+        return 0.0
+    overlap = len(a_tokens & b_tokens)
+    return overlap / max(len(a_tokens), len(b_tokens))
+
+
+def _fuzzy_score(a: str, b: str) -> float:
+    """Compute combined fuzzy score for normalized strings.
+
+    Args:
+    -----
+        a (str):
+            Normalized source token.
+        b (str):
+            Normalized candidate token.
+
+    Returns:
+    --------
+        float:
+            Similarity score in range [0, 1].
+    """
+    seq_score = SequenceMatcher(None, a, b).ratio()
+    token_score = _token_overlap_score(a, b)
+    return (seq_score * 0.7) + (token_score * 0.3)
+
+
+def _best_match(
+    raw_value: str,
+    candidates: list[tuple[str, str]],
+) -> tuple[str, float, str]:
+    """Find best canonical candidate for a raw OCR value.
+
+    Args:
+    -----
+        raw_value (str):
+            OCR-extracted value.
+        candidates (list[tuple[str, str]]):
+            Pairs of (candidate value, source kind).
+
+    Returns:
+    --------
+        tuple[str, float, str]:
+            Matched value, similarity score and source kind.
+    """
+    if not raw_value or not candidates:
+        return raw_value, 0.0, "none"
+    raw_norm = normalize_match_token(raw_value)
+    if not raw_norm:
+        return raw_value, 0.0, "none"
+
+    best_value = raw_value
+    best_score = -1.0
+    best_source = "none"
+    for candidate, source_kind in candidates:
+        candidate_norm = normalize_match_token(candidate)
+        if not candidate_norm:
+            continue
+        score = _fuzzy_score(raw_norm, candidate_norm)
+        if score > best_score:
+            best_value = candidate
+            best_score = score
+            best_source = source_kind
+    return best_value, max(best_score, 0.0), best_source
+
+
+def _hex_to_color_name(hex_color: str) -> Optional[str]:
+    """Map a hex color to canonical color name if known.
+
+    Args:
+    -----
+        hex_color (str):
+            Color hex string.
+
+    Returns:
+    --------
+        Optional[str]:
+            Canonical color name or None.
+    """
+    if not hex_color:
+        return None
+    color_hex = hex_color.strip().upper()
+    for name, mapped in COLOR_MAP.items():
+        if mapped.upper() == color_hex:
+            return name.title()
+    return None
+
+
+def apply_db_similarity_matching(
+    parsed: dict,
+    db_brands: list[str],
+    db_materials: list[str],
+    db_color_names: list[str],
+) -> dict:
+    """Apply DB-assisted canonical matching to OCR text fields.
+
+    Args:
+    -----
+        parsed (dict):
+            Parsed OCR payload.
+        db_brands (list[str]):
+            Brand candidates from DB.
+        db_materials (list[str]):
+            Material candidates from DB.
+        db_color_names (list[str]):
+            Color-name candidates from DB.
+
+    Returns:
+    --------
+        dict:
+            Updated payload with canonicalized brand/material/color fields.
+    """
+    field_meta = parsed.setdefault("field_meta", {})
+    warnings = parsed.setdefault("warnings", [])
+
+    brand_candidates = [(value, "db") for value in db_brands if value]
+    brand_candidates += [(value, "static") for value in STATIC_BRAND_CANONICALS]
+
+    material_candidates = [(value, "db") for value in db_materials if value]
+    material_candidates += [(value, "static") for value, _ in MATERIAL_PATTERNS]
+
+    color_candidates = [(value, "db") for value in db_color_names if value]
+    color_candidates += [(value.title(), "static") for value in COLOR_MAP.keys()]
+
+    brand_ocr = str(parsed.get("brand") or "").strip()
+    if brand_ocr:
+        brand_match, brand_score, brand_source = _best_match(brand_ocr, brand_candidates)
+        parsed["canonical_brand"] = brand_match
+        parsed["brand"] = brand_match
+        entry = field_meta.get("brand", {})
+        entry.update(
+            {
+                "value": brand_match,
+                "source": "ocr+db-match",
+                "confidence": max(float(entry.get("confidence", 0.0)), brand_score),
+                "ocr_value": brand_ocr,
+                "matched_value": brand_match,
+                "match_score": round(brand_score, 3),
+                "match_source": brand_source,
+            }
+        )
+        field_meta["brand"] = entry
+        if brand_score < 0.6:
+            warnings.append("Brand auto-korrigiert mit niedriger Sicherheit")
+
+    material_ocr = str(parsed.get("material") or "").strip()
+    if material_ocr:
+        material_match, material_score, material_source = _best_match(material_ocr, material_candidates)
+        parsed["canonical_material"] = material_match
+        parsed["material"] = material_match
+        entry = field_meta.get("material", {})
+        entry.update(
+            {
+                "value": material_match,
+                "source": "ocr+db-match",
+                "confidence": max(float(entry.get("confidence", 0.0)), material_score),
+                "ocr_value": material_ocr,
+                "matched_value": material_match,
+                "match_score": round(material_score, 3),
+                "match_source": material_source,
+            }
+        )
+        field_meta["material"] = entry
+        if material_score < 0.6:
+            warnings.append("Material auto-korrigiert mit niedriger Sicherheit")
+
+    color_ocr = str(parsed.get("color_name") or "").strip()
+    if not color_ocr:
+        color_ocr = _hex_to_color_name(parsed.get("color") or "") or ""
+    if color_ocr:
+        color_match, color_score, color_source = _best_match(color_ocr, color_candidates)
+        canonical_color_hex = COLOR_MAP.get(color_match.lower())
+        if canonical_color_hex:
+            parsed["canonical_color_name"] = color_match
+            parsed["color_name"] = color_match
+            parsed["color"] = canonical_color_hex
+
+            color_name_entry = field_meta.get("color_name", {})
+            color_name_entry.update(
+                {
+                    "value": color_match,
+                    "source": "ocr+db-match",
+                    "confidence": max(float(color_name_entry.get("confidence", 0.0)), color_score),
+                    "ocr_value": color_ocr,
+                    "matched_value": color_match,
+                    "match_score": round(color_score, 3),
+                    "match_source": color_source,
+                }
+            )
+            field_meta["color_name"] = color_name_entry
+
+            color_entry = field_meta.get("color", {})
+            color_entry.update(
+                {
+                    "value": canonical_color_hex,
+                    "source": "ocr+db-match",
+                    "confidence": max(float(color_entry.get("confidence", 0.0)), color_score),
+                    "ocr_value": color_ocr,
+                    "matched_value": color_match,
+                    "match_score": round(color_score, 3),
+                    "match_source": color_source,
+                }
+            )
+            field_meta["color"] = color_entry
+            if color_score < 0.6:
+                warnings.append("Farbe auto-korrigiert mit niedriger Sicherheit")
+
+    # Deduplicate warning messages while preserving order.
+    seen: set[str] = set()
+    parsed["warnings"] = [msg for msg in warnings if not (msg in seen or seen.add(msg))]
+    return parsed
 
 
 def parse_label(text: str) -> dict:

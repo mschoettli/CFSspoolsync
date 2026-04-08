@@ -17,3 +17,5 @@ class PrinterStatusOut(BaseModel):
     bed_temp: float
     bed_target: float
     remaining_seconds: Optional[float]
+    cfs_temp: Optional[float] = None
+    cfs_humidity: Optional[float] = None

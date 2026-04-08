@@ -1,6 +1,6 @@
-﻿"""Unit tests for service-layer helper functions."""
+"""Unit tests for service-layer helper functions."""
 
-from app.services.label_ocr import parse_label
+from app.services.label_ocr import apply_db_similarity_matching, parse_label
 from app.services.ssh_client import meters_to_grams
 
 
@@ -123,3 +123,48 @@ def test_parse_label_does_not_use_material_as_color() -> None:
     text = "Color: PLA+"
     parsed = parse_label(text)
     assert parsed["color"] == "#888888"
+
+
+def test_apply_db_similarity_matching_corrects_brand_material_color() -> None:
+    """Ensure OCR text fields are canonicalized from DB/static candidates.
+
+    Returns:
+    --------
+        None:
+            Asserts canonical mapping and matching metadata.
+    """
+    parsed = parse_label("BAM8U LAB PLAA Color: WeisS")
+    matched = apply_db_similarity_matching(
+        parsed=parsed,
+        db_brands=["Bambu Lab"],
+        db_materials=["PLA"],
+        db_color_names=["White"],
+    )
+
+    assert matched["brand"] == "Bambu Lab"
+    assert matched["material"] == "PLA"
+    assert matched["color_name"] == "White"
+    assert matched["color"] == "#FFFFFF"
+    assert matched["field_meta"]["brand"]["match_source"] in {"db", "static"}
+    assert matched["field_meta"]["material"]["source"] == "ocr+db-match"
+    assert matched["field_meta"]["color"]["source"] == "ocr+db-match"
+
+
+def test_apply_db_similarity_matching_adds_low_confidence_warning() -> None:
+    """Ensure low-score canonical mappings are still applied with warning.
+
+    Returns:
+    --------
+        None:
+            Asserts policy behavior for weak matches.
+    """
+    parsed = parse_label("Brand: Xqzv Material: Pls Color: Whte")
+    matched = apply_db_similarity_matching(
+        parsed=parsed,
+        db_brands=["Bambu Lab"],
+        db_materials=["PLA"],
+        db_color_names=["White"],
+    )
+
+    assert matched["brand"] == "Bambu Lab"
+    assert any("niedriger Sicherheit" in warning for warning in matched["warnings"])

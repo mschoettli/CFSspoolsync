@@ -8,6 +8,63 @@ from app.services import moonraker
 router = APIRouter(prefix="/api/printer", tags=["printer"])
 
 
+def _to_float(value):
+    """Safely coerce a numeric-like value to float.
+
+    Args:
+    -----
+        value:
+            Candidate value to convert.
+
+    Returns:
+    --------
+        float | None:
+            Converted value or ``None`` when conversion fails.
+    """
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _pick_env_metric(status: dict, metric: str):
+    """Pick the best CFS/chamber metric from Moonraker object status.
+
+    Args:
+    -----
+        status (dict):
+            Moonraker status payload keyed by object name.
+        metric (str):
+            Metric name, for example ``temperature`` or ``humidity``.
+
+    Returns:
+    --------
+        float | None:
+            Best metric value for CFS/chamber sensors, if available.
+    """
+    candidates = []
+    for name, payload in status.items():
+        if not isinstance(payload, dict):
+            continue
+
+        lower = str(name).lower()
+        if not any(token in lower for token in ("cfs", "chamber", "box", "cabinet")):
+            continue
+
+        value = _to_float(payload.get(metric))
+        if value is None:
+            continue
+
+        priority = 3 if "cfs" in lower else 2
+        candidates.append((priority, value))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return round(candidates[0][1], 1)
+
+
 @router.get("/status", response_model=PrinterStatusOut)
 async def printer_status():
     """Return summarized printer status from Moonraker."""
@@ -39,4 +96,6 @@ async def printer_status():
         "bed_temp": round(bed.get("temperature", 0), 1),
         "bed_target": round(bed.get("target", 0), 1),
         "remaining_seconds": remaining_seconds,
+        "cfs_temp": _pick_env_metric(status, "temperature"),
+        "cfs_humidity": _pick_env_metric(status, "humidity"),
     }

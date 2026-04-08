@@ -5,6 +5,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import quote
 
 import httpx
 
@@ -40,16 +41,85 @@ async def _client() -> httpx.AsyncClient:
     return _http_client
 
 
+async def _query_objects(object_names: list[str]) -> dict:
+    """Query a set of Moonraker printer objects and return their status payload.
+
+    Args:
+    -----
+        object_names (list[str]):
+            Moonraker object names, for example ``print_stats`` or
+            ``temperature_sensor chamber``.
+
+    Returns:
+    --------
+        dict:
+            Status mapping from object name to object payload.
+    """
+    if not object_names:
+        return {}
+
+    query = "&".join(quote(name, safe="_") for name in object_names)
+    client = await _client()
+    response = await client.get(f"{MOONRAKER_URL}/printer/objects/query?{query}")
+    response.raise_for_status()
+    return response.json().get("result", {}).get("status", {})
+
+
+async def _list_objects() -> list[str]:
+    """Return all available Moonraker printer object names.
+
+    Returns:
+    --------
+        list[str]:
+            Available object names from ``/printer/objects/list``.
+    """
+    client = await _client()
+    response = await client.get(f"{MOONRAKER_URL}/printer/objects/list")
+    response.raise_for_status()
+    objects = response.json().get("result", {}).get("objects", [])
+    return [obj for obj in objects if isinstance(obj, str)]
+
+
+def _pick_env_sensor_objects(objects: list[str]) -> list[str]:
+    """Select CFS/chamber related sensor objects from Moonraker object list.
+
+    Args:
+    -----
+        objects (list[str]):
+            All printer object names.
+
+    Returns:
+    --------
+        list[str]:
+            Sensor object names ordered by relevance.
+    """
+    selected: list[str] = []
+    for name in objects:
+        lower = name.lower()
+        has_cfs_context = any(token in lower for token in ("cfs", "chamber", "box", "cabinet"))
+        is_env_sensor = any(
+            token in lower
+            for token in ("temperature_sensor", "humidity_sensor", "htu21d", "bme280", "aht10")
+        )
+        if has_cfs_context and is_env_sensor:
+            selected.append(name)
+    return selected
+
+
 async def get_printer_status() -> dict:
     """Fetch current printer status from Moonraker."""
     try:
-        params = "print_stats&toolhead&heater_bed&extruder&display_status"
-        client = await _client()
-        response = await client.get(
-            f"{MOONRAKER_URL}/printer/objects/query?{params}"
-        )
-        response.raise_for_status()
-        return response.json().get("result", {}).get("status", {})
+        base_objects = ["print_stats", "toolhead", "heater_bed", "extruder", "display_status"]
+        status = await _query_objects(base_objects)
+
+        try:
+            env_objects = _pick_env_sensor_objects(await _list_objects())
+            if env_objects:
+                status.update(await _query_objects(env_objects))
+        except Exception as exc:
+            logger.debug("Moonraker env sensor lookup failed: %s", exc)
+
+        return status
     except Exception as exc:
         logger.debug("Moonraker unreachable: %s", exc)
         return {}

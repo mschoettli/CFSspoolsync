@@ -184,6 +184,10 @@ body {
   gap: 10px;
 }
 
+#view-cfs .header-actions {
+  flex-direction: row-reverse;
+}
+
 .sync-meta {
   color: var(--text-muted);
   font-size: 0.76rem;
@@ -777,6 +781,13 @@ body {
   gap: 8px;
 }
 
+.spool-source-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
 .spool-scan-video {
   width: 100%;
   border-radius: 8px;
@@ -830,7 +841,7 @@ body {
 
 .ocr-review-row {
   display: grid;
-  grid-template-columns: minmax(90px, 1fr) minmax(0, 2fr) auto;
+  grid-template-columns: minmax(90px, 1fr) minmax(0, 2fr) auto auto;
   gap: 8px;
   align-items: center;
   font-size: 0.76rem;
@@ -845,6 +856,18 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ocr-review-ocr {
+  color: var(--text-mid);
+}
+
+.ocr-review-arrow {
+  color: var(--text-muted);
+  font-size: 0.72rem;
 }
 
 .ocr-review-badge {
@@ -872,6 +895,13 @@ body {
   color: #ffd4d4;
   border-color: rgba(255, 140, 140, 0.5);
   background: rgba(255, 140, 140, 0.18);
+}
+
+.ocr-review-source {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .ocr-review-warnings {
@@ -1234,6 +1264,10 @@ body {
 
   .spool-source-actions .btn {
     flex: 1 1 auto;
+  }
+
+  .spool-source-footer {
+    justify-content: flex-end;
   }
 
   .form-actions-sticky {

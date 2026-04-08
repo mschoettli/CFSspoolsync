@@ -137,14 +137,17 @@ function renderPrinterStatus() {
   }
 
   const tempParts = [];
-  if (typeof p.extruder_temp === 'number' && p.extruder_temp > 0) {
-    tempParts.push(`🌡 ${p.extruder_temp.toFixed(0)}°C`);
-  }
-  if (typeof p.bed_temp === 'number' && p.bed_temp > 0) {
-    tempParts.push(`🛏 ${p.bed_temp.toFixed(0)}°C`);
+  const cfsTemp = [
+    p.cfs_temp,
+    p.cfs_temperature,
+    p.chamber_temp,
+    p.temperature,
+  ].find(v => typeof v === 'number' && Number.isFinite(v));
+  if (typeof cfsTemp === 'number') {
+    tempParts.push(`🌡 ${cfsTemp.toFixed(0)}°C`);
   }
 
-  const humidity = [p.cfs_humidity, p.humidity, p.chamber_humidity]
+  const humidity = [p.cfs_humidity, p.humidity, p.chamber_humidity, p.cfs_rh]
     .find(v => typeof v === 'number' && Number.isFinite(v) && v >= 0);
   if (typeof humidity === 'number') {
     tempParts.push(`💧 ${humidity.toFixed(0)}%`);
@@ -561,19 +564,19 @@ function renderK2SyncMeta() {
   if (!el) return;
 
   if (!state.lastSyncAt) {
-    el.textContent = 'Letzter K2-Sync: noch nie';
+    el.textContent = 'Zuletzt: noch nie';
     el.classList.remove('error');
     return;
   }
 
   const syncAt = fmtDate(state.lastSyncAt);
   if (state.lastSyncStatus === 'error') {
-    el.textContent = `Letzter K2-Sync fehlgeschlagen (${syncAt})`;
+    el.textContent = `Zuletzt: fehlgeschlagen (${syncAt})`;
     el.classList.add('error');
     return;
   }
 
-  el.textContent = `Letzter K2-Sync: ${syncAt}`;
+  el.textContent = `Zuletzt: ${syncAt}`;
   el.classList.remove('error');
 }
 
@@ -661,14 +664,16 @@ function buildAddSpoolForm() {
           <div class="spool-source-actions">
             <button class="btn btn-ghost btn-sm" id="btnReadFromK2" type="button" disabled>Von CFS lesen</button>
             <button class="btn btn-ghost btn-sm" id="btnScanLabel" type="button">Etikett scannen</button>
-            <button class="btn btn-primary btn-sm" id="btnContinueToForm" type="button">Weiter</button>
-            <button class="btn btn-ghost btn-sm" id="btnCancelSpoolSource" type="button">Abbrechen</button>
           </div>
           <input type="file" id="labelImageInput" accept="image/*" style="display:none">
           <video id="labelVideo" class="spool-scan-video" style="display:none" autoplay playsinline></video>
           <canvas id="labelCanvas" style="display:none"></canvas>
           <button class="btn btn-primary btn-sm" id="btnCapture" type="button" style="display:none">Foto aufnehmen</button>
           <span id="k2ReadStatus" class="spool-read-status"></span>
+        </div>
+        <div class="spool-source-footer">
+          <button class="btn btn-ghost btn-sm" id="btnCancelSpoolSource" type="button">Abbrechen</button>
+          <button class="btn btn-primary btn-sm" id="btnContinueToForm" type="button">Weiter</button>
         </div>
       </section>
 
@@ -1027,14 +1032,26 @@ function renderOCRReview(data) {
     .map(([key, label]) => {
       const entry = fieldMeta[key];
       if (!entry) return '';
-      const cls = confidenceClass(entry.confidence);
-      const score = typeof entry.confidence === 'number' ? `${Math.round(entry.confidence * 100)}%` : 'n/a';
+      const hasMatchScore = typeof entry.match_score === 'number';
+      const cls = confidenceClass(hasMatchScore ? entry.match_score : entry.confidence);
+      const score = hasMatchScore
+        ? `${Math.round(entry.match_score * 100)}%`
+        : (typeof entry.confidence === 'number' ? `${Math.round(entry.confidence * 100)}%` : 'n/a');
       const value = entry.source === 'default' ? '—' : (entry.value ?? '—');
+      const ocrValue = entry.ocr_value ?? null;
+      const matchedValue = entry.matched_value ?? null;
+      const sourceLabel = entry.match_source ? String(entry.match_source).toUpperCase() : '';
+      const valueHtml = (
+        ocrValue && matchedValue
+          ? `<span class="ocr-review-ocr">${esc(String(ocrValue))}</span><span class="ocr-review-arrow">-></span><span>${esc(String(matchedValue))}</span>`
+          : esc(String(value))
+      );
       return `
         <div class="ocr-review-row">
           <span class="ocr-review-key">${label}</span>
-          <span class="ocr-review-val">${esc(String(value))}</span>
+          <span class="ocr-review-val">${valueHtml}</span>
           <span class="ocr-review-badge ${cls}">${score}</span>
+          ${sourceLabel ? `<span class="ocr-review-source">${sourceLabel}</span>` : '<span></span>'}
         </div>`;
     })
     .filter(Boolean);

@@ -646,97 +646,170 @@ function openAddSpoolModal() {
 
 function buildAddSpoolForm() {
   return `
-    <div class="k2-read-box">
-      <p>Daten automatisch einlesen</p>
-      <div class="k2-slot-selector" style="margin-bottom:10px">
-        ${[1,2,3,4].map(n => `<button class="slot-btn" data-slot="${n}">Spule ${n}</button>`).join('')}
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-ghost btn-sm" id="btnReadFromK2" disabled>Von K2 lesen</button>
-        <button class="btn btn-ghost btn-sm" id="btnScanLabel" type="button">📷 Etikett scannen</button>
-        <input type="file" id="labelImageInput" accept="image/*" style="display:none">
-        <video id="labelVideo" style="display:none;width:100%;border-radius:8px;margin-top:8px" autoplay playsinline></video>
-        <canvas id="labelCanvas" style="display:none"></canvas>
-        <button class="btn btn-primary btn-sm" id="btnCapture" type="button" style="display:none;margin-top:8px">📸 Foto aufnehmen</button>
-      </div>
-      <span id="k2ReadStatus" style="font-size:0.72rem;color:var(--text-muted);margin-top:6px;display:block"></span>
-    </div>
-
-    <form id="addSpoolForm">
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">Material *</label>
-          <input class="form-input" name="material" required placeholder="PLA, PETG, ABS…">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Farbe</label>
-          <input class="form-input" type="color" name="color" value="#888888">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Hersteller</label>
-          <input class="form-input" name="brand" placeholder="Bambu Lab, eSUN…">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Name / Bezeichnung</label>
-          <input class="form-input" name="name" placeholder="Basic PLA Black">
-        </div>
-
-        <div class="form-section-title">Gewicht</div>
-
-        <div class="form-group">
-          <label class="form-label">Anfangsgewicht (g) *</label>
-          <input class="form-input" type="number" name="initial_weight" required min="1" step="0.1" value="1000">
-          <span class="form-hint">Vollspule ohne Spulenkörper</span>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Aktuell verbleibend (g)</label>
-          <input class="form-input" type="number" name="remaining_weight" min="0" step="0.1" placeholder="Leer = Anfangsgewicht">
-        </div>
-
-        <div class="form-section-title">Temperatur</div>
-
-        <div class="form-group">
-          <label class="form-label">Düse min (°C)</label>
-          <input class="form-input" type="number" name="nozzle_min" value="190" min="0" max="500">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Düse max (°C)</label>
-          <input class="form-input" type="number" name="nozzle_max" value="230" min="0" max="500">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Bett (°C)</label>
-          <input class="form-input" type="number" name="bed_temp" value="60" min="0" max="150">
-        </div>
-
-        <div class="form-section-title">Erweitert</div>
-
-        <div class="form-group">
-          <label class="form-label">Durchmesser (mm)</label>
-          <input class="form-input" type="number" name="diameter" value="1.75" step="0.01" min="1">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Dichte (g/cm³)</label>
-          <input class="form-input" type="number" name="density" value="1.24" step="0.01" min="0.5">
-        </div>
-        <div class="form-group span2">
-          <label class="form-label">Seriennummer</label>
-          <input class="form-input" name="serial_num" placeholder="NFC Tag ID…">
-        </div>
-        <div class="form-group span2">
-          <label class="form-label">Notizen</label>
-          <input class="form-input" name="notes" placeholder="">
-        </div>
+    <div class="spool-modal-add">
+      <div class="spool-stepper" aria-label="Modal steps">
+        <div class="spool-step-pill is-active" id="stepPillSource">1 Quelle</div>
+        <div class="spool-step-pill" id="stepPillForm">2 Pruefen & Speichern</div>
       </div>
 
-      <div class="form-actions">
-        <button type="button" class="btn btn-ghost" id="btnCancelSpool">Abbrechen</button>
-        <button type="submit" class="btn btn-primary">Spule speichern</button>
-      </div>
-    </form>`;
+      <section class="spool-step-panel is-active" id="addSpoolStepSource">
+        <div class="k2-read-box k2-read-box-elevated">
+          <p>Daten automatisch einlesen</p>
+          <div class="k2-slot-selector">
+            ${[1, 2, 3, 4].map(n => `<button class="slot-btn" type="button" data-slot="${n}">Spule ${n}</button>`).join('')}
+          </div>
+          <div class="spool-source-actions">
+            <button class="btn btn-ghost btn-sm" id="btnReadFromK2" type="button" disabled>Von CFS lesen</button>
+            <button class="btn btn-ghost btn-sm" id="btnScanLabel" type="button">Etikett scannen</button>
+            <button class="btn btn-primary btn-sm" id="btnContinueToForm" type="button">Weiter</button>
+            <button class="btn btn-ghost btn-sm" id="btnCancelSpoolSource" type="button">Abbrechen</button>
+          </div>
+          <input type="file" id="labelImageInput" accept="image/*" style="display:none">
+          <video id="labelVideo" class="spool-scan-video" style="display:none" autoplay playsinline></video>
+          <canvas id="labelCanvas" style="display:none"></canvas>
+          <button class="btn btn-primary btn-sm" id="btnCapture" type="button" style="display:none">Foto aufnehmen</button>
+          <span id="k2ReadStatus" class="spool-read-status"></span>
+        </div>
+      </section>
+
+      <form id="addSpoolForm" class="spool-step-panel">
+        <div class="spool-detected-strip" id="detectedStrip">
+          <div class="spool-detected-item">
+            <span>Material</span>
+            <strong id="detectedMaterial">-</strong>
+          </div>
+          <div class="spool-detected-item">
+            <span>Brand</span>
+            <strong id="detectedBrand">-</strong>
+          </div>
+          <div class="spool-detected-item">
+            <span>Gewicht</span>
+            <strong id="detectedWeight">-</strong>
+          </div>
+        </div>
+
+        <div class="spool-form-card">
+          <h4>Basis</h4>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Material *</label>
+              <input class="form-input" name="material" required placeholder="PLA, PETG, ABS...">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Farbe</label>
+              <input class="form-input" type="color" name="color" value="#888888">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Hersteller</label>
+              <input class="form-input" name="brand" placeholder="Bambu Lab, eSUN...">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Name / Bezeichnung</label>
+              <input class="form-input" name="name" placeholder="Basic PLA Black">
+            </div>
+          </div>
+        </div>
+
+        <div class="spool-form-card">
+          <h4>Gewicht</h4>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Anfangsgewicht (g) *</label>
+              <input class="form-input" type="number" name="initial_weight" required min="1" step="0.1" value="1000">
+              <span class="form-hint">Vollspule ohne Spulenkoerper</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Aktuell verbleibend (g)</label>
+              <input class="form-input" type="number" name="remaining_weight" min="0" step="0.1" placeholder="Leer = Anfangsgewicht">
+            </div>
+          </div>
+        </div>
+
+        <details class="spool-form-card" open>
+          <summary>Temperatur</summary>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Duese min (C)</label>
+              <input class="form-input" type="number" name="nozzle_min" value="190" min="0" max="500">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Duese max (C)</label>
+              <input class="form-input" type="number" name="nozzle_max" value="230" min="0" max="500">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Bett (C)</label>
+              <input class="form-input" type="number" name="bed_temp" value="60" min="0" max="150">
+            </div>
+          </div>
+        </details>
+
+        <details class="spool-form-card">
+          <summary>Erweitert</summary>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Durchmesser (mm)</label>
+              <input class="form-input" type="number" name="diameter" value="1.75" step="0.01" min="1">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Dichte (g/cm3)</label>
+              <input class="form-input" type="number" name="density" value="1.24" step="0.01" min="0.5">
+            </div>
+            <div class="form-group span2">
+              <label class="form-label">Seriennummer</label>
+              <input class="form-input" name="serial_num" placeholder="NFC Tag ID...">
+            </div>
+            <div class="form-group span2">
+              <label class="form-label">Notizen</label>
+              <input class="form-input" name="notes" placeholder="">
+            </div>
+          </div>
+        </details>
+
+        <div class="form-actions form-actions-sticky">
+          <button type="button" class="btn btn-ghost" id="btnBackToSource">Zurueck</button>
+          <button type="button" class="btn btn-ghost" id="btnCancelSpool">Abbrechen</button>
+          <button type="submit" class="btn btn-primary">Spule speichern</button>
+        </div>
+      </form>
+    </div>`;
 }
 
 function setupAddSpoolForm() {
   let selectedSlot = null;
+
+  const sourcePanel = document.getElementById('addSpoolStepSource');
+  const formPanel = document.getElementById('addSpoolForm');
+  const stepPillSource = document.getElementById('stepPillSource');
+  const stepPillForm = document.getElementById('stepPillForm');
+
+  const setStep = (step) => {
+    const inSource = step === 'source';
+    sourcePanel.classList.toggle('is-active', inSource);
+    formPanel.classList.toggle('is-active', !inSource);
+    stepPillSource.classList.toggle('is-active', inSource);
+    stepPillForm.classList.toggle('is-active', !inSource);
+  };
+
+  const refreshDetectedStrip = () => {
+    const f = document.getElementById('addSpoolForm');
+    if (!f) return;
+    const material = String(f.querySelector('[name="material"]').value || '').trim() || '-';
+    const brand = String(f.querySelector('[name="brand"]').value || '').trim() || '-';
+    const initial = parseFloat(f.querySelector('[name="initial_weight"]').value);
+    document.getElementById('detectedMaterial').textContent = material;
+    document.getElementById('detectedBrand').textContent = brand;
+    document.getElementById('detectedWeight').textContent = Number.isFinite(initial) ? `${initial.toFixed(0)} g` : '-';
+  };
+
+  setStep('source');
+  refreshDetectedStrip();
+
+  document.getElementById('btnContinueToForm').addEventListener('click', () => {
+    setStep('form');
+    refreshDetectedStrip();
+  });
+
+  document.getElementById('btnBackToSource').addEventListener('click', () => setStep('source'));
 
   document.querySelectorAll('.slot-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -754,6 +827,7 @@ function setupAddSpoolForm() {
     try {
       const data = await apiFetch(`/api/cfs/slot/${selectedSlot}/read`);
       fillFormFromK2(data);
+      refreshDetectedStrip();
       statusEl.textContent = 'OK Daten geladen';
       statusEl.style.color = 'var(--accent)';
     } catch (e) {
@@ -763,6 +837,7 @@ function setupAddSpoolForm() {
   });
 
   document.getElementById('btnCancelSpool').addEventListener('click', closeModal);
+  document.getElementById('btnCancelSpoolSource').addEventListener('click', closeModal);
 
   document.getElementById('btnScanLabel').addEventListener('click', async () => {
     const video = document.getElementById('labelVideo');
@@ -792,7 +867,8 @@ function setupAddSpoolForm() {
           try {
             const data = await uploadLabelImage(blob);
             fillFormFromOCR(data);
-            statusEl.textContent = 'OK Etikett erkannt: ' + (data.material || '?') + ' ' + (data.brand || '');
+            refreshDetectedStrip();
+            statusEl.textContent = 'OK Etikett erkannt';
             statusEl.style.color = 'var(--accent)';
           } catch (err) {
             statusEl.textContent = 'Fehler: ' + err.message;
@@ -815,6 +891,7 @@ function setupAddSpoolForm() {
     try {
       const data = await uploadLabelImage(file);
       fillFormFromOCR(data);
+      refreshDetectedStrip();
       statusEl.textContent = 'OK Etikett erkannt';
       statusEl.style.color = 'var(--accent)';
     } catch (err) {
@@ -825,7 +902,9 @@ function setupAddSpoolForm() {
     }
   });
 
-  document.getElementById('addSpoolForm').addEventListener('submit', async e => {
+  formPanel.addEventListener('input', refreshDetectedStrip);
+
+  formPanel.addEventListener('submit', async e => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const payload = {
@@ -877,7 +956,6 @@ function setupAddSpoolForm() {
     }
   });
 }
-
 function fillFormFromK2(data) {
   const f = document.getElementById('addSpoolForm');
   const set = (name, val) => { if (val !== undefined && val !== null && val !== '') f.querySelector(`[name="${name}"]`).value = val; };
@@ -1219,3 +1297,4 @@ function formatRemainingWeight(weight) {
   if (typeof weight !== 'number' || !isFinite(weight)) return '—';
   return `${weight.toFixed(0)} g`;
 }
+

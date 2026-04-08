@@ -17,6 +17,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Free disk space
+        run: |
+          echo "Disk usage before cleanup:"
+          df -h
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/share/boost || true
+          docker system prune -af || true
+          echo "Disk usage after cleanup:"
+          df -h
+
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:

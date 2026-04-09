@@ -15,9 +15,9 @@ OCR_FALLBACK_MIN_SCORE = 35.0
 MATERIAL_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("PETG-CF", re.compile(r"\bPETG\s*[-+ ]\s*CF\b", re.IGNORECASE)),
     ("PETG-GF", re.compile(r"\bPETG\s*[-+ ]\s*GF\b", re.IGNORECASE)),
-    ("PLA+", re.compile(r"\bPLA\s*\+\b", re.IGNORECASE)),
+    ("PLA+", re.compile(r"\bP[L1I][A4]\s*\+\b", re.IGNORECASE)),
     ("PETG", re.compile(r"\bPETG\b", re.IGNORECASE)),
-    ("PLA", re.compile(r"\bPLA\b", re.IGNORECASE)),
+    ("PLA", re.compile(r"\bP[L1I][A4]\b", re.IGNORECASE)),
     ("ABS", re.compile(r"\bABS\b", re.IGNORECASE)),
     ("ASA", re.compile(r"\bASA\b", re.IGNORECASE)),
     ("TPU", re.compile(r"\bTPU\b", re.IGNORECASE)),
@@ -86,6 +86,7 @@ BRAND_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("eSUN", re.compile(r"\bE[\s\-]?SUN\b", re.IGNORECASE)),
     ("Anycubic", re.compile(r"\bANYCUBIC\b", re.IGNORECASE)),
     ("Creality", re.compile(r"\bCREALITY\b", re.IGNORECASE)),
+    ("Creality", re.compile(r"\bENDER(?:\s*[- ]?PLA)?\b", re.IGNORECASE)),
     ("Geeetech", re.compile(r"\bGEE+\s*[\+\-]?\s*TECH\b", re.IGNORECASE)),
 ]
 
@@ -348,6 +349,19 @@ def _parse_color(normalized_text: str) -> Optional[tuple[str, str, str]]:
         canonical = COLOR_ALIASES.get(name, name)
         if canonical in COLOR_MAP:
             return canonical.title(), COLOR_MAP[canonical], source
+
+    # Fuzzy fallback for common OCR confusion, e.g. "biack" -> "black".
+    token_candidates = re.findall(r"[A-Za-zÄÖÜäöüß]{3,20}", lower_text)
+    best_name = ""
+    best_score = 0.0
+    for token in token_candidates:
+        for canonical in COLOR_MAP:
+            score = SequenceMatcher(None, token, canonical).ratio()
+            if score > best_score:
+                best_name = canonical
+                best_score = score
+    if best_name and best_score >= 0.84:
+        return best_name.title(), COLOR_MAP[best_name], f"fuzzy:{best_name}"
     return None
 
 
@@ -881,9 +895,10 @@ class TesseractOCREngine(OCREngine):
         import pytesseract
 
         return [
-            pytesseract.image_to_string(image, config="--oem 3 --psm 6"),
-            pytesseract.image_to_string(image, config="--oem 3 --psm 4"),
-            pytesseract.image_to_string(image, config="--oem 3 --psm 11"),
+            pytesseract.image_to_string(image, config="--oem 3 --psm 6 -l eng"),
+            pytesseract.image_to_string(image, config="--oem 3 --psm 4 -l eng"),
+            pytesseract.image_to_string(image, config="--oem 3 --psm 11 -l eng"),
+            pytesseract.image_to_string(image, config="--oem 1 --psm 6 -l eng"),
         ]
 
 
@@ -1045,7 +1060,7 @@ def _build_image_variants(image):
 
     base = ImageOps.exif_transpose(image)
     width, height = base.size
-    scale = max(1.0, 1600 / max(width, height))
+    scale = max(1.0, 2200 / max(width, height))
     if scale > 1.0:
         from PIL import Image
 
@@ -1055,11 +1070,14 @@ def _build_image_variants(image):
     variants = [base, cropped]
     prepared = []
     for variant in variants:
+        prepared.append(variant)
         gray = variant.convert("L")
-        sharp = ImageEnhance.Sharpness(gray).enhance(1.8)
-        contrast = ImageEnhance.Contrast(sharp).enhance(2.2).filter(ImageFilter.SHARPEN)
-        threshold = contrast.point(lambda p: 255 if p > 148 else 0)
-        prepared.extend([contrast, threshold])
+        sharp = ImageEnhance.Sharpness(gray).enhance(2.0)
+        contrast = ImageEnhance.Contrast(sharp).enhance(2.4).filter(ImageFilter.SHARPEN)
+        threshold_mid = contrast.point(lambda p: 255 if p > 148 else 0)
+        threshold_low = contrast.point(lambda p: 255 if p > 132 else 0)
+        auto = ImageOps.autocontrast(gray, cutoff=1)
+        prepared.extend([gray, auto, contrast, threshold_mid, threshold_low])
     return prepared
 
 

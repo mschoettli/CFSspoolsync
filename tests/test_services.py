@@ -184,6 +184,41 @@ def test_parse_label_extracts_geeetech_brand() -> None:
     assert parsed["brand"] == "Geeetech"
 
 
+def test_parse_label_extracts_ender_brand_and_black_color() -> None:
+    """Ensure Ender labels resolve to Creality and parse black color.
+
+    Returns:
+    --------
+        None:
+            Asserts parsing for common Creality Ender labels.
+    """
+    parsed = parse_label(
+        "Ender PLA Value Pack\nColor Black\nDiameter 1.75±0.03mm\n"
+        "Net Weight 1000g\nNozzle Temp 190-220C\nBed Temp25-60C"
+    )
+    assert parsed["brand"] == "Creality"
+    assert parsed["material"] == "PLA"
+    assert parsed["color_name"] == "Black"
+    assert parsed["color"] == "#000000"
+    assert parsed["nozzle_min"] == 190
+    assert parsed["nozzle_max"] == 220
+    assert parsed["bed_min"] == 25
+    assert parsed["bed_max"] == 60
+
+
+def test_parse_label_fuzzy_color_corrects_biack() -> None:
+    """Ensure OCR color typo 'biack' is normalized to black.
+
+    Returns:
+    --------
+        None:
+            Asserts fuzzy color fallback behavior.
+    """
+    parsed = parse_label("Color: biack")
+    assert parsed["color_name"] == "Black"
+    assert parsed["color"] == "#000000"
+
+
 def test_apply_db_similarity_matching_keeps_brand_when_match_is_weak() -> None:
     """Ensure weak brand similarity does not overwrite OCR value.
 
@@ -212,22 +247,19 @@ def test_ocr_orchestrator_prefers_paddle_when_score_is_good(monkeypatch) -> None
             Asserts primary-engine selection behavior.
     """
     monkeypatch.setattr(label_ocr, "_build_image_variants", lambda _: ["variant"])
+    monkeypatch.setattr(label_ocr, "_open_image_from_bytes", lambda _: object())
+
+    class DummyPaddleEngine:
+        """Minimal paddle-engine stand-in for deterministic tests."""
+
+        name = "paddle"
+
+    monkeypatch.setattr(label_ocr, "_get_paddle_engine", lambda: DummyPaddleEngine())
     monkeypatch.setattr(
         label_ocr,
         "_best_engine_result",
         lambda engine, _: label_ocr.OCRResult("PETG 1.75mm", engine.name, 75.0),
     )
-
-    class DummyImage:
-        """Simple in-memory image placeholder for OCR tests."""
-
-        @staticmethod
-        def open(_):
-            return object()
-
-    import io
-    monkeypatch.setattr(io, "BytesIO", lambda x: x)
-    monkeypatch.setattr("PIL.Image.open", DummyImage.open)
     result = label_ocr.ocr_image_with_engine(b"dummy")
     assert result is not None
     assert result.engine == "paddle"
@@ -242,6 +274,14 @@ def test_ocr_orchestrator_falls_back_to_tesseract(monkeypatch) -> None:
             Asserts fallback path behavior.
     """
     monkeypatch.setattr(label_ocr, "_build_image_variants", lambda _: ["variant"])
+    monkeypatch.setattr(label_ocr, "_open_image_from_bytes", lambda _: object())
+
+    class DummyPaddleEngine:
+        """Minimal paddle-engine stand-in for deterministic tests."""
+
+        name = "paddle"
+
+    monkeypatch.setattr(label_ocr, "_get_paddle_engine", lambda: DummyPaddleEngine())
 
     def fake_best(engine, _):
         if engine.name == "paddle":
@@ -249,17 +289,6 @@ def test_ocr_orchestrator_falls_back_to_tesseract(monkeypatch) -> None:
         return label_ocr.OCRResult("PETG 1.75mm", "tesseract", 60.0)
 
     monkeypatch.setattr(label_ocr, "_best_engine_result", fake_best)
-
-    class DummyImage:
-        """Simple in-memory image placeholder for OCR tests."""
-
-        @staticmethod
-        def open(_):
-            return object()
-
-    import io
-    monkeypatch.setattr(io, "BytesIO", lambda x: x)
-    monkeypatch.setattr("PIL.Image.open", DummyImage.open)
     result = label_ocr.ocr_image_with_engine(b"dummy")
     assert result is not None
     assert result.engine == "tesseract"

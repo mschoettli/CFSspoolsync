@@ -1127,9 +1127,10 @@ function renderOCRReview(data) {
       const value = entry.source === 'default' ? '—' : (entry.value ?? '—');
       const ocrValue = entry.ocr_value ?? null;
       const matchedValue = entry.matched_value ?? null;
+      const matchApplied = entry.match_applied !== false;
       const sourceLabel = entry.match_source ? String(entry.match_source).toUpperCase() : '';
       const valueHtml = (
-        ocrValue && matchedValue
+        ocrValue && matchedValue && matchApplied
           ? `<span class="ocr-review-ocr">${esc(String(ocrValue))}</span><span class="ocr-review-arrow">-></span><span>${esc(String(matchedValue))}</span>`
           : esc(String(value))
       );

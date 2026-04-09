@@ -46,6 +46,7 @@ The UI is available on `http://localhost:${PORT:-8080}`.
 - [Public API](docs/api.md)
 - [Deployment](docs/deployment.md)
 - [Development](docs/development.md)
+- [K2 SSH Troubleshooting](docs/k2-ssh-troubleshooting.md)
 
 ## Tech Stack
 

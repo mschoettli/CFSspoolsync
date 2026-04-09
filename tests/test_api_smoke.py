@@ -186,6 +186,8 @@ def test_scan_label_v2_response_contains_meta(monkeypatch) -> None:
                 "brand": {"confidence": 0.98, "status": "accepted", "source_lines": [], "accepted_value": "Geeetech", "candidates": ["Geeetech"]},
                 "material": {"confidence": 0.98, "status": "accepted", "source_lines": [], "accepted_value": "PETG", "candidates": ["PETG"]},
             },
+            "fallback_recommended": False,
+            "suggestions": {"brand": ["Geeetech"], "material": ["PETG"], "color_name": ["White"]},
             "timing": {"total_ms": 180, "partial_timeout": False, "stages": {}},
         },
     )
@@ -195,7 +197,7 @@ def test_scan_label_v2_response_contains_meta(monkeypatch) -> None:
     )
     assert response.status_code == 200
     payload = response.json()
-    for key in ["engine", "duration_ms", "fields", "field_meta", "warnings", "raw_text", "timing"]:
+    for key in ["engine", "duration_ms", "fields", "field_meta", "warnings", "raw_text", "timing", "fallback_recommended", "suggestions"]:
         assert key in payload
     assert isinstance(payload["fields"], dict)
     assert isinstance(payload["field_meta"], dict)

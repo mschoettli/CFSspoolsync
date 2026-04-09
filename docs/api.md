@@ -98,6 +98,11 @@ Returns:
 - `duration_ms`
 - `raw_text`
 - `warnings`
+- `fallback_recommended` (`true` when required fields are missing/low confidence)
+- `suggestions`:
+  - `brand`: top fallback suggestions
+  - `material`: top fallback suggestions
+  - `color_name`: top fallback suggestions
 - `timing`:
   - `total_ms`
   - `partial_timeout`

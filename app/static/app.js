@@ -669,6 +669,24 @@ async function markEmpty(id) {
 // ── Modal: Add Spool ──────────────────────────────────────────────────────
 let _addSpoolFormSetup = false;
 let _labelScanStream = null;
+const OCR_FALLBACK_BRANDS = ['JAYO', 'Geeetech', 'Creality', 'Bambu Lab', 'Sunlu', 'eSUN', 'Anycubic'];
+const OCR_FALLBACK_MATERIALS = ['PLA', 'PLA+', 'PETG', 'ABS', 'ASA', 'TPU', 'PETG-CF'];
+const OCR_FALLBACK_COLORS = [
+  { name: 'White', hex: '#FFFFFF' },
+  { name: 'Black', hex: '#000000' },
+  { name: 'Gray', hex: '#888888' },
+  { name: 'Brown', hex: '#8B4513' },
+  { name: 'Gold', hex: '#FFD700' },
+  { name: 'Blue', hex: '#0000FF' },
+  { name: 'Red', hex: '#FF0000' },
+  { name: 'Green', hex: '#00AA00' },
+];
+const OCR_FALLBACK_COLOR_BY_NAME = OCR_FALLBACK_COLORS.reduce((acc, item) => {
+  acc[item.name.toLowerCase()] = item.hex;
+  return acc;
+}, {});
+OCR_FALLBACK_COLOR_BY_NAME.grey = '#888888';
+OCR_FALLBACK_COLOR_BY_NAME.wood = '#8B4513';
 
 function stopLabelScanStream() {
   if (_labelScanStream) {
@@ -744,6 +762,36 @@ function buildAddSpoolForm() {
         <div id="ocrReviewPanel" class="ocr-review-panel ocr-review-empty">
           <div class="ocr-review-title">OCR Review</div>
           <div class="ocr-review-empty-text">Noch kein Scan vorhanden.</div>
+        </div>
+        <div id="ocrFallbackPanel" class="ocr-fallback-panel">
+          <div class="ocr-fallback-title">Schneller Fallback (manuell bestaetigt)</div>
+          <div class="ocr-fallback-grid">
+            <div class="form-group">
+              <label class="form-label">Hersteller Vorschlag</label>
+              <select class="form-input" id="ocrFallbackBrand">
+                <option value="">Bitte waehlen</option>
+                ${OCR_FALLBACK_BRANDS.map(v => `<option value="${v}">${v}</option>`).join('')}
+              </select>
+              <div class="ocr-suggestion-row" id="ocrSuggestBrand"></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Material Vorschlag</label>
+              <select class="form-input" id="ocrFallbackMaterial">
+                <option value="">Bitte waehlen</option>
+                ${OCR_FALLBACK_MATERIALS.map(v => `<option value="${v}">${v}</option>`).join('')}
+              </select>
+              <div class="ocr-suggestion-row" id="ocrSuggestMaterial"></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Farbe Vorschlag</label>
+              <select class="form-input" id="ocrFallbackColor">
+                <option value="">Bitte waehlen</option>
+                ${OCR_FALLBACK_COLORS.map(v => `<option value="${v.hex}">${v.name}</option>`).join('')}
+              </select>
+              <div class="ocr-suggestion-row" id="ocrSuggestColor"></div>
+            </div>
+          </div>
+          <div class="ocr-fallback-note">Dropdown-Auswahl hat Vorrang und wird als manuell bestaetigt uebernommen.</div>
         </div>
 
         <div class="spool-form-card">
@@ -837,6 +885,10 @@ function setupAddSpoolForm() {
   let loadedFromCfs = false;
   let scanInProgress = false;
   let hasAutoDetectedData = false;
+  let fallbackUsed = false;
+  let modalClicks = 0;
+  let lastScanStartedAt = 0;
+  let readyMetricsSent = false;
 
   const sourcePanel = document.getElementById('addSpoolStepSource');
   const formPanel = document.getElementById('addSpoolForm');
@@ -845,6 +897,7 @@ function setupAddSpoolForm() {
   const continueBtn = document.getElementById('btnContinueToForm');
   const readFromCfsBtn = document.getElementById('btnReadFromK2');
   const scanBtn = document.getElementById('btnScanLabel');
+  const fallbackPanel = document.getElementById('ocrFallbackPanel');
   let scanStatusTimer = null;
 
   const stopScanStatusTicker = () => {
@@ -890,10 +943,106 @@ function setupAddSpoolForm() {
     document.getElementById('detectedWeight').textContent = Number.isFinite(initial) ? `${initial.toFixed(0)} g` : '-';
   };
 
+  const isSaveReady = () => {
+    const f = document.getElementById('addSpoolForm');
+    if (!f) return false;
+    const material = String(f.querySelector('[name="material"]').value || '').trim();
+    const diameter = parseFloat(f.querySelector('[name="diameter"]').value);
+    const initialWeight = parseFloat(f.querySelector('[name="initial_weight"]').value);
+    return Boolean(material) && Number.isFinite(diameter) && diameter > 0 && Number.isFinite(initialWeight) && initialWeight > 0;
+  };
+
+  const maybeEmitReadyMetrics = (source) => {
+    if (!lastScanStartedAt || readyMetricsSent || !isSaveReady()) return;
+    const totalMs = Date.now() - lastScanStartedAt;
+    const payload = {
+      source,
+      total_ms: totalMs,
+      clicks: modalClicks,
+      fallback_assisted: fallbackUsed,
+      ocr_only_success: !fallbackUsed,
+      within_target: totalMs <= 12000 && modalClicks <= 2,
+    };
+    console.info('[OCR-METRICS]', payload);
+    readyMetricsSent = true;
+  };
+
+  const pushSuggestionChips = (containerId, values, onPick) => {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const safeValues = Array.isArray(values) ? values.filter(Boolean).slice(0, 5) : [];
+    container.innerHTML = safeValues.map(value => `<button type="button" class="ocr-chip" data-value="${esc(String(value))}">${esc(String(value))}</button>`).join('');
+    container.querySelectorAll('.ocr-chip').forEach(btn => {
+      btn.addEventListener('click', () => onPick(btn.dataset.value || ''));
+    });
+  };
+
+  const applyFallbackDropdowns = () => {
+    const form = document.getElementById('addSpoolForm');
+    if (!form) return;
+    const brandSelect = document.getElementById('ocrFallbackBrand');
+    const materialSelect = document.getElementById('ocrFallbackMaterial');
+    const colorSelect = document.getElementById('ocrFallbackColor');
+
+    brandSelect?.addEventListener('change', () => {
+      if (!brandSelect.value) return;
+      form.querySelector('[name="brand"]').value = brandSelect.value;
+      fallbackUsed = true;
+      refreshDetectedStrip();
+      maybeEmitReadyMetrics('fallback-brand');
+    });
+    materialSelect?.addEventListener('change', () => {
+      if (!materialSelect.value) return;
+      form.querySelector('[name="material"]').value = materialSelect.value;
+      fallbackUsed = true;
+      refreshDetectedStrip();
+      maybeEmitReadyMetrics('fallback-material');
+    });
+    colorSelect?.addEventListener('change', () => {
+      if (!colorSelect.value) return;
+      form.querySelector('[name="color"]').value = colorSelect.value;
+      fallbackUsed = true;
+      refreshDetectedStrip();
+      maybeEmitReadyMetrics('fallback-color');
+    });
+  };
+
+  const renderFallbackPanel = (data) => {
+    if (!fallbackPanel) return;
+    const show = Boolean(data?.fallback_recommended);
+    fallbackPanel.classList.toggle('is-visible', show);
+    if (!show) return;
+
+    const suggestions = data?.suggestions || {};
+    const brandSelect = document.getElementById('ocrFallbackBrand');
+    const materialSelect = document.getElementById('ocrFallbackMaterial');
+    const colorSelect = document.getElementById('ocrFallbackColor');
+
+    pushSuggestionChips('ocrSuggestBrand', suggestions.brand || [], (value) => {
+      if (!brandSelect) return;
+      brandSelect.value = value;
+      brandSelect.dispatchEvent(new Event('change'));
+    });
+    pushSuggestionChips('ocrSuggestMaterial', suggestions.material || [], (value) => {
+      if (!materialSelect) return;
+      materialSelect.value = value;
+      materialSelect.dispatchEvent(new Event('change'));
+    });
+    pushSuggestionChips('ocrSuggestColor', suggestions.color_name || [], (value) => {
+      if (!colorSelect) return;
+      const mapped = OCR_FALLBACK_COLOR_BY_NAME[String(value || '').toLowerCase()];
+      if (mapped) {
+        colorSelect.value = mapped;
+        colorSelect.dispatchEvent(new Event('change'));
+      }
+    });
+  };
+
   const applyOCRResult = (data, statusEl) => {
     stopScanStatusTicker();
     fillFormFromOCR(data);
     renderOCRReview(data);
+    renderFallbackPanel(data);
     refreshDetectedStrip();
     const acceptedCount = Object.values(data?.field_meta || {})
       .filter(entry => entry?.status === 'accepted').length;
@@ -908,10 +1057,16 @@ function setupAddSpoolForm() {
       statusEl.style.color = 'var(--accent)';
     }
     hasAutoDetectedData = acceptedCount > 0;
+    setStep('form');
+    maybeEmitReadyMetrics('ocr');
   };
 
   setStep('source');
   refreshDetectedStrip();
+  applyFallbackDropdowns();
+  document.querySelector('.spool-modal-add')?.addEventListener('click', () => {
+    modalClicks += 1;
+  });
 
   document.getElementById('btnContinueToForm').addEventListener('click', () => {
     if (scanInProgress) {
@@ -962,6 +1117,10 @@ function setupAddSpoolForm() {
   document.getElementById('btnScanLabel').addEventListener('click', async () => {
     const video = document.getElementById('labelVideo');
     const captureBtn = document.getElementById('btnCapture');
+    lastScanStartedAt = Date.now();
+    modalClicks = 0;
+    fallbackUsed = false;
+    readyMetricsSent = false;
     try {
       stopLabelScanStream();
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -1008,6 +1167,10 @@ function setupAddSpoolForm() {
   document.getElementById('labelImageInput').addEventListener('change', async e => {
     const file = e.target.files[0];
     if (!file) return;
+    lastScanStartedAt = Date.now();
+    modalClicks = 0;
+    fallbackUsed = false;
+    readyMetricsSent = false;
     const statusEl = document.getElementById('k2ReadStatus');
     startScanStatusTicker(statusEl);
     setScanBusy(true);
@@ -1024,7 +1187,10 @@ function setupAddSpoolForm() {
     }
   });
 
-  formPanel.addEventListener('input', refreshDetectedStrip);
+  formPanel.addEventListener('input', () => {
+    refreshDetectedStrip();
+    maybeEmitReadyMetrics('manual-input');
+  });
 
   formPanel.addEventListener('submit', async e => {
     e.preventDefault();
@@ -1055,20 +1221,21 @@ function setupAddSpoolForm() {
       if (!Number.isFinite(payload.initial_weight) || payload.initial_weight <= 0) {
         throw new Error('Anfangsgewicht muss > 0 sein');
       }
+      if (!Number.isFinite(payload.diameter) || payload.diameter <= 0) {
+        throw new Error('Durchmesser muss > 0 sein');
+      }
+      payload.nozzle_min = Number.isFinite(payload.nozzle_min) ? payload.nozzle_min : 190;
+      payload.nozzle_max = Number.isFinite(payload.nozzle_max) ? payload.nozzle_max : 230;
+      payload.bed_temp = Number.isFinite(payload.bed_temp) ? payload.bed_temp : 60;
+      payload.density = Number.isFinite(payload.density) ? payload.density : 1.24;
       if (payload.remaining_weight !== null && !Number.isFinite(payload.remaining_weight)) {
         throw new Error('Aktuell verbleibend ist ungueltig');
       }
+      if (payload.remaining_weight === null) {
+        payload.remaining_weight = payload.initial_weight;
+      }
       if (payload.remaining_weight !== null && payload.remaining_weight > payload.initial_weight) {
         throw new Error('Aktuell verbleibend darf nicht groesser als Anfangsgewicht sein');
-      }
-      if (
-        !Number.isFinite(payload.nozzle_min)
-        || !Number.isFinite(payload.nozzle_max)
-        || !Number.isFinite(payload.bed_temp)
-        || !Number.isFinite(payload.diameter)
-        || !Number.isFinite(payload.density)
-      ) {
-        throw new Error('Bitte alle numerischen Felder gueltig ausfuellen');
       }
       if (payload.nozzle_min > payload.nozzle_max) {
         throw new Error('Duese min darf nicht groesser als Duese max sein');
@@ -1125,7 +1292,7 @@ function renderOCRReview(data) {
       const score = typeof entry.confidence === 'number'
         ? `${Math.round(entry.confidence * 100)}%`
         : 'n/a';
-      const value = entry.accepted_value ?? '—';
+      const value = entry.accepted_value ?? (Array.isArray(entry.candidates) && entry.candidates.length ? entry.candidates[0] : '—');
       const sourceLabel = entry.status ? String(entry.status).toUpperCase() : '';
       const lineHint = Array.isArray(entry.source_lines) && entry.source_lines.length
         ? entry.source_lines[0]

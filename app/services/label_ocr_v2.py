@@ -57,6 +57,37 @@ COLOR_ALIASES = {
     "burdy wood": "brown",
 }
 
+COMMON_BRANDS = [
+    "JAYO",
+    "Geeetech",
+    "Creality",
+    "Bambu Lab",
+    "SUNLU",
+    "eSUN",
+    "Anycubic",
+]
+
+COMMON_MATERIALS = [
+    "PLA",
+    "PLA+",
+    "PETG",
+    "ABS",
+    "ASA",
+    "TPU",
+    "PETG-CF",
+]
+
+COMMON_COLORS = [
+    "White",
+    "Black",
+    "Gray",
+    "Brown",
+    "Gold",
+    "Blue",
+    "Red",
+    "Green",
+]
+
 MATERIAL_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("PETG-CF", re.compile(r"\bPETG\s*[-+ ]\s*CF\b", re.IGNORECASE)),
     ("PETG-GF", re.compile(r"\bPETG\s*[-+ ]\s*GF\b", re.IGNORECASE)),
@@ -393,32 +424,47 @@ def _line_contains(line: str, keywords: list[str]) -> bool:
 
 
 def _extract_material(lines: list[str]) -> ParsedField:
+    candidates: list[str] = []
     for line in lines:
         for material, pattern in MATERIAL_PATTERNS:
             if pattern.search(line):
-                return ParsedField(material, 0.93, [line], [material])
-    return _make_missing()
+                if material not in candidates:
+                    candidates.append(material)
+    if candidates:
+        return ParsedField(candidates[0], 0.93, [lines[0]], candidates[:3])
+    return ParsedField(value=None, confidence=0.0, source_lines=[], candidates=COMMON_MATERIALS[:4])
 
 
 def _extract_brand(lines: list[str]) -> ParsedField:
+    found: list[str] = []
     for line in lines[:8]:
         for brand, pattern, confidence in BRAND_PATTERNS:
             if pattern.search(line):
-                return ParsedField(brand, confidence, [line], [brand])
+                if brand not in found:
+                    found.append(brand)
+                if confidence >= 0.92:
+                    return ParsedField(brand, confidence, [line], found[:3])
+    if found:
+        return ParsedField(found[0], 0.88, [lines[0]], found[:3])
     for line in lines[:4]:
         clean = re.sub(r"[^A-Za-z ]", "", line).strip()
+        if re.search(r"\d", line):
+            continue
         if len(clean) >= 4 and clean.isupper() and len(clean.split()) <= 3:
             title = clean.title()
             return ParsedField(title, 0.58, [line], [title])
-    return _make_missing()
+    return ParsedField(value=None, confidence=0.0, source_lines=[], candidates=COMMON_BRANDS[:4])
 
 
 def _extract_color(lines: list[str]) -> ParsedField:
     candidates: list[tuple[str, float, str]] = []
     for line in lines:
+        normalized_line = _normalize_token(line)
         match = re.search(r"(?:color|farbe)\s*[:\-]?\s*([A-Za-z ]{2,24})", _normalize_text(line), re.IGNORECASE)
         if match:
             candidates.append((match.group(1).strip(), 0.92, line))
+        if "wood" in normalized_line or "burdy" in normalized_line or "burly" in normalized_line:
+            candidates.append(("brown", 0.72, line))
         for name in COLOR_HEX_MAP:
             if re.search(rf"\b{re.escape(name)}\b", line, re.IGNORECASE):
                 candidates.append((name, 0.70, line))
@@ -434,7 +480,7 @@ def _extract_color(lines: list[str]) -> ParsedField:
             if score >= 0.86 and (0.6 + (score - 0.86)) > best_conf:
                 best_value, best_conf, best_line = canonical, 0.6 + (score - 0.86), src
     if not best_value:
-        return _make_missing()
+        return ParsedField(value=None, confidence=0.0, source_lines=[], candidates=COMMON_COLORS[:5])
     return ParsedField({"color_name": best_value.title(), "color_hex": COLOR_HEX_MAP[best_value]}, min(best_conf, 0.95), [best_line] if best_line else [], [best_value.title()])
 
 
@@ -453,6 +499,12 @@ def _extract_diameter(lines: list[str]) -> ParsedField:
             val = float(match.group(1).replace(",", "."))
             if 1.0 <= val <= 3.5:
                 return ParsedField(val, 0.78, [line], [str(val)])
+    joined = " ".join(lines)
+    match = re.search(r"\b([1-3](?:[.,]\d{1,2}))\s*mm\b", joined, re.IGNORECASE)
+    if match:
+        val = float(match.group(1).replace(",", "."))
+        if 1.0 <= val <= 3.5:
+            return ParsedField(val, 0.70, [joined[:140]], [str(val)])
     return _make_missing()
 
 
@@ -466,6 +518,13 @@ def _extract_weight(lines: list[str]) -> ParsedField:
             grams = int(round(value * 1000)) if match.group(2).lower() == "kg" else int(round(value))
             if 100 <= grams <= 5000:
                 return ParsedField(grams, 0.92, [line], [f"{grams}g"])
+    joined = " ".join(lines)
+    fallback = re.search(r"\b(\d+(?:[.,]\d+)?)\s*(kg|g)\b", joined, re.IGNORECASE)
+    if fallback:
+        value = float(fallback.group(1).replace(",", "."))
+        grams = int(round(value * 1000)) if fallback.group(2).lower() == "kg" else int(round(value))
+        if 100 <= grams <= 5000:
+            return ParsedField(grams, 0.72, [joined[:140]], [f"{grams}g"])
     return _make_missing()
 
 
@@ -506,6 +565,16 @@ def _field_status(field: ParsedField) -> str:
 
 def _accepted_value(field: ParsedField):
     return field.value if _field_status(field) == "accepted" else None
+
+
+def _suggestions_for_field(parsed_field: ParsedField, fallback: list[str]) -> list[str]:
+    """Build top suggestions for one field."""
+    unique: list[str] = []
+    for candidate in parsed_field.candidates + fallback:
+        normalized = str(candidate).strip()
+        if normalized and normalized not in unique:
+            unique.append(normalized)
+    return unique[:5]
 
 
 def parse_ocr_text_v2(text: str) -> dict:
@@ -563,7 +632,23 @@ def parse_ocr_text_v2(text: str) -> dict:
             warnings.append(f"{key} not recognized")
         elif meta["status"] == "low_confidence":
             warnings.append(f"{key} low confidence")
-    return {"raw_text": text, "fields": fields, "field_meta": field_meta, "warnings": warnings}
+    fallback_recommended = any(
+        field_meta[field]["status"] != "accepted"
+        for field in ("material", "diameter_mm", "weight_g")
+    )
+    suggestions = {
+        "brand": _suggestions_for_field(brand, COMMON_BRANDS),
+        "material": _suggestions_for_field(material, COMMON_MATERIALS),
+        "color_name": _suggestions_for_field(color, COMMON_COLORS),
+    }
+    return {
+        "raw_text": text,
+        "fields": fields,
+        "field_meta": field_meta,
+        "warnings": warnings,
+        "fallback_recommended": fallback_recommended,
+        "suggestions": suggestions,
+    }
 
 
 def _timing_payload(meta: OCRRunMeta, total_ms: int) -> dict[str, object]:
@@ -594,6 +679,12 @@ def _build_empty_response(reason: str, duration_ms: int, timing: dict[str, objec
         "warnings": [f"ocr extraction failed: {reason}"],
         "fields": fields,
         "field_meta": meta,
+        "fallback_recommended": True,
+        "suggestions": {
+            "brand": COMMON_BRANDS[:5],
+            "material": COMMON_MATERIALS[:5],
+            "color_name": COMMON_COLORS[:5],
+        },
         "timing": timing,
     }
 
@@ -620,6 +711,8 @@ def run_ocr_v2(image_bytes: bytes, *, budget_seconds: float | None = None, debug
                 "warnings": warnings,
                 "fields": parsed["fields"],
                 "field_meta": parsed["field_meta"],
+                "fallback_recommended": parsed["fallback_recommended"],
+                "suggestions": parsed["suggestions"],
                 "timing": timing,
             }
         if debug:

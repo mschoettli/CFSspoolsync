@@ -67,7 +67,7 @@ def test_parse_v2_cr_silk_gold_label() -> None:
     parsed = parse_ocr_text_v2(text)
     fields = parsed["fields"]
     assert fields["brand"] == "Creality"
-    assert fields["material"] is None
+    assert fields["material"] == "PLA"
     assert fields["color_name"] == "Gold"
     assert fields["color_hex"] == "#FFD700"
     assert fields["diameter_mm"] == 1.75
@@ -93,6 +93,17 @@ def test_parse_v2_keeps_low_confidence_fields_unaccepted() -> None:
     parsed = parse_ocr_text_v2("Brand: Xqzv Material: PLS")
     assert parsed["fields"]["brand"] is None
     assert parsed["field_meta"]["brand"]["status"] in {"low_confidence", "missing", "rejected_by_rule"}
+    assert parsed["fallback_recommended"] is True
+    assert parsed["suggestions"]["material"]
+
+
+def test_parse_v2_marks_fallback_not_required_when_required_fields_are_accepted() -> None:
+    """Ensure fallback hint is disabled when all required fields are accepted."""
+    parsed = parse_ocr_text_v2("PETG 1.75mm Net Weight 1000g")
+    assert parsed["fields"]["material"] == "PETG"
+    assert parsed["fields"]["diameter_mm"] == 1.75
+    assert parsed["fields"]["weight_g"] == 1000
+    assert parsed["fallback_recommended"] is False
 
 
 def test_ocr_v2_prefers_paddle_when_score_is_good(monkeypatch) -> None:

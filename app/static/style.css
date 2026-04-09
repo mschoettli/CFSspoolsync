@@ -975,6 +975,60 @@ body {
   gap: 3px;
 }
 
+.ocr-fallback-panel {
+  display: none;
+  margin-bottom: 10px;
+  border: 1px solid rgba(80, 200, 120, 0.45);
+  border-radius: var(--radius-md);
+  background: rgba(80, 200, 120, 0.1);
+  padding: 10px;
+  gap: 8px;
+}
+
+.ocr-fallback-panel.is-visible {
+  display: grid;
+}
+
+.ocr-fallback-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #b7f8d1;
+  font-weight: 700;
+}
+
+.ocr-fallback-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ocr-fallback-note {
+  font-size: 0.7rem;
+  color: var(--text-mid);
+}
+
+.ocr-suggestion-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.ocr-chip {
+  border: 1px solid rgba(80, 200, 120, 0.45);
+  border-radius: 999px;
+  background: rgba(80, 200, 120, 0.16);
+  color: #d6ffe5;
+  font-size: 0.66rem;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.ocr-chip:hover {
+  background: rgba(80, 200, 120, 0.28);
+}
+
 .spool-detected-item {
   min-width: 0;
 }
@@ -1421,6 +1475,10 @@ body {
   .form-section-title { grid-column: span 1; }
 
   .spool-detected-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .ocr-fallback-grid {
     grid-template-columns: 1fr;
   }
 

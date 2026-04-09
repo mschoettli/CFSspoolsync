@@ -892,7 +892,6 @@ function setupAddSpoolForm() {
   document.getElementById('btnCancelSpoolSource').addEventListener('click', closeModal);
 
   document.getElementById('btnScanLabel').addEventListener('click', async () => {
-    loadedFromCfs = false;
     const video = document.getElementById('labelVideo');
     const captureBtn = document.getElementById('btnCapture');
     try {
@@ -933,7 +932,6 @@ function setupAddSpoolForm() {
   });
 
   document.getElementById('labelImageInput').addEventListener('change', async e => {
-    loadedFromCfs = false;
     const file = e.target.files[0];
     if (!file) return;
     const statusEl = document.getElementById('k2ReadStatus');
@@ -1003,7 +1001,7 @@ function setupAddSpoolForm() {
       await apiFetch('/api/spools', { method: 'POST', body: JSON.stringify(payload) });
       showToast('Spule hinzugefuegt', 'success');
       closeModal();
-      await loadSpools();
+      await Promise.all([loadSpools(), loadCFS()]);
     } catch (err) {
       showToast(err.message, 'error');
     }

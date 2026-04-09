@@ -4,6 +4,10 @@ import { apiFetch, uploadLabelImage } from '/js/api.js';
 import { startPolling } from '/js/polling.js';
 import { state } from '/js/state.js';
 
+let lastCfsMarkup = null;
+let lastSpoolsMarkup = null;
+let lastJobsMarkup = null;
+
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   setupNav();
@@ -84,7 +88,7 @@ async function loadCFS() {
 }
 
 async function loadSpools() {
-  if (state.view === 'lager') renderSpoolsSkeleton();
+  if (state.view === 'lager' && state.spools.length === 0) renderSpoolsSkeleton();
   try {
     state.spools = await apiFetch('/api/spools');
     renderSpools();
@@ -94,7 +98,7 @@ async function loadSpools() {
 }
 
 async function loadJobs(render = true) {
-  if (state.view === 'jobs') renderJobsSkeleton();
+  if (state.view === 'jobs' && state.jobs.length === 0) renderJobsSkeleton();
   try {
     state.jobs = await apiFetch('/api/jobs?limit=30');
     if (render || state.view === 'jobs') renderJobs();
@@ -161,12 +165,16 @@ function renderPrinterStatus() {
 // ── Render: CFS Slots ──────────────────────────────────────────────────────
 function renderCFS() {
   const grid = document.getElementById('slotsGrid');
-  grid.innerHTML = state.cfs.map(slot => renderSlotCard(slot)).join('');
+  const markup = state.cfs.map(slot => renderSlotCard(slot)).join('');
+  if (markup === lastCfsMarkup) return;
+  grid.innerHTML = markup;
+  lastCfsMarkup = markup;
 }
 
 function renderInitialPlaceholders() {
   const slots = document.getElementById('slotsGrid');
   if (slots) {
+    lastCfsMarkup = null;
     slots.innerHTML = Array.from({ length: 4 }).map(() => `
       <div class="slot-card skeleton">
         <div class="slot-card-inner" style="height:180px"></div>
@@ -183,6 +191,7 @@ function renderViewSkeleton(name) {
 function renderSpoolsSkeleton() {
   const el = document.getElementById('spoolsList');
   if (!el) return;
+  lastSpoolsMarkup = null;
   el.innerHTML = `
     <div class="inventory-loading-grid">
       ${Array.from({ length: 5 }).map(() => `
@@ -197,6 +206,7 @@ function renderSpoolsSkeleton() {
 function renderJobsSkeleton() {
   const el = document.getElementById('jobsList');
   if (!el) return;
+  lastJobsMarkup = null;
   el.innerHTML = `
     <div class="jobs-list">
       ${Array.from({ length: 4 }).map(() => `
@@ -331,7 +341,11 @@ function renderSpools() {
   if (state.filterStatus) list = list.filter(s => s.status === state.filterStatus);
 
   if (!list.length) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📦</div>Keine Spulen vorhanden</div>`;
+    const markup = `<div class="empty-state"><div class="empty-state-icon">📦</div>Keine Spulen vorhanden</div>`;
+    if (markup !== lastSpoolsMarkup) {
+      el.innerHTML = markup;
+      lastSpoolsMarkup = markup;
+    }
     return;
   }
 
@@ -350,7 +364,10 @@ function renderSpools() {
     sections.push(renderInventorySection('Leere Filamente', leer, 'empty'));
   }
 
-  el.innerHTML = `<div class="inventory-layout">${sections.join('')}</div>`;
+  const markup = `<div class="inventory-layout">${sections.join('')}</div>`;
+  if (markup === lastSpoolsMarkup) return;
+  el.innerHTML = markup;
+  lastSpoolsMarkup = markup;
 
   el.querySelectorAll('.btn-edit-spool').forEach(btn =>
     btn.addEventListener('click', () => openEditModal(parseInt(btn.dataset.id))));
@@ -507,11 +524,18 @@ function renderJobs() {
   }
 
   if (!list.length) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🖨</div>Noch keine Druckjobs erfasst</div>`;
+    const markup = `<div class="empty-state"><div class="empty-state-icon">🖨</div>Noch keine Druckjobs erfasst</div>`;
+    if (markup !== lastJobsMarkup) {
+      el.innerHTML = markup;
+      lastJobsMarkup = markup;
+    }
     return;
   }
 
-  el.innerHTML = `<div class="jobs-list">${list.map(renderJobCard).join('')}</div>`;
+  const markup = `<div class="jobs-list">${list.map(renderJobCard).join('')}</div>`;
+  if (markup === lastJobsMarkup) return;
+  el.innerHTML = markup;
+  lastJobsMarkup = markup;
 }
 
 function renderJobCard(j) {

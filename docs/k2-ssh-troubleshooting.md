@@ -37,7 +37,7 @@ and how to fix it step by step.
 Use these values in your stack `.env`:
 
 ```env
-K2_HOST=192.168.178.192
+K2_HOST=192.168.1.100 -> your ip
 K2_SSH_USER=root
 K2_SSH_KEY_HOST=/root/.ssh/id_k2
 K2_SSH_KEY=/run/secrets/id_k2
@@ -81,7 +81,7 @@ Fingerprints must match exactly.
 If SSH reports `REMOTE HOST IDENTIFICATION HAS CHANGED`:
 
 ```bash
-ssh-keygen -f /root/.ssh/known_hosts -R 192.168.178.192
+ssh-keygen -f /root/.ssh/known_hosts -R 192.168.1.100 -> your ip
 ssh root@192.168.178.192
 ```
 

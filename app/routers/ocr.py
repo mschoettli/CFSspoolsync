@@ -23,7 +23,13 @@ async def scan_label(file: UploadFile = File(...), db: Session = Depends(get_db)
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(400, "Bild zu gross (max 10 MB)")
 
-    ocr_result = await asyncio.to_thread(ocr_image_with_engine, content)
+    try:
+        ocr_result = await asyncio.wait_for(
+            asyncio.to_thread(ocr_image_with_engine, content),
+            timeout=30,
+        )
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(504, "OCR-Analyse Timeout (30s)") from exc
     if ocr_result is None:
         raise HTTPException(503, "OCR fehlgeschlagen - PaddleOCR und Tesseract nicht verfugbar")
 

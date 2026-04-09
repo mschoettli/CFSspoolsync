@@ -58,7 +58,23 @@ export async function uploadLabelImage(file) {
   const fd = new FormData();
   fd.append("file", file, "label.jpg");
 
-  const response = await fetch("/api/scan-label", { method: "POST", body: fd });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+  let response;
+  try {
+    response = await fetch("/api/scan-label", {
+      method: "POST",
+      body: fd,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("OCR-Analyse Timeout (30s). Bitte erneut versuchen.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
   if (!response.ok) {
     const text = await response.text();
     let detail = "OCR request failed";

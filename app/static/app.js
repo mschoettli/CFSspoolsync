@@ -811,11 +811,23 @@ function buildAddSpoolForm() {
 function setupAddSpoolForm() {
   let selectedSlot = null;
   let loadedFromCfs = false;
+  let scanInProgress = false;
+  let hasAutoDetectedData = false;
 
   const sourcePanel = document.getElementById('addSpoolStepSource');
   const formPanel = document.getElementById('addSpoolForm');
   const stepPillSource = document.getElementById('stepPillSource');
   const stepPillForm = document.getElementById('stepPillForm');
+  const continueBtn = document.getElementById('btnContinueToForm');
+  const readFromCfsBtn = document.getElementById('btnReadFromK2');
+  const scanBtn = document.getElementById('btnScanLabel');
+
+  const setScanBusy = (busy) => {
+    scanInProgress = busy;
+    continueBtn.disabled = busy;
+    scanBtn.disabled = busy;
+    readFromCfsBtn.disabled = busy || !selectedSlot;
+  };
 
   const setStep = (step) => {
     const inSource = step === 'source';
@@ -854,6 +866,13 @@ function setupAddSpoolForm() {
   refreshDetectedStrip();
 
   document.getElementById('btnContinueToForm').addEventListener('click', () => {
+    if (scanInProgress) {
+      showToast('OCR laeuft noch. Bitte warten.', 'info');
+      return;
+    }
+    if (!hasAutoDetectedData) {
+      showToast('Keine Daten erkannt. Felder bitte manuell pruefen/ausfuellen.', 'info');
+    }
     setStep('form');
     refreshDetectedStrip();
   });
@@ -866,7 +885,7 @@ function setupAddSpoolForm() {
       btn.classList.add('selected');
       selectedSlot = parseInt(btn.dataset.slot);
       loadedFromCfs = false;
-      document.getElementById('btnReadFromK2').disabled = false;
+      readFromCfsBtn.disabled = scanInProgress ? true : false;
     });
   });
 
@@ -879,6 +898,7 @@ function setupAddSpoolForm() {
       fillFormFromK2(data);
       refreshDetectedStrip();
       loadedFromCfs = true;
+      hasAutoDetectedData = true;
       statusEl.textContent = 'OK Daten geladen';
       statusEl.style.color = 'var(--accent)';
     } catch (e) {
@@ -910,24 +930,30 @@ function setupAddSpoolForm() {
         const statusEl = document.getElementById('k2ReadStatus');
         statusEl.textContent = 'Bild wird analysiert...';
         statusEl.style.color = 'var(--text-muted)';
+        setScanBusy(true);
         canvas.toBlob(async (blob) => {
           if (!blob) {
             statusEl.textContent = 'Fehler: Bild konnte nicht verarbeitet werden';
             statusEl.style.color = 'var(--warn)';
+            setScanBusy(false);
             return;
           }
           try {
             const data = await uploadLabelImage(blob);
             applyOCRResult(data, statusEl);
+            hasAutoDetectedData = true;
           } catch (err) {
             statusEl.textContent = 'Fehler: ' + err.message;
             statusEl.style.color = 'var(--warn)';
+          } finally {
+            setScanBusy(false);
           }
         }, 'image/jpeg', 0.95);
       };
     } catch (err) {
       stopLabelScanStream();
       document.getElementById('labelImageInput').click();
+      setScanBusy(false);
     }
   });
 
@@ -937,13 +963,16 @@ function setupAddSpoolForm() {
     const statusEl = document.getElementById('k2ReadStatus');
     statusEl.textContent = 'Bild wird analysiert...';
     statusEl.style.color = 'var(--text-muted)';
+    setScanBusy(true);
     try {
       const data = await uploadLabelImage(file);
       applyOCRResult(data, statusEl);
+      hasAutoDetectedData = true;
     } catch (err) {
       statusEl.textContent = 'Scan fehlgeschlagen: ' + err.message;
       statusEl.style.color = 'var(--warn)';
     } finally {
+      setScanBusy(false);
       e.target.value = '';
     }
   });

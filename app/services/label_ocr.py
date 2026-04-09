@@ -2,6 +2,7 @@
 
 import logging
 import re
+import threading
 import unicodedata
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -99,6 +100,10 @@ STATIC_BRAND_CANONICALS = [
     "Creality",
     "Geeetech",
 ]
+
+_PADDLE_ENGINE = None
+_PADDLE_INIT_FAILED = False
+_PADDLE_LOCK = threading.Lock()
 
 DEFAULT_FIELDS = {
     "brand": "",
@@ -932,6 +937,66 @@ class PaddleOCREngine(OCREngine):
         return ["\n".join(lines)] if lines else []
 
 
+def _get_paddle_engine() -> Optional[PaddleOCREngine]:
+    """Return a cached PaddleOCR engine instance when available.
+
+    Returns:
+    --------
+        Optional[PaddleOCREngine]:
+            Reused Paddle engine instance, or None when unavailable.
+    """
+    global _PADDLE_ENGINE, _PADDLE_INIT_FAILED
+    if _PADDLE_ENGINE is not None:
+        return _PADDLE_ENGINE
+    if _PADDLE_INIT_FAILED:
+        return None
+
+    with _PADDLE_LOCK:
+        if _PADDLE_ENGINE is not None:
+            return _PADDLE_ENGINE
+        if _PADDLE_INIT_FAILED:
+            return None
+        try:
+            _PADDLE_ENGINE = PaddleOCREngine()
+        except Exception as exc:
+            _PADDLE_INIT_FAILED = True
+            logger.info("PaddleOCR unavailable, fallback to Tesseract: %s", exc)
+            return None
+    return _PADDLE_ENGINE
+
+
+def _open_image_from_bytes(image_bytes: bytes):
+    """Open uploaded bytes as PIL image with optional HEIC support.
+
+    Args:
+    -----
+        image_bytes (bytes):
+            Encoded image content.
+
+    Returns:
+    --------
+        PIL.Image.Image:
+            Opened image object.
+
+    Raises:
+    -------
+        Exception:
+            Raised when the bytes cannot be decoded as image.
+    """
+    import io
+    from PIL import Image
+
+    try:
+        import pillow_heif
+
+        pillow_heif.register_heif_opener()
+    except Exception:
+        # HEIC support is optional and only enabled when dependency is installed.
+        pass
+
+    return Image.open(io.BytesIO(image_bytes))
+
+
 def _crop_bright_label_region(image):
     """Try to crop image to a bright label-like bounding box.
 
@@ -1041,20 +1106,16 @@ def ocr_image_with_engine(image_bytes: bytes) -> Optional[OCRResult]:
             Best OCR result and selected engine.
     """
     try:
-        import io
-        from PIL import Image
-
-        image = Image.open(io.BytesIO(image_bytes))
+        image = _open_image_from_bytes(image_bytes)
         variants = _build_image_variants(image)
     except Exception as exc:
         logger.error("OCR preprocessing error: %s", exc)
         return None
 
     paddle_result: Optional[OCRResult] = None
-    try:
-        paddle_result = _best_engine_result(PaddleOCREngine(), variants)
-    except Exception as exc:
-        logger.info("PaddleOCR unavailable, fallback to Tesseract: %s", exc)
+    paddle_engine = _get_paddle_engine()
+    if paddle_engine is not None:
+        paddle_result = _best_engine_result(paddle_engine, variants)
 
     if paddle_result and paddle_result.score >= OCR_FALLBACK_MIN_SCORE:
         logger.info(

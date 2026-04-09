@@ -1,6 +1,7 @@
 /** API helper functions for backend calls. */
 
 const API_BASE = "";
+const OCR_TIMEOUT_MS = 120_000;
 
 /**
  * Execute a JSON API call and raise on non-2xx responses.
@@ -59,7 +60,7 @@ export async function uploadLabelImage(file) {
   fd.append("file", file, "label.jpg");
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+  const timeoutId = setTimeout(() => controller.abort(), OCR_TIMEOUT_MS);
   let response;
   try {
     response = await fetch("/api/scan-label", {
@@ -69,7 +70,7 @@ export async function uploadLabelImage(file) {
     });
   } catch (error) {
     if (error?.name === "AbortError") {
-      throw new Error("OCR-Analyse Timeout (30s). Bitte erneut versuchen.");
+      throw new Error(`OCR-Analyse Timeout (${Math.round(OCR_TIMEOUT_MS / 1000)}s). Bitte erneut versuchen.`);
     }
     throw error;
   } finally {

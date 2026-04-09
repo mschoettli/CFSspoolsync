@@ -1,6 +1,7 @@
 """HTTP routes for label OCR parsing."""
 
 import asyncio
+import os
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from app.services.label_ocr import (
 )
 
 router = APIRouter(prefix="/api", tags=["ocr"])
+OCR_TIMEOUT_SECONDS = int(os.getenv("OCR_TIMEOUT_SECONDS", "120"))
 
 
 @router.post("/scan-label")
@@ -26,10 +28,10 @@ async def scan_label(file: UploadFile = File(...), db: Session = Depends(get_db)
     try:
         ocr_result = await asyncio.wait_for(
             asyncio.to_thread(ocr_image_with_engine, content),
-            timeout=30,
+            timeout=OCR_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError as exc:
-        raise HTTPException(504, "OCR-Analyse Timeout (30s)") from exc
+        raise HTTPException(504, f"OCR-Analyse Timeout ({OCR_TIMEOUT_SECONDS}s)") from exc
     if ocr_result is None:
         raise HTTPException(503, "OCR fehlgeschlagen - PaddleOCR und Tesseract nicht verfugbar")
 

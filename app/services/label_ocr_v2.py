@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 import re
 import threading
 import time
@@ -18,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 ACCEPTED_CONFIDENCE = 0.80
 LOW_CONFIDENCE = 0.55
+FAST_ACCEPT_SCORE = 55.0
+FAST_VARIANT_LIMIT = 2
+FAST_TESSERACT_VARIANT_LIMIT = 1
 
 COLOR_HEX_MAP = {
     "white": "#FFFFFF",
@@ -43,7 +47,6 @@ COLOR_HEX_MAP = {
 
 COLOR_ALIASES = {
     "weiss": "white",
-    "weiB": "white",
     "weiß": "white",
     "schwarz": "black",
     "grau": "gray",
@@ -78,6 +81,8 @@ BRAND_PATTERNS: list[tuple[str, re.Pattern[str], float]] = [
 _PADDLE_ENGINE = None
 _PADDLE_INIT_FAILED = False
 _PADDLE_LOCK = threading.Lock()
+_TESSERACT_ENGINE = None
+_TESSERACT_LOCK = threading.Lock()
 
 
 @dataclass
@@ -98,6 +103,22 @@ class ParsedField:
     source_lines: list[str]
     candidates: list[str]
     rejected: bool = False
+
+
+@dataclass
+class OCRRunMeta:
+    """Metadata for OCR runtime diagnostics."""
+
+    partial_timeout: bool
+    preprocess_ms: int
+    fast_pass_ms: int
+    deep_pass_ms: int
+    paddle_ms: int
+    tesseract_ms: int
+    variants_fast: int
+    variants_deep: int
+    fast_phase_returned: bool
+    timeout_reason: str
 
 
 class OCREngine:
@@ -133,11 +154,10 @@ class PaddleOCREngine(OCREngine):
             if not block:
                 continue
             for line in block:
-                if not line or len(line) < 2:
-                    continue
-                text = str(line[1][0]).strip()
-                if text:
-                    lines.append(text)
+                if line and len(line) >= 2:
+                    text = str(line[1][0]).strip()
+                    if text:
+                        lines.append(text)
         return ["\n".join(lines)] if lines else []
 
 
@@ -161,14 +181,7 @@ class TesseractEngine(OCREngine):
 def _normalize_text(text: str) -> str:
     """Normalize OCR text before parsing."""
     normalized = unicodedata.normalize("NFKC", text or "")
-    replacements = {
-        "Â°": "°",
-        "º": "°",
-        "–": "-",
-        "—": "-",
-        "−": "-",
-    }
-    for src, dst in replacements.items():
+    for src, dst in {"Â°": "°", "º": "°", "–": "-", "—": "-", "−": "-"}.items():
         normalized = normalized.replace(src, dst)
     normalized = re.sub(r"(?<=\d)[Oo](?=\d)", "0", normalized)
     normalized = re.sub(r"(?<=\d)[Il](?=\d)", "1", normalized)
@@ -182,8 +195,7 @@ def _normalize_token(value: str) -> str:
         return ""
     normalized = unicodedata.normalize("NFKD", value)
     normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
-    normalized = normalized.lower()
-    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized.lower())
     return re.sub(r"\s+", " ", normalized).strip()
 
 
@@ -193,16 +205,14 @@ def _score_text(candidate: str) -> float:
     if not stripped:
         return 0.0
     normalized = _normalize_text(stripped)
-    keywords = [
-        r"\b(?:PLA|PETG|ABS|ASA|TPU)\b",
-        r"\b(?:COLOR|FARBE)\b",
-        r"\b(?:TEMP|NOZZLE|BED)\b",
-        r"\b(?:WEIGHT|N\.W\.)\b",
-        r"\b(?:MM)\b",
-    ]
-    keyword_hits = sum(bool(re.search(pattern, normalized, re.IGNORECASE)) for pattern in keywords)
-    alnum_chars = sum(char.isalnum() for char in normalized)
-    return keyword_hits * 30 + min(alnum_chars, 500) * 0.08
+    pats = [r"\b(?:PLA|PETG|ABS|ASA|TPU)\b", r"\b(?:COLOR|FARBE)\b", r"\b(?:TEMP|NOZZLE|BED)\b", r"\b(?:WEIGHT|N\.W\.)\b", r"\b(?:MM)\b"]
+    hits = sum(bool(re.search(p, normalized, re.IGNORECASE)) for p in pats)
+    return hits * 30 + min(sum(ch.isalnum() for ch in normalized), 500) * 0.08
+
+
+def _deadline_exceeded(deadline: float | None) -> bool:
+    """Check if an optional deadline is exceeded."""
+    return deadline is not None and time.perf_counter() >= deadline
 
 
 def _get_paddle_engine() -> Optional[PaddleOCREngine]:
@@ -212,7 +222,6 @@ def _get_paddle_engine() -> Optional[PaddleOCREngine]:
         return _PADDLE_ENGINE
     if _PADDLE_INIT_FAILED:
         return None
-
     with _PADDLE_LOCK:
         if _PADDLE_ENGINE is not None:
             return _PADDLE_ENGINE
@@ -225,6 +234,17 @@ def _get_paddle_engine() -> Optional[PaddleOCREngine]:
             logger.info("PaddleOCR unavailable, fallback to Tesseract: %s", exc)
             return None
     return _PADDLE_ENGINE
+
+
+def _get_tesseract_engine() -> TesseractEngine:
+    """Get cached Tesseract engine wrapper."""
+    global _TESSERACT_ENGINE
+    if _TESSERACT_ENGINE is not None:
+        return _TESSERACT_ENGINE
+    with _TESSERACT_LOCK:
+        if _TESSERACT_ENGINE is None:
+            _TESSERACT_ENGINE = TesseractEngine()
+    return _TESSERACT_ENGINE
 
 
 def _open_image_from_bytes(image_bytes: bytes) -> Image.Image:
@@ -250,38 +270,43 @@ def _crop_label_region(image: Image.Image) -> Image.Image:
         return image
     pad_x = int((x2 - x1) * 0.05)
     pad_y = int((y2 - y1) * 0.07)
-    left = max(0, x1 - pad_x)
-    top = max(0, y1 - pad_y)
-    right = min(image.width, x2 + pad_x)
-    bottom = min(image.height, y2 + pad_y)
-    return image.crop((left, top, right, bottom))
+    return image.crop((max(0, x1 - pad_x), max(0, y1 - pad_y), min(image.width, x2 + pad_x), min(image.height, y2 + pad_y)))
 
 
-def _build_variants(image: Image.Image) -> list[Image.Image]:
-    """Create OCR-friendly image variants."""
+def _build_variant_sets(image: Image.Image) -> tuple[list[Image.Image], list[Image.Image]]:
+    """Create fast and deep OCR variants."""
     base = ImageOps.exif_transpose(image)
-    width, height = base.size
-    scale = max(1.0, 2200 / max(width, height))
+    scale = max(1.0, 2200 / max(base.size))
     if scale > 1.0:
-        base = base.resize((int(width * scale), int(height * scale)), Image.Resampling.LANCZOS)
-
+        base = base.resize((int(base.width * scale), int(base.height * scale)), Image.Resampling.LANCZOS)
     cropped = _crop_label_region(base)
-    variants: list[Image.Image] = []
+    fast: list[Image.Image] = []
+    deep: list[Image.Image] = []
     for source in [base, cropped]:
         gray = source.convert("L")
         sharp = ImageEnhance.Sharpness(gray).enhance(2.0)
         contrast = ImageEnhance.Contrast(sharp).enhance(2.5).filter(ImageFilter.SHARPEN)
         auto = ImageOps.autocontrast(gray, cutoff=1)
-        threshold_1 = contrast.point(lambda value: 255 if value > 130 else 0)
-        threshold_2 = contrast.point(lambda value: 255 if value > 150 else 0)
-        variants.extend([source, gray, auto, contrast, threshold_1, threshold_2])
-    return variants
+        thr1 = contrast.point(lambda value: 255 if value > 130 else 0)
+        thr2 = contrast.point(lambda value: 255 if value > 150 else 0)
+        fast.extend([source, contrast])
+        deep.extend([source, gray, auto, contrast, thr1, thr2])
+    return fast, deep
 
 
-def _best_result(engine: OCREngine, variants: list[Image.Image]) -> Optional[OCRResult]:
+def _best_result(engine: OCREngine, variants: list[Image.Image], *, deadline: float | None = None, max_variants: int | None = None) -> tuple[Optional[OCRResult], int, bool]:
     """Get best OCR result from one engine across variants."""
+    started = time.perf_counter()
     best: Optional[OCRResult] = None
+    partial_timeout = False
+    seen = 0
     for variant in variants:
+        if max_variants is not None and seen >= max_variants:
+            break
+        if _deadline_exceeded(deadline):
+            partial_timeout = True
+            break
+        seen += 1
         try:
             texts = engine.extract_text(variant)
         except Exception as exc:
@@ -291,27 +316,69 @@ def _best_result(engine: OCREngine, variants: list[Image.Image]) -> Optional[OCR
             score = _score_text(text)
             if best is None or score > best.score:
                 best = OCRResult(text=text, engine=engine.name, score=score)
-    return best
+    return best, int((time.perf_counter() - started) * 1000), partial_timeout
 
 
-def _extract_ocr_text(image_bytes: bytes) -> OCRResult:
-    """Run OCR with Paddle primary and Tesseract fallback."""
+def _extract_ocr_text(image_bytes: bytes, *, budget_seconds: float | None = None) -> tuple[Optional[OCRResult], OCRRunMeta]:
+    """Run OCR with fast and deep passes under an optional time budget."""
+    started = time.perf_counter()
+    deadline = started + budget_seconds if budget_seconds else None
+    preprocess_started = time.perf_counter()
     image = _open_image_from_bytes(image_bytes)
-    variants = _build_variants(image)
+    fast_variants, deep_variants = _build_variant_sets(image)
+    preprocess_ms = int((time.perf_counter() - preprocess_started) * 1000)
 
+    partial_timeout = False
+    timeout_reason = ""
+    paddle_ms = 0
+    tesseract_ms = 0
+    best: Optional[OCRResult] = None
+    fast_phase_returned = False
+
+    fast_started = time.perf_counter()
     paddle_engine = _get_paddle_engine()
-    paddle_result: Optional[OCRResult] = None
     if paddle_engine is not None:
-        paddle_result = _best_result(paddle_engine, variants)
-    if paddle_result and paddle_result.score >= 35.0:
-        return paddle_result
+        res, ms, pt = _best_result(paddle_engine, fast_variants, deadline=deadline, max_variants=FAST_VARIANT_LIMIT)
+        paddle_ms += ms
+        partial_timeout = partial_timeout or pt
+        best = res if res is not None else best
+    if best is None or best.score < FAST_ACCEPT_SCORE:
+        res, ms, pt = _best_result(_get_tesseract_engine(), fast_variants, deadline=deadline, max_variants=FAST_TESSERACT_VARIANT_LIMIT)
+        tesseract_ms += ms
+        partial_timeout = partial_timeout or pt
+        if res is not None and (best is None or res.score > best.score):
+            best = res
+    fast_pass_ms = int((time.perf_counter() - fast_started) * 1000)
 
-    tesseract_result = _best_result(TesseractEngine(), variants)
-    if tesseract_result is not None:
-        return tesseract_result
-    if paddle_result is not None:
-        return paddle_result
-    raise RuntimeError("No OCR output from Paddle or Tesseract")
+    if best is not None and best.score >= FAST_ACCEPT_SCORE:
+        fast_phase_returned = True
+        return best, OCRRunMeta(partial_timeout, preprocess_ms, fast_pass_ms, 0, paddle_ms, tesseract_ms, len(fast_variants), len(deep_variants), fast_phase_returned, timeout_reason)
+
+    if _deadline_exceeded(deadline):
+        partial_timeout = True
+        timeout_reason = "timeout_after_fast_pass"
+        return best, OCRRunMeta(partial_timeout, preprocess_ms, fast_pass_ms, 0, paddle_ms, tesseract_ms, len(fast_variants), len(deep_variants), False, timeout_reason)
+
+    deep_started = time.perf_counter()
+    if paddle_engine is not None:
+        res, ms, pt = _best_result(paddle_engine, deep_variants, deadline=deadline)
+        paddle_ms += ms
+        partial_timeout = partial_timeout or pt
+        if res is not None and (best is None or res.score > best.score):
+            best = res
+    if not _deadline_exceeded(deadline):
+        res, ms, pt = _best_result(_get_tesseract_engine(), deep_variants, deadline=deadline)
+        tesseract_ms += ms
+        partial_timeout = partial_timeout or pt
+        if res is not None and (best is None or res.score > best.score):
+            best = res
+    else:
+        partial_timeout = True
+        timeout_reason = "timeout_before_deep_tesseract"
+    deep_pass_ms = int((time.perf_counter() - deep_started) * 1000)
+    if partial_timeout and not timeout_reason:
+        timeout_reason = "partial_timeout_in_deep_pass"
+    return best, OCRRunMeta(partial_timeout, preprocess_ms, fast_pass_ms, deep_pass_ms, paddle_ms, tesseract_ms, len(fast_variants), len(deep_variants), False, timeout_reason)
 
 
 def _make_missing() -> ParsedField:
@@ -326,206 +393,124 @@ def _line_contains(line: str, keywords: list[str]) -> bool:
 
 
 def _extract_material(lines: list[str]) -> ParsedField:
-    """Extract material with OCR-tolerant patterns."""
     for line in lines:
         for material, pattern in MATERIAL_PATTERNS:
             if pattern.search(line):
-                return ParsedField(
-                    value=material,
-                    confidence=0.93,
-                    source_lines=[line],
-                    candidates=[material],
-                )
+                return ParsedField(material, 0.93, [line], [material])
     return _make_missing()
 
 
 def _extract_brand(lines: list[str]) -> ParsedField:
-    """Extract brand from header/brand context."""
     for line in lines[:8]:
         for brand, pattern, confidence in BRAND_PATTERNS:
             if pattern.search(line):
-                return ParsedField(
-                    value=brand,
-                    confidence=confidence,
-                    source_lines=[line],
-                    candidates=[brand],
-                )
-    # Header fallback: first short all-caps token line.
+                return ParsedField(brand, confidence, [line], [brand])
     for line in lines[:4]:
-        cleaned = re.sub(r"[^A-Za-z ]", "", line).strip()
-        if len(cleaned) < 4:
-            continue
-        if cleaned.isupper() and len(cleaned.split()) <= 3:
-            return ParsedField(
-                value=cleaned.title(),
-                confidence=0.58,
-                source_lines=[line],
-                candidates=[cleaned.title()],
-            )
+        clean = re.sub(r"[^A-Za-z ]", "", line).strip()
+        if len(clean) >= 4 and clean.isupper() and len(clean.split()) <= 3:
+            title = clean.title()
+            return ParsedField(title, 0.58, [line], [title])
     return _make_missing()
 
 
 def _extract_color(lines: list[str]) -> ParsedField:
-    """Extract color from color-specific context lines."""
     candidates: list[tuple[str, float, str]] = []
     for line in lines:
-        normalized_line = _normalize_text(line)
-        label_match = re.search(r"(?:color|farbe|颜[色色])\s*[:\-]?\s*([A-Za-z ]{2,24})", normalized_line, re.IGNORECASE)
-        if label_match:
-            token = label_match.group(1).strip()
-            candidates.append((token, 0.92, line))
-
-    for line in lines:
-        for color_name in COLOR_HEX_MAP:
-            if re.search(rf"\b{re.escape(color_name)}\b", line, re.IGNORECASE):
-                candidates.append((color_name, 0.70, line))
-
+        match = re.search(r"(?:color|farbe)\s*[:\-]?\s*([A-Za-z ]{2,24})", _normalize_text(line), re.IGNORECASE)
+        if match:
+            candidates.append((match.group(1).strip(), 0.92, line))
+        for name in COLOR_HEX_MAP:
+            if re.search(rf"\b{re.escape(name)}\b", line, re.IGNORECASE):
+                candidates.append((name, 0.70, line))
     best_value = None
     best_conf = 0.0
     best_line = ""
-    for token, confidence, source_line in candidates:
-        normalized = _normalize_token(token)
-        normalized = COLOR_ALIASES.get(normalized, normalized)
-        if normalized in COLOR_HEX_MAP and confidence > best_conf:
-            best_value = normalized
-            best_conf = confidence
-            best_line = source_line
-            continue
-
+    for token, conf, src in candidates:
+        norm = COLOR_ALIASES.get(_normalize_token(token), _normalize_token(token))
+        if norm in COLOR_HEX_MAP and conf > best_conf:
+            best_value, best_conf, best_line = norm, conf, src
         for canonical in COLOR_HEX_MAP:
-            fuzzy_score = SequenceMatcher(None, normalized, canonical).ratio()
-            if fuzzy_score >= 0.86 and (0.6 + (fuzzy_score - 0.86)) > best_conf:
-                best_value = canonical
-                best_conf = 0.6 + (fuzzy_score - 0.86)
-                best_line = source_line
-
+            score = SequenceMatcher(None, norm, canonical).ratio()
+            if score >= 0.86 and (0.6 + (score - 0.86)) > best_conf:
+                best_value, best_conf, best_line = canonical, 0.6 + (score - 0.86), src
     if not best_value:
         return _make_missing()
-    return ParsedField(
-        value={"color_name": best_value.title(), "color_hex": COLOR_HEX_MAP[best_value]},
-        confidence=min(best_conf, 0.95),
-        source_lines=[best_line] if best_line else [],
-        candidates=[best_value.title()],
-    )
+    return ParsedField({"color_name": best_value.title(), "color_hex": COLOR_HEX_MAP[best_value]}, min(best_conf, 0.95), [best_line] if best_line else [], [best_value.title()])
 
 
 def _extract_diameter(lines: list[str]) -> ParsedField:
-    """Extract filament diameter in mm."""
     for line in lines:
         if not re.search(r"diam|mm|直径", line, re.IGNORECASE):
             continue
         match = re.search(r"([1-3](?:[.,]\d{1,2}))\s*(?:±|\+/-)?\s*\d*(?:[.,]\d+)?\s*mm", line, re.IGNORECASE)
-        if not match:
-            continue
-        diameter = float(match.group(1).replace(",", "."))
-        if 1.0 <= diameter <= 3.5:
-            return ParsedField(
-                value=diameter,
-                confidence=0.9,
-                source_lines=[line],
-                candidates=[str(diameter)],
-            )
-    # fallback for lines containing plain 1.75mm
+        if match:
+            val = float(match.group(1).replace(",", "."))
+            if 1.0 <= val <= 3.5:
+                return ParsedField(val, 0.90, [line], [str(val)])
     for line in lines:
         match = re.search(r"\b([1-3](?:[.,]\d{1,2}))\s*mm\b", line, re.IGNORECASE)
-        if not match:
-            continue
-        diameter = float(match.group(1).replace(",", "."))
-        if 1.0 <= diameter <= 3.5:
-            return ParsedField(
-                value=diameter,
-                confidence=0.78,
-                source_lines=[line],
-                candidates=[str(diameter)],
-            )
+        if match:
+            val = float(match.group(1).replace(",", "."))
+            if 1.0 <= val <= 3.5:
+                return ParsedField(val, 0.78, [line], [str(val)])
     return _make_missing()
 
 
 def _extract_weight(lines: list[str]) -> ParsedField:
-    """Extract net weight in grams."""
     for line in lines:
         if not re.search(r"net|weight|n\.w\.|nw|重量", line, re.IGNORECASE):
             continue
         match = re.search(r"(\d+(?:[.,]\d+)?)\s*(kg|g)\b", line, re.IGNORECASE)
-        if not match:
-            continue
-        value = float(match.group(1).replace(",", "."))
-        unit = match.group(2).lower()
-        grams = int(round(value * 1000)) if unit == "kg" else int(round(value))
-        if 100 <= grams <= 5000:
-            return ParsedField(
-                value=grams,
-                confidence=0.92,
-                source_lines=[line],
-                candidates=[f"{grams}g"],
-            )
+        if match:
+            value = float(match.group(1).replace(",", "."))
+            grams = int(round(value * 1000)) if match.group(2).lower() == "kg" else int(round(value))
+            if 100 <= grams <= 5000:
+                return ParsedField(grams, 0.92, [line], [f"{grams}g"])
     return _make_missing()
 
 
 def _extract_temp_range(lines: list[str], keywords: list[str], bounds: tuple[int, int]) -> ParsedField:
-    """Extract temperature range with keyword context."""
-    lower_bound, upper_bound = bounds
-    pattern = re.compile(
-        r"(\d{2,3})\s*(?:°?\s*C)?\s*(?:-|~|to)\s*(\d{2,3})\s*(?:°?\s*C)?",
-        re.IGNORECASE,
-    )
-    fallback_candidate: Optional[ParsedField] = None
+    low_bound, high_bound = bounds
+    pattern = re.compile(r"(\d{2,3})\s*(?:°?\s*C)?\s*(?:-|~|to)\s*(\d{2,3})\s*(?:°?\s*C)?", re.IGNORECASE)
+    fallback: Optional[ParsedField] = None
     for line in lines:
         match = pattern.search(line)
         if not match:
             continue
-        low = int(match.group(1))
-        high = int(match.group(2))
+        low, high = int(match.group(1)), int(match.group(2))
         if low > high:
             low, high = high, low
-        if low < lower_bound or high > upper_bound:
-            rejected = ParsedField(
-                value={"min": low, "max": high},
-                confidence=0.0,
-                source_lines=[line],
-                candidates=[f"{low}-{high}"],
-                rejected=True,
-            )
-            if fallback_candidate is None:
-                fallback_candidate = rejected
+        if low < low_bound or high > high_bound:
+            reject = ParsedField({"min": low, "max": high}, 0.0, [line], [f"{low}-{high}"], True)
+            fallback = fallback or reject
             continue
-        confidence = 0.9 if _line_contains(line, keywords) else 0.62
-        candidate = ParsedField(
-            value={"min": low, "max": high},
-            confidence=confidence,
-            source_lines=[line],
-            candidates=[f"{low}-{high}"],
-        )
+        conf = 0.90 if _line_contains(line, keywords) else 0.62
+        cand = ParsedField({"min": low, "max": high}, conf, [line], [f"{low}-{high}"])
         if _line_contains(line, keywords):
-            return candidate
-        if fallback_candidate is None:
-            fallback_candidate = candidate
-    return fallback_candidate if fallback_candidate is not None else _make_missing()
+            return cand
+        fallback = fallback or cand
+    return fallback or _make_missing()
 
 
-def _field_status(parsed_field: ParsedField) -> str:
-    """Map parsed field confidence to API status."""
-    if parsed_field.value is None:
+def _field_status(field: ParsedField) -> str:
+    if field.value is None:
         return "missing"
-    if parsed_field.rejected:
+    if field.rejected:
         return "rejected_by_rule"
-    if parsed_field.confidence >= ACCEPTED_CONFIDENCE:
+    if field.confidence >= ACCEPTED_CONFIDENCE:
         return "accepted"
-    if parsed_field.confidence >= LOW_CONFIDENCE:
+    if field.confidence >= LOW_CONFIDENCE:
         return "low_confidence"
     return "rejected_by_rule"
 
 
-def _accepted_value(parsed_field: ParsedField):
-    """Return accepted value or null for low-confidence fields."""
-    return parsed_field.value if _field_status(parsed_field) == "accepted" else None
+def _accepted_value(field: ParsedField):
+    return field.value if _field_status(field) == "accepted" else None
 
 
 def parse_ocr_text_v2(text: str) -> dict:
     """Parse OCR text into v2 structured fields and metadata."""
-    normalized = _normalize_text(text)
-    lines = [line.strip() for line in normalized.splitlines() if line.strip()]
-
+    lines = [line.strip() for line in _normalize_text(text).splitlines() if line.strip()]
     brand = _extract_brand(lines)
     material = _extract_material(lines)
     color = _extract_color(lines)
@@ -534,170 +519,150 @@ def parse_ocr_text_v2(text: str) -> dict:
     nozzle = _extract_temp_range(lines, ["print", "printing", "nozzle", "extruder"], (150, 350))
     bed = _extract_temp_range(lines, ["bed", "plate"], (20, 150))
 
+    color_acc = _accepted_value(color)
+    nozzle_acc = _accepted_value(nozzle)
+    bed_acc = _accepted_value(bed)
     fields = {
         "brand": _accepted_value(brand),
         "material": _accepted_value(material),
-        "color_name": _accepted_value(color).get("color_name") if isinstance(_accepted_value(color), dict) else None,
-        "color_hex": _accepted_value(color).get("color_hex") if isinstance(_accepted_value(color), dict) else None,
+        "color_name": color_acc.get("color_name") if isinstance(color_acc, dict) else None,
+        "color_hex": color_acc.get("color_hex") if isinstance(color_acc, dict) else None,
         "diameter_mm": _accepted_value(diameter),
         "weight_g": _accepted_value(weight),
-        "nozzle_min": _accepted_value(nozzle).get("min") if isinstance(_accepted_value(nozzle), dict) else None,
-        "nozzle_max": _accepted_value(nozzle).get("max") if isinstance(_accepted_value(nozzle), dict) else None,
-        "bed_min": _accepted_value(bed).get("min") if isinstance(_accepted_value(bed), dict) else None,
-        "bed_max": _accepted_value(bed).get("max") if isinstance(_accepted_value(bed), dict) else None,
+        "nozzle_min": nozzle_acc.get("min") if isinstance(nozzle_acc, dict) else None,
+        "nozzle_max": nozzle_acc.get("max") if isinstance(nozzle_acc, dict) else None,
+        "bed_min": bed_acc.get("min") if isinstance(bed_acc, dict) else None,
+        "bed_max": bed_acc.get("max") if isinstance(bed_acc, dict) else None,
     }
 
-    field_meta = {
-        "brand": {
-            "confidence": round(brand.confidence, 3),
-            "status": _field_status(brand),
-            "source_lines": brand.source_lines,
-            "accepted_value": fields["brand"],
-            "candidates": brand.candidates,
-        },
-        "material": {
-            "confidence": round(material.confidence, 3),
-            "status": _field_status(material),
-            "source_lines": material.source_lines,
-            "accepted_value": fields["material"],
-            "candidates": material.candidates,
-        },
-        "color_name": {
-            "confidence": round(color.confidence, 3),
-            "status": _field_status(color),
-            "source_lines": color.source_lines,
-            "accepted_value": fields["color_name"],
-            "candidates": color.candidates,
-        },
-        "color_hex": {
-            "confidence": round(color.confidence, 3),
-            "status": _field_status(color),
-            "source_lines": color.source_lines,
-            "accepted_value": fields["color_hex"],
-            "candidates": color.candidates,
-        },
-        "diameter_mm": {
-            "confidence": round(diameter.confidence, 3),
-            "status": _field_status(diameter),
-            "source_lines": diameter.source_lines,
-            "accepted_value": fields["diameter_mm"],
-            "candidates": diameter.candidates,
-        },
-        "weight_g": {
-            "confidence": round(weight.confidence, 3),
-            "status": _field_status(weight),
-            "source_lines": weight.source_lines,
-            "accepted_value": fields["weight_g"],
-            "candidates": weight.candidates,
-        },
-        "nozzle_min": {
-            "confidence": round(nozzle.confidence, 3),
-            "status": _field_status(nozzle),
-            "source_lines": nozzle.source_lines,
-            "accepted_value": fields["nozzle_min"],
-            "candidates": nozzle.candidates,
-        },
-        "nozzle_max": {
-            "confidence": round(nozzle.confidence, 3),
-            "status": _field_status(nozzle),
-            "source_lines": nozzle.source_lines,
-            "accepted_value": fields["nozzle_max"],
-            "candidates": nozzle.candidates,
-        },
-        "bed_min": {
-            "confidence": round(bed.confidence, 3),
-            "status": _field_status(bed),
-            "source_lines": bed.source_lines,
-            "accepted_value": fields["bed_min"],
-            "candidates": bed.candidates,
-        },
-        "bed_max": {
-            "confidence": round(bed.confidence, 3),
-            "status": _field_status(bed),
-            "source_lines": bed.source_lines,
-            "accepted_value": fields["bed_max"],
-            "candidates": bed.candidates,
-        },
-    }
-
-    warnings: list[str] = []
-    for field_name, meta in field_meta.items():
-        if meta["status"] in {"missing", "rejected_by_rule"}:
-            warnings.append(f"{field_name} not recognized")
-        elif meta["status"] == "low_confidence":
-            warnings.append(f"{field_name} low confidence")
-
-    return {
-        "raw_text": text,
-        "fields": fields,
-        "field_meta": field_meta,
-        "warnings": warnings,
-    }
-
-
-def _build_empty_response(reason: str, duration_ms: int) -> dict:
-    """Build a fallback OCR response when extraction fails.
-
-    Args:
-    -----
-        reason (str):
-            Failure reason for warnings.
-        duration_ms (int):
-            Processing duration in milliseconds.
-
-    Returns:
-    --------
-        dict:
-            OCR v2-compatible empty payload.
-    """
-    fields = {
-        "brand": None,
-        "material": None,
-        "color_name": None,
-        "color_hex": None,
-        "diameter_mm": None,
-        "weight_g": None,
-        "nozzle_min": None,
-        "nozzle_max": None,
-        "bed_min": None,
-        "bed_max": None,
+    raw_fields = {
+        "brand": brand,
+        "material": material,
+        "color_name": color,
+        "color_hex": color,
+        "diameter_mm": diameter,
+        "weight_g": weight,
+        "nozzle_min": nozzle,
+        "nozzle_max": nozzle,
+        "bed_min": bed,
+        "bed_max": bed,
     }
     field_meta = {
         key: {
-            "confidence": 0.0,
-            "status": "missing",
-            "source_lines": [],
-            "accepted_value": None,
-            "candidates": [],
+            "confidence": round(field.confidence, 3),
+            "status": _field_status(field),
+            "source_lines": field.source_lines,
+            "accepted_value": fields[key],
+            "candidates": field.candidates,
         }
-        for key in fields
+        for key, field in raw_fields.items()
     }
+    warnings = []
+    for key, meta in field_meta.items():
+        if meta["status"] in {"missing", "rejected_by_rule"}:
+            warnings.append(f"{key} not recognized")
+        elif meta["status"] == "low_confidence":
+            warnings.append(f"{key} low confidence")
+    return {"raw_text": text, "fields": fields, "field_meta": field_meta, "warnings": warnings}
+
+
+def _timing_payload(meta: OCRRunMeta, total_ms: int) -> dict[str, object]:
+    return {
+        "total_ms": total_ms,
+        "partial_timeout": meta.partial_timeout,
+        "stages": {
+            "preprocess_ms": meta.preprocess_ms,
+            "fast_pass_ms": meta.fast_pass_ms,
+            "deep_pass_ms": meta.deep_pass_ms,
+            "paddle_ms": meta.paddle_ms,
+            "tesseract_ms": meta.tesseract_ms,
+            "variants_fast": meta.variants_fast,
+            "variants_deep": meta.variants_deep,
+            "fast_phase_returned": meta.fast_phase_returned,
+            "timeout_reason": meta.timeout_reason,
+        },
+    }
+
+
+def _build_empty_response(reason: str, duration_ms: int, timing: dict[str, object]) -> dict:
+    fields = {k: None for k in ["brand", "material", "color_name", "color_hex", "diameter_mm", "weight_g", "nozzle_min", "nozzle_max", "bed_min", "bed_max"]}
+    meta = {k: {"confidence": 0.0, "status": "missing", "source_lines": [], "accepted_value": None, "candidates": []} for k in fields}
     return {
         "engine": "none",
         "duration_ms": duration_ms,
         "raw_text": "",
         "warnings": [f"ocr extraction failed: {reason}"],
         "fields": fields,
-        "field_meta": field_meta,
+        "field_meta": meta,
+        "timing": timing,
     }
 
 
-def run_ocr_v2(image_bytes: bytes) -> dict:
+def run_ocr_v2(image_bytes: bytes, *, budget_seconds: float | None = None, debug: bool = False) -> dict:
     """Run complete OCR v2 pipeline and return API payload."""
     started = time.perf_counter()
+    budget = budget_seconds if budget_seconds is not None else float(os.getenv("OCR_V2_INTERNAL_TIMEOUT_SECONDS", "110"))
     try:
-        ocr = _extract_ocr_text(image_bytes)
-        parsed = parse_ocr_text_v2(ocr.text)
+        ocr, run_meta = _extract_ocr_text(image_bytes, budget_seconds=budget)
         duration_ms = int((time.perf_counter() - started) * 1000)
-        return {
-            "engine": ocr.engine,
-            "duration_ms": duration_ms,
-            "raw_text": parsed["raw_text"],
-            "warnings": parsed["warnings"],
-            "fields": parsed["fields"],
-            "field_meta": parsed["field_meta"],
-        }
+        timing = _timing_payload(run_meta, duration_ms)
+        if ocr is None:
+            payload = _build_empty_response("no_ocr_result", duration_ms, timing)
+        else:
+            parsed = parse_ocr_text_v2(ocr.text)
+            warnings = parsed["warnings"][:]
+            if run_meta.partial_timeout:
+                warnings.append("partial timeout: deep analysis was truncated")
+            payload = {
+                "engine": ocr.engine,
+                "duration_ms": duration_ms,
+                "raw_text": parsed["raw_text"],
+                "warnings": warnings,
+                "fields": parsed["fields"],
+                "field_meta": parsed["field_meta"],
+                "timing": timing,
+            }
+        if debug:
+            payload["debug"] = {"budget_seconds": budget}
+        logger.info(
+            "OCR v2 completed engine=%s total_ms=%s partial_timeout=%s",
+            payload.get("engine"),
+            duration_ms,
+            payload.get("timing", {}).get("partial_timeout"),
+        )
+        return payload
     except Exception as exc:
         logger.exception("OCR v2 extraction failed: %s", exc)
         duration_ms = int((time.perf_counter() - started) * 1000)
-        return _build_empty_response(str(exc), duration_ms)
+        timing = {
+            "total_ms": duration_ms,
+            "partial_timeout": False,
+            "stages": {
+                "preprocess_ms": 0,
+                "fast_pass_ms": 0,
+                "deep_pass_ms": 0,
+                "paddle_ms": 0,
+                "tesseract_ms": 0,
+                "variants_fast": 0,
+                "variants_deep": 0,
+                "fast_phase_returned": False,
+                "timeout_reason": "exception",
+            },
+        }
+        return _build_empty_response(str(exc), duration_ms, timing)
+
+
+def warmup_ocr_v2_background() -> None:
+    """Warm up OCR engines in a background thread."""
+    if os.getenv("OCR_V2_WARMUP", "1") != "1":
+        return
+
+    def _warmup() -> None:
+        try:
+            _get_paddle_engine()
+            _get_tesseract_engine()
+            logger.info("OCR v2 warmup complete")
+        except Exception as exc:
+            logger.info("OCR v2 warmup skipped: %s", exc)
+
+    threading.Thread(target=_warmup, name="ocr-v2-warmup", daemon=True).start()

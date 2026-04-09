@@ -98,7 +98,7 @@ def test_parse_v2_keeps_low_confidence_fields_unaccepted() -> None:
 def test_ocr_v2_prefers_paddle_when_score_is_good(monkeypatch) -> None:
     """Ensure paddle result is selected when quality is high."""
     monkeypatch.setattr(label_ocr_v2, "_open_image_from_bytes", lambda _: object())
-    monkeypatch.setattr(label_ocr_v2, "_build_variants", lambda _: ["variant"])
+    monkeypatch.setattr(label_ocr_v2, "_build_variant_sets", lambda _: (["variant"], ["variant"]))
 
     class DummyPaddleEngine:
         """Minimal paddle stand-in."""
@@ -109,16 +109,16 @@ def test_ocr_v2_prefers_paddle_when_score_is_good(monkeypatch) -> None:
     monkeypatch.setattr(
         label_ocr_v2,
         "_best_result",
-        lambda engine, _: label_ocr_v2.OCRResult("PETG 1.75mm", engine.name, 80.0),
+        lambda engine, *_args, **_kwargs: (label_ocr_v2.OCRResult("PETG 1.75mm", engine.name, 80.0), 10, False),
     )
-    result = label_ocr_v2._extract_ocr_text(b"dummy")
+    result, _meta = label_ocr_v2._extract_ocr_text(b"dummy")
     assert result.engine == "paddle"
 
 
 def test_ocr_v2_falls_back_to_tesseract(monkeypatch) -> None:
     """Ensure fallback selects Tesseract when paddle score is low."""
     monkeypatch.setattr(label_ocr_v2, "_open_image_from_bytes", lambda _: object())
-    monkeypatch.setattr(label_ocr_v2, "_build_variants", lambda _: ["variant"])
+    monkeypatch.setattr(label_ocr_v2, "_build_variant_sets", lambda _: (["variant"], ["variant"]))
 
     class DummyPaddleEngine:
         """Minimal paddle stand-in."""
@@ -127,13 +127,13 @@ def test_ocr_v2_falls_back_to_tesseract(monkeypatch) -> None:
 
     monkeypatch.setattr(label_ocr_v2, "_get_paddle_engine", lambda: DummyPaddleEngine())
 
-    def fake_best(engine, _):
+    def fake_best(engine, _variants, **_kwargs):
         if engine.name == "paddle":
-            return label_ocr_v2.OCRResult("noise", "paddle", 10.0)
-        return label_ocr_v2.OCRResult("PETG 1.75mm", "tesseract", 60.0)
+            return label_ocr_v2.OCRResult("noise", "paddle", 10.0), 10, False
+        return label_ocr_v2.OCRResult("PETG 1.75mm", "tesseract", 60.0), 10, False
 
     monkeypatch.setattr(label_ocr_v2, "_best_result", fake_best)
-    result = label_ocr_v2._extract_ocr_text(b"dummy")
+    result, _meta = label_ocr_v2._extract_ocr_text(b"dummy")
     assert result.engine == "tesseract"
 
 
@@ -142,10 +142,53 @@ def test_run_ocr_v2_returns_empty_payload_when_extraction_fails(monkeypatch) -> 
     monkeypatch.setattr(
         label_ocr_v2,
         "_extract_ocr_text",
-        lambda _: (_ for _ in ()).throw(RuntimeError("broken engine")),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("broken engine")),
     )
     payload = label_ocr_v2.run_ocr_v2(b"dummy")
     assert payload["engine"] == "none"
     assert payload["fields"]["material"] is None
     assert payload["field_meta"]["material"]["status"] == "missing"
     assert payload["warnings"]
+
+
+def test_ocr_v2_fast_pass_can_return_without_deep_pass(monkeypatch) -> None:
+    """Ensure fast pass short-circuits deep pass for strong OCR output."""
+    monkeypatch.setattr(label_ocr_v2, "_open_image_from_bytes", lambda _: object())
+    monkeypatch.setattr(label_ocr_v2, "_build_variant_sets", lambda _: (["fast"], ["deep"]))
+
+    class DummyPaddleEngine:
+        """Minimal paddle stand-in."""
+
+        name = "paddle"
+
+    monkeypatch.setattr(label_ocr_v2, "_get_paddle_engine", lambda: DummyPaddleEngine())
+
+    def fake_best(engine, variants, **_kwargs):
+        if variants == ["fast"]:
+            return label_ocr_v2.OCRResult("PETG 1.75mm", engine.name, 70.0), 10, False
+        raise AssertionError("Deep pass should not run")
+
+    monkeypatch.setattr(label_ocr_v2, "_best_result", fake_best)
+    _result, meta = label_ocr_v2._extract_ocr_text(b"dummy")
+    assert meta.fast_phase_returned is True
+    assert meta.deep_pass_ms == 0
+
+
+def test_ocr_v2_marks_partial_timeout(monkeypatch) -> None:
+    """Ensure partial timeout is reported in metadata."""
+    monkeypatch.setattr(label_ocr_v2, "_open_image_from_bytes", lambda _: object())
+    monkeypatch.setattr(label_ocr_v2, "_build_variant_sets", lambda _: (["fast"], ["deep"]))
+
+    class DummyPaddleEngine:
+        """Minimal paddle stand-in."""
+
+        name = "paddle"
+
+    monkeypatch.setattr(label_ocr_v2, "_get_paddle_engine", lambda: DummyPaddleEngine())
+    monkeypatch.setattr(
+        label_ocr_v2,
+        "_best_result",
+        lambda _engine, _variants, **_kwargs: (None, 1, True),
+    )
+    _result, meta = label_ocr_v2._extract_ocr_text(b"dummy", budget_seconds=0.00001)
+    assert meta.partial_timeout is True

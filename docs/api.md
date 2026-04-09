@@ -98,6 +98,10 @@ Returns:
 - `duration_ms`
 - `raw_text`
 - `warnings`
+- `timing`:
+  - `total_ms`
+  - `partial_timeout`
+  - `stages` (`preprocess_ms`, `fast_pass_ms`, `deep_pass_ms`, `paddle_ms`, `tesseract_ms`, `variants_fast`, `variants_deep`, `fast_phase_returned`, `timeout_reason`)
 - `fields`:
   - `brand`, `material`, `color_name`, `color_hex`
   - `diameter_mm`, `weight_g`

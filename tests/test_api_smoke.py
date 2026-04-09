@@ -165,7 +165,7 @@ def test_scan_label_v2_response_contains_meta(monkeypatch) -> None:
     monkeypatch.setattr(
         ocr_router,
         "run_ocr_v2",
-        lambda _: {
+        lambda *_args, **_kwargs: {
             "engine": "tesseract",
             "duration_ms": 180,
             "raw_text": "GEEETECH PETG 1.75mm Color: White Net Weight: 1KG",
@@ -186,6 +186,7 @@ def test_scan_label_v2_response_contains_meta(monkeypatch) -> None:
                 "brand": {"confidence": 0.98, "status": "accepted", "source_lines": [], "accepted_value": "Geeetech", "candidates": ["Geeetech"]},
                 "material": {"confidence": 0.98, "status": "accepted", "source_lines": [], "accepted_value": "PETG", "candidates": ["PETG"]},
             },
+            "timing": {"total_ms": 180, "partial_timeout": False, "stages": {}},
         },
     )
     response = client.post(
@@ -194,7 +195,7 @@ def test_scan_label_v2_response_contains_meta(monkeypatch) -> None:
     )
     assert response.status_code == 200
     payload = response.json()
-    for key in ["engine", "duration_ms", "fields", "field_meta", "warnings", "raw_text"]:
+    for key in ["engine", "duration_ms", "fields", "field_meta", "warnings", "raw_text", "timing"]:
         assert key in payload
     assert isinstance(payload["fields"], dict)
     assert isinstance(payload["field_meta"], dict)

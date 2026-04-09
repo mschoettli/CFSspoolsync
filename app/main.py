@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.database import Base, engine
 from app.routers import cfs, jobs, ocr, printer, spools
+from app.services.label_ocr_v2 import warmup_ocr_v2_background
 from app.services import moonraker
 
 logging.basicConfig(
@@ -26,6 +27,7 @@ Base.metadata.create_all(bind=engine)
 async def lifespan(_app: FastAPI):
     """Manage background worker lifecycle for Moonraker polling."""
     await moonraker.init_http_client()
+    warmup_ocr_v2_background()
 
     task = None
     if os.getenv("DISABLE_MOONRAKER_POLLING", "0") != "1":

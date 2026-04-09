@@ -845,6 +845,24 @@ function setupAddSpoolForm() {
   const continueBtn = document.getElementById('btnContinueToForm');
   const readFromCfsBtn = document.getElementById('btnReadFromK2');
   const scanBtn = document.getElementById('btnScanLabel');
+  let scanStatusTimer = null;
+
+  const stopScanStatusTicker = () => {
+    if (scanStatusTimer) {
+      clearTimeout(scanStatusTimer);
+      scanStatusTimer = null;
+    }
+  };
+
+  const startScanStatusTicker = (statusEl) => {
+    stopScanStatusTicker();
+    statusEl.textContent = 'Fast-Scan laeuft...';
+    statusEl.style.color = 'var(--text-muted)';
+    scanStatusTimer = setTimeout(() => {
+      statusEl.textContent = 'Vertiefte Analyse laeuft...';
+      statusEl.style.color = 'var(--text-mid)';
+    }, 1400);
+  };
 
   const setScanBusy = (busy) => {
     scanInProgress = busy;
@@ -873,14 +891,17 @@ function setupAddSpoolForm() {
   };
 
   const applyOCRResult = (data, statusEl) => {
+    stopScanStatusTicker();
     fillFormFromOCR(data);
     renderOCRReview(data);
     refreshDetectedStrip();
     const acceptedCount = Object.values(data?.field_meta || {})
       .filter(entry => entry?.status === 'accepted').length;
     const warnings = Array.isArray(data?.warnings) ? data.warnings.filter(Boolean) : [];
-    if (warnings.length || acceptedCount === 0) {
-      statusEl.textContent = `OCR abgeschlossen (${acceptedCount} sichere Felder, ${warnings.length} Hinweis${warnings.length !== 1 ? 'e' : ''})`;
+    const partialTimeout = Boolean(data?.timing?.partial_timeout);
+    if (warnings.length || acceptedCount === 0 || partialTimeout) {
+      const timeoutHint = partialTimeout ? ', Deep-Scan gekuerzt' : '';
+      statusEl.textContent = `OCR abgeschlossen (${acceptedCount} sichere Felder, ${warnings.length} Hinweis${warnings.length !== 1 ? 'e' : ''}${timeoutHint})`;
       statusEl.style.color = 'var(--text-mid)';
     } else {
       statusEl.textContent = `OCR abgeschlossen (${acceptedCount} sichere Felder)`;
@@ -955,11 +976,11 @@ function setupAddSpoolForm() {
         canvas.getContext('2d').drawImage(video, 0, 0);
         stopLabelScanStream();
         const statusEl = document.getElementById('k2ReadStatus');
-        statusEl.textContent = 'Bild wird analysiert...';
-        statusEl.style.color = 'var(--text-muted)';
+        startScanStatusTicker(statusEl);
         setScanBusy(true);
         canvas.toBlob(async (blob) => {
           if (!blob) {
+            stopScanStatusTicker();
             statusEl.textContent = 'Fehler: Bild konnte nicht verarbeitet werden';
             statusEl.style.color = 'var(--warn)';
             setScanBusy(false);
@@ -969,6 +990,7 @@ function setupAddSpoolForm() {
             const data = await uploadLabelImage(blob);
             applyOCRResult(data, statusEl);
           } catch (err) {
+            stopScanStatusTicker();
             statusEl.textContent = 'Fehler: ' + err.message;
             statusEl.style.color = 'var(--warn)';
           } finally {
@@ -987,13 +1009,13 @@ function setupAddSpoolForm() {
     const file = e.target.files[0];
     if (!file) return;
     const statusEl = document.getElementById('k2ReadStatus');
-    statusEl.textContent = 'Bild wird analysiert...';
-    statusEl.style.color = 'var(--text-muted)';
+    startScanStatusTicker(statusEl);
     setScanBusy(true);
     try {
       const data = await uploadLabelImage(file);
       applyOCRResult(data, statusEl);
     } catch (err) {
+      stopScanStatusTicker();
       statusEl.textContent = 'Scan fehlgeschlagen: ' + err.message;
       statusEl.style.color = 'var(--warn)';
     } finally {

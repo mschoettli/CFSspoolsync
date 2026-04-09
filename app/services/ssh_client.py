@@ -22,16 +22,52 @@ SLOT_TO_KEY = {1: "Spule 1", 2: "Spule 2", 3: "Spule 3", 4: "Spule 4"}
 SLOT_TO_ID = {1: "A", 2: "B", 3: "C", 4: "D"}
 
 
+def _load_private_key(path: str) -> paramiko.PKey:
+    """Load a private key file using supported modern key types.
+
+    Args:
+    -----
+        path (str):
+            Absolute path to the private key file inside the container.
+
+    Returns:
+    --------
+        paramiko.PKey:
+            Loaded Paramiko key object.
+
+    Raises:
+    -------
+        ValueError:
+            Raised when the file cannot be parsed as Ed25519, RSA, or ECDSA.
+    """
+    loaders = (
+        paramiko.Ed25519Key.from_private_key_file,
+        paramiko.RSAKey.from_private_key_file,
+        paramiko.ECDSAKey.from_private_key_file,
+    )
+    last_error: Optional[Exception] = None
+    for loader in loaders:
+        try:
+            return loader(path)
+        except Exception as exc:
+            last_error = exc
+    raise ValueError(f"Unsupported SSH private key format at {path}: {last_error}")
+
+
 def _get_client() -> paramiko.SSHClient:
     """Create an SSH client connected to the configured K2 host."""
+    pkey = _load_private_key(K2_SSH_KEY)
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     client.connect(
         hostname=K2_HOST,
         username=K2_SSH_USER,
-        key_filename=K2_SSH_KEY,
+        pkey=pkey,
+        allow_agent=False,
+        look_for_keys=False,
         timeout=8,
         banner_timeout=8,
+        disabled_algorithms={"pubkeys": ["ssh-dss"]},
     )
     return client
 

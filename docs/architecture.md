@@ -25,7 +25,7 @@ Core responsibilities:
 - **Services (`app/services/`)**
   - `moonraker.py`: transition tracking (`printing -> complete/standby/error/cancelled`).
   - `ssh_client.py`: printer SSH access + CFS JSON parsing.
-  - `label_ocr.py`: OCR image preprocessing and text parsing heuristics.
+  - `label_ocr_v2.py`: OCR v2 preprocessing, engine orchestration, and field parser.
 - **Persistence**
   - SQLAlchemy ORM models in `app/models.py`.
   - SQLite in WAL mode (`app/database.py`).

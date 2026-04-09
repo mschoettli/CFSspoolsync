@@ -1,294 +1,137 @@
 """Unit tests for service-layer helper functions."""
 
-from app.services import label_ocr
-from app.services.label_ocr import apply_db_similarity_matching, parse_label
+from app.services import label_ocr_v2
+from app.services.label_ocr_v2 import parse_ocr_text_v2
 from app.services.ssh_client import meters_to_grams
 
 
 def test_meters_to_grams_non_positive_returns_zero() -> None:
-    """Ensure invalid geometric inputs return zero consumption.
-
-    Returns:
-    --------
-        None:
-            Asserts guard-clause behavior.
-    """
+    """Ensure invalid geometric inputs return zero consumption."""
     assert meters_to_grams(0, 1.75, 1.24) == 0.0
     assert meters_to_grams(10, 0, 1.24) == 0.0
     assert meters_to_grams(10, 1.75, 0) == 0.0
 
 
 def test_meters_to_grams_positive_value() -> None:
-    """Ensure conversion returns positive grams for valid input.
-
-    Returns:
-    --------
-        None:
-            Asserts physically plausible output.
-    """
+    """Ensure conversion returns positive grams for valid input."""
     value = meters_to_grams(5.0, 1.75, 1.24)
     assert value > 0
 
 
-def test_parse_label_extracts_core_fields() -> None:
-    """Validate OCR text parsing for core filament fields.
-
-    Returns:
-    --------
-        None:
-            Asserts material, diameter and weight extraction.
-    """
-    text = """
-    SUNLU
-    PLA+
-    Color: White
-    Printing Temp: 200-220C
-    Bed Temp: 50-60C
-    1.75mm
-    Net Weight: 1KG
-    """
-    parsed = parse_label(text)
-
-    assert parsed["brand"] == "Sunlu"
-    assert parsed["material"] == "PLA+"
-    assert parsed["diameter"] == 1.75
-    assert parsed["weight_g"] == 1000
-    assert "field_meta" in parsed
-    assert "warnings" in parsed
-    assert parsed["field_meta"]["weight_g"]["confidence"] > 0.5
-
-
-def test_parse_label_normalizes_symbols_and_parses_temps() -> None:
-    """Validate parser normalization for degree and dash OCR artifacts.
-
-    Returns:
-    --------
-        None:
-            Asserts robust parsing of malformed OCR symbols.
-    """
+def test_parse_v2_geeetech_white_label() -> None:
+    """Validate Geeetech-style label parsing."""
     text = (
-        "PLA\n"
-        "Printing Temp: 21O\u00b0C \u2013 23O\u00b0C\n"
-        "Bed Temp: 6O\u00b0C \u2013 7O\u00b0C\n"
+        "GEEETECH\nPETG 1.75mm Color: White\n"
+        "Printing Temp: 220C-250C\nBed Temp:60-85C\nNet Weight:2KG"
     )
-    parsed = parse_label(text)
-
-    assert parsed["nozzle_min"] == 210
-    assert parsed["nozzle_max"] == 230
-    assert parsed["bed_min"] == 60
-    assert parsed["bed_max"] == 70
-
-
-def test_parse_label_avoids_material_substring_false_positive() -> None:
-    """Ensure short material tokens do not match as plain substrings.
-
-    Returns:
-    --------
-        None:
-            Asserts PA is only extracted from token boundaries.
-    """
-    parsed = parse_label("SPACE GRAY EDITION")
-    assert parsed["material"] == ""
+    parsed = parse_ocr_text_v2(text)
+    fields = parsed["fields"]
+    assert fields["brand"] == "Geeetech"
+    assert fields["material"] == "PETG"
+    assert fields["color_name"] == "White"
+    assert fields["color_hex"] == "#FFFFFF"
+    assert fields["weight_g"] == 2000
+    assert fields["diameter_mm"] == 1.75
+    assert fields["nozzle_min"] == 220
+    assert fields["nozzle_max"] == 250
+    assert fields["bed_min"] == 60
+    assert fields["bed_max"] == 85
 
 
-def test_parse_label_extracts_known_brand_and_german_color() -> None:
-    """Ensure known brand and localized color labels are parsed.
-
-    Returns:
-    --------
-        None:
-            Asserts brand/color extraction for common real-world labels.
-    """
-    text = """
-    BAMBU LAB
-    PLA Basic
-    Farbe: Weiss
-    1.75mm
-    Net Weight: 1kg
-    """
-    parsed = parse_label(text)
-
-    assert parsed["brand"] == "Bambu Lab"
-    assert parsed["color_name"] == "White"
-    assert parsed["color"] == "#FFFFFF"
-
-
-def test_parse_label_does_not_use_material_as_color() -> None:
-    """Ensure color parser does not accept material tokens as color values.
-
-    Returns:
-    --------
-        None:
-            Asserts color remains default when label value is not a color.
-    """
-    text = "Color: PLA+"
-    parsed = parse_label(text)
-    assert parsed["color"] == "#888888"
-
-
-def test_apply_db_similarity_matching_corrects_brand_material_color() -> None:
-    """Ensure OCR text fields are canonicalized from DB/static candidates.
-
-    Returns:
-    --------
-        None:
-            Asserts canonical mapping and matching metadata.
-    """
-    parsed = parse_label("BAM8U LAB PLAA Color: WeisS")
-    matched = apply_db_similarity_matching(
-        parsed=parsed,
-        db_brands=["Bambu Lab"],
-        db_materials=["PLA"],
-        db_color_names=["White"],
+def test_parse_v2_ender_black_label() -> None:
+    """Validate Ender/Creality label parsing."""
+    text = (
+        "Ender PLA Value Pake\nColor Black\nDiameter 1.75±0.03mm\n"
+        "Net Weight 1000g\nNozzle Temp 190-220C\nBed Temp 25-60C"
     )
+    parsed = parse_ocr_text_v2(text)
+    fields = parsed["fields"]
+    assert fields["brand"] == "Creality"
+    assert fields["material"] == "PLA"
+    assert fields["color_name"] == "Black"
+    assert fields["color_hex"] == "#000000"
+    assert fields["weight_g"] == 1000
+    assert fields["diameter_mm"] == 1.75
+    assert fields["nozzle_min"] == 190
+    assert fields["nozzle_max"] == 220
+    assert fields["bed_min"] == 25
+    assert fields["bed_max"] == 60
 
-    assert matched["brand"] == "Bambu Lab"
-    assert matched["material"] == "PLA"
-    assert matched["color_name"] == "White"
-    assert matched["color"] == "#FFFFFF"
-    assert matched["field_meta"]["brand"]["match_source"] in {"db", "static"}
-    assert matched["field_meta"]["material"]["source"] == "ocr+db-match"
-    assert matched["field_meta"]["color"]["source"] == "ocr+db-match"
 
-
-def test_apply_db_similarity_matching_adds_low_confidence_warning() -> None:
-    """Ensure low-score canonical mappings are still applied with warning.
-
-    Returns:
-    --------
-        None:
-            Asserts policy behavior for weak matches.
-    """
-    parsed = parse_label("Brand: Xqzv Material: Pls Color: Whte")
-    matched = apply_db_similarity_matching(
-        parsed=parsed,
-        db_brands=["Bambu Lab"],
-        db_materials=["PLA"],
-        db_color_names=["White"],
+def test_parse_v2_cr_silk_gold_label() -> None:
+    """Validate CR-Silk style label parsing."""
+    text = (
+        "Product Name CR-Silk\nColor Gold\nDiameter 1.75mm\n"
+        "N.W. 1.0kg\nPrint Temp 190-230C"
     )
-
-    assert matched["brand"] == "Xqzv"
-    assert matched["field_meta"]["brand"]["match_applied"] is False
-    assert any("OCR-Wert beibehalten" in warning for warning in matched["warnings"])
-
-
-def test_parse_label_extracts_geeetech_brand() -> None:
-    """Ensure Geeetech labels are parsed to the canonical brand value.
-
-    Returns:
-    --------
-        None:
-            Asserts explicit Geeetech parsing from OCR text.
-    """
-    parsed = parse_label("GEEETECH\nPETG 1.75mm\nNet Weight: 1KG")
-    assert parsed["brand"] == "Geeetech"
+    parsed = parse_ocr_text_v2(text)
+    fields = parsed["fields"]
+    assert fields["brand"] == "Creality"
+    assert fields["material"] is None
+    assert fields["color_name"] == "Gold"
+    assert fields["color_hex"] == "#FFD700"
+    assert fields["diameter_mm"] == 1.75
+    assert fields["weight_g"] == 1000
+    assert fields["nozzle_min"] == 190
+    assert fields["nozzle_max"] == 230
 
 
-def test_parse_label_extracts_ender_brand_and_black_color() -> None:
-    """Ensure Ender labels resolve to Creality and parse black color.
-
-    Returns:
-    --------
-        None:
-            Asserts parsing for common Creality Ender labels.
-    """
-    parsed = parse_label(
-        "Ender PLA Value Pack\nColor Black\nDiameter 1.75±0.03mm\n"
-        "Net Weight 1000g\nNozzle Temp 190-220C\nBed Temp25-60C"
-    )
-    assert parsed["brand"] == "Creality"
-    assert parsed["material"] == "PLA"
-    assert parsed["color_name"] == "Black"
-    assert parsed["color"] == "#000000"
-    assert parsed["nozzle_min"] == 190
-    assert parsed["nozzle_max"] == 220
-    assert parsed["bed_min"] == 25
-    assert parsed["bed_max"] == 60
+def test_parse_v2_jayo_label() -> None:
+    """Validate JAYO-like one-line label parsing."""
+    text = "JAYO PLA+ 3D Printer Filament 1.75mm 1.1kg Burdy Wood"
+    parsed = parse_ocr_text_v2(text)
+    fields = parsed["fields"]
+    assert fields["brand"] == "JAYO"
+    assert fields["material"] == "PLA+"
+    assert fields["diameter_mm"] == 1.75
+    assert fields["weight_g"] == 1100
+    assert fields["color_hex"] == "#8B4513"
 
 
-def test_parse_label_fuzzy_color_corrects_biack() -> None:
-    """Ensure OCR color typo 'biack' is normalized to black.
-
-    Returns:
-    --------
-        None:
-            Asserts fuzzy color fallback behavior.
-    """
-    parsed = parse_label("Color: biack")
-    assert parsed["color_name"] == "Black"
-    assert parsed["color"] == "#000000"
+def test_parse_v2_keeps_low_confidence_fields_unaccepted() -> None:
+    """Ensure low-confidence values are not auto-accepted."""
+    parsed = parse_ocr_text_v2("Brand: Xqzv Material: PLS")
+    assert parsed["fields"]["brand"] is None
+    assert parsed["field_meta"]["brand"]["status"] in {"low_confidence", "missing", "rejected_by_rule"}
 
 
-def test_apply_db_similarity_matching_keeps_brand_when_match_is_weak() -> None:
-    """Ensure weak brand similarity does not overwrite OCR value.
-
-    Returns:
-    --------
-        None:
-            Asserts new brand threshold policy and metadata flags.
-    """
-    parsed = parse_label("XQZV\nPETG")
-    matched = apply_db_similarity_matching(
-        parsed=parsed,
-        db_brands=["Creality"],
-        db_materials=["PETG"],
-        db_color_names=["White"],
-    )
-    assert matched["brand"] == "Xqzv"
-    assert matched["field_meta"]["brand"]["match_applied"] is False
-
-
-def test_ocr_orchestrator_prefers_paddle_when_score_is_good(monkeypatch) -> None:
-    """Ensure PaddleOCR result is used when score is above threshold.
-
-    Returns:
-    --------
-        None:
-            Asserts primary-engine selection behavior.
-    """
-    monkeypatch.setattr(label_ocr, "_build_image_variants", lambda _: ["variant"])
-    monkeypatch.setattr(label_ocr, "_open_image_from_bytes", lambda _: object())
+def test_ocr_v2_prefers_paddle_when_score_is_good(monkeypatch) -> None:
+    """Ensure paddle result is selected when quality is high."""
+    monkeypatch.setattr(label_ocr_v2, "_open_image_from_bytes", lambda _: object())
+    monkeypatch.setattr(label_ocr_v2, "_build_variants", lambda _: ["variant"])
 
     class DummyPaddleEngine:
-        """Minimal paddle-engine stand-in for deterministic tests."""
+        """Minimal paddle stand-in."""
 
         name = "paddle"
 
-    monkeypatch.setattr(label_ocr, "_get_paddle_engine", lambda: DummyPaddleEngine())
+    monkeypatch.setattr(label_ocr_v2, "_get_paddle_engine", lambda: DummyPaddleEngine())
     monkeypatch.setattr(
-        label_ocr,
-        "_best_engine_result",
-        lambda engine, _: label_ocr.OCRResult("PETG 1.75mm", engine.name, 75.0),
+        label_ocr_v2,
+        "_best_result",
+        lambda engine, _: label_ocr_v2.OCRResult("PETG 1.75mm", engine.name, 80.0),
     )
-    result = label_ocr.ocr_image_with_engine(b"dummy")
-    assert result is not None
+    result = label_ocr_v2._extract_ocr_text(b"dummy")
     assert result.engine == "paddle"
 
 
-def test_ocr_orchestrator_falls_back_to_tesseract(monkeypatch) -> None:
-    """Ensure low-score Paddle output falls back to Tesseract.
-
-    Returns:
-    --------
-        None:
-            Asserts fallback path behavior.
-    """
-    monkeypatch.setattr(label_ocr, "_build_image_variants", lambda _: ["variant"])
-    monkeypatch.setattr(label_ocr, "_open_image_from_bytes", lambda _: object())
+def test_ocr_v2_falls_back_to_tesseract(monkeypatch) -> None:
+    """Ensure fallback selects Tesseract when paddle score is low."""
+    monkeypatch.setattr(label_ocr_v2, "_open_image_from_bytes", lambda _: object())
+    monkeypatch.setattr(label_ocr_v2, "_build_variants", lambda _: ["variant"])
 
     class DummyPaddleEngine:
-        """Minimal paddle-engine stand-in for deterministic tests."""
+        """Minimal paddle stand-in."""
 
         name = "paddle"
 
-    monkeypatch.setattr(label_ocr, "_get_paddle_engine", lambda: DummyPaddleEngine())
+    monkeypatch.setattr(label_ocr_v2, "_get_paddle_engine", lambda: DummyPaddleEngine())
 
     def fake_best(engine, _):
         if engine.name == "paddle":
-            return label_ocr.OCRResult("noise", "paddle", 12.0)
-        return label_ocr.OCRResult("PETG 1.75mm", "tesseract", 60.0)
+            return label_ocr_v2.OCRResult("noise", "paddle", 10.0)
+        return label_ocr_v2.OCRResult("PETG 1.75mm", "tesseract", 60.0)
 
-    monkeypatch.setattr(label_ocr, "_best_engine_result", fake_best)
-    result = label_ocr.ocr_image_with_engine(b"dummy")
-    assert result is not None
+    monkeypatch.setattr(label_ocr_v2, "_best_result", fake_best)
+    result = label_ocr_v2._extract_ocr_text(b"dummy")
     assert result.engine == "tesseract"

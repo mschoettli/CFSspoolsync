@@ -773,7 +773,7 @@ function buildAddSpoolForm() {
           <div class="form-grid">
             <div class="form-group">
               <label class="form-label">Anfangsgewicht (g) *</label>
-              <input class="form-input" type="number" name="initial_weight" required min="1" step="0.1" value="1000">
+              <input class="form-input" type="number" name="initial_weight" required min="1" step="0.1" placeholder="1000">
               <span class="form-hint">Vollspule ohne Spulenkoerper</span>
             </div>
             <div class="form-group">
@@ -806,7 +806,7 @@ function buildAddSpoolForm() {
           <div class="form-grid">
             <div class="form-group">
               <label class="form-label">Durchmesser (mm)</label>
-              <input class="form-input" type="number" name="diameter" value="1.75" step="0.01" min="1">
+              <input class="form-input" type="number" name="diameter" step="0.01" min="1" placeholder="1.75">
             </div>
             <div class="form-group">
               <label class="form-label">Dichte (g/cm3)</label>
@@ -876,14 +876,17 @@ function setupAddSpoolForm() {
     fillFormFromOCR(data);
     renderOCRReview(data);
     refreshDetectedStrip();
+    const acceptedCount = Object.values(data?.field_meta || {})
+      .filter(entry => entry?.status === 'accepted').length;
     const warnings = Array.isArray(data?.warnings) ? data.warnings.filter(Boolean) : [];
-    if (warnings.length) {
-      statusEl.textContent = `OK Etikett erkannt (${warnings.length} Hinweis${warnings.length > 1 ? 'e' : ''})`;
+    if (warnings.length || acceptedCount === 0) {
+      statusEl.textContent = `OCR abgeschlossen (${acceptedCount} sichere Felder, ${warnings.length} Hinweis${warnings.length !== 1 ? 'e' : ''})`;
       statusEl.style.color = 'var(--text-mid)';
-      return;
+    } else {
+      statusEl.textContent = `OCR abgeschlossen (${acceptedCount} sichere Felder)`;
+      statusEl.style.color = 'var(--accent)';
     }
-    statusEl.textContent = 'OK Etikett erkannt';
-    statusEl.style.color = 'var(--accent)';
+    hasAutoDetectedData = acceptedCount > 0;
   };
 
   setStep('source');
@@ -965,7 +968,6 @@ function setupAddSpoolForm() {
           try {
             const data = await uploadLabelImage(blob);
             applyOCRResult(data, statusEl);
-            hasAutoDetectedData = true;
           } catch (err) {
             statusEl.textContent = 'Fehler: ' + err.message;
             statusEl.style.color = 'var(--warn)';
@@ -991,7 +993,6 @@ function setupAddSpoolForm() {
     try {
       const data = await uploadLabelImage(file);
       applyOCRResult(data, statusEl);
-      hasAutoDetectedData = true;
     } catch (err) {
       statusEl.textContent = 'Scan fehlgeschlagen: ' + err.message;
       statusEl.style.color = 'var(--warn)';
@@ -1073,27 +1074,6 @@ function fillFormFromK2(data) {
   set('remaining_weight', data.remaining_grams);
 }
 
-function getLegacyFieldMeta(data) {
-  const fieldMap = {
-    material: data.material,
-    brand: data.brand,
-    color: data.color,
-    nozzle_min: data.nozzle_min,
-    nozzle_max: data.nozzle_max,
-    bed_max: data.bed_max,
-    bed_min: data.bed_min,
-    diameter: data.diameter,
-    weight_g: data.weight_g,
-  };
-  const meta = {};
-  Object.entries(fieldMap).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
-      meta[key] = { value, confidence: 0.45, source: 'legacy' };
-    }
-  });
-  return meta;
-}
-
 function confidenceClass(score) {
   if (typeof score !== 'number' || Number.isNaN(score)) return 'unknown';
   if (score >= 0.8) return 'high';
@@ -1104,7 +1084,7 @@ function confidenceClass(score) {
 function renderOCRReview(data) {
   const panel = document.getElementById('ocrReviewPanel');
   if (!panel) return;
-  const fieldMeta = data?.field_meta || getLegacyFieldMeta(data || {});
+  const fieldMeta = data?.field_meta || {};
   const fields = [
     ['material', 'Material'],
     ['brand', 'Brand'],
@@ -1112,32 +1092,26 @@ function renderOCRReview(data) {
     ['nozzle_min', 'Nozzle Min'],
     ['nozzle_max', 'Nozzle Max'],
     ['bed_max', 'Bed'],
-    ['diameter', 'Durchmesser'],
-    ['color', 'Farbe'],
+    ['diameter_mm', 'Durchmesser'],
+    ['color_name', 'Farbe'],
   ];
   const rows = fields
     .map(([key, label]) => {
       const entry = fieldMeta[key];
       if (!entry) return '';
-      const hasMatchScore = typeof entry.match_score === 'number';
-      const cls = confidenceClass(hasMatchScore ? entry.match_score : entry.confidence);
-      const score = hasMatchScore
-        ? `${Math.round(entry.match_score * 100)}%`
-        : (typeof entry.confidence === 'number' ? `${Math.round(entry.confidence * 100)}%` : 'n/a');
-      const value = entry.source === 'default' ? '—' : (entry.value ?? '—');
-      const ocrValue = entry.ocr_value ?? null;
-      const matchedValue = entry.matched_value ?? null;
-      const matchApplied = entry.match_applied !== false;
-      const sourceLabel = entry.match_source ? String(entry.match_source).toUpperCase() : '';
-      const valueHtml = (
-        ocrValue && matchedValue && matchApplied
-          ? `<span class="ocr-review-ocr">${esc(String(ocrValue))}</span><span class="ocr-review-arrow">-></span><span>${esc(String(matchedValue))}</span>`
-          : esc(String(value))
-      );
+      const cls = confidenceClass(entry.confidence);
+      const score = typeof entry.confidence === 'number'
+        ? `${Math.round(entry.confidence * 100)}%`
+        : 'n/a';
+      const value = entry.accepted_value ?? '—';
+      const sourceLabel = entry.status ? String(entry.status).toUpperCase() : '';
+      const lineHint = Array.isArray(entry.source_lines) && entry.source_lines.length
+        ? entry.source_lines[0]
+        : '';
       return `
         <div class="ocr-review-row">
           <span class="ocr-review-key">${label}</span>
-          <span class="ocr-review-val">${valueHtml}</span>
+          <span class="ocr-review-val" title="${esc(lineHint)}">${esc(String(value))}</span>
           <span class="ocr-review-badge ${cls}">${score}</span>
           ${sourceLabel ? `<span class="ocr-review-source">${sourceLabel}</span>` : '<span></span>'}
         </div>`;
@@ -1167,34 +1141,21 @@ function fillFormFromOCR(data) {
     input.value = val;
   };
 
-  const fieldMeta = data.field_meta || getLegacyFieldMeta(data);
-  const getValue = (key, fallback) => {
-    const metaEntry = fieldMeta[key];
-    if (
-      metaEntry
-      && metaEntry.source
-      && metaEntry.source !== 'default'
-      && metaEntry.value !== undefined
-      && metaEntry.value !== null
-      && metaEntry.value !== ''
-    ) {
-      return metaEntry.value;
-    }
-    if (fallback === undefined || fallback === null || fallback === '') return null;
-    if (typeof fallback === 'number' && fallback === 0) return null;
-    if (typeof fallback === 'string' && fallback === '0') return null;
-    if (typeof fallback === 'string' && fallback === '#888888') return null;
-    return fallback;
+  const fields = data.fields || {};
+  const getAccepted = (key) => {
+    const value = fields[key];
+    if (value === undefined || value === null || value === '') return null;
+    return value;
   };
 
-  const weightValue = getValue('weight_g', data.weight_g);
-  const bedValue = getValue('bed_max', data.bed_max || data.bed_min);
-  const nozzleMin = getValue('nozzle_min', data.nozzle_min);
-  const nozzleMax = getValue('nozzle_max', data.nozzle_max);
-  const diameter = getValue('diameter', data.diameter);
-  const material = getValue('material', data.material);
-  const color = getValue('color', data.color);
-  const brand = getValue('brand', data.brand);
+  const weightValue = getAccepted('weight_g');
+  const bedValue = getAccepted('bed_max') ?? getAccepted('bed_min');
+  const nozzleMin = getAccepted('nozzle_min');
+  const nozzleMax = getAccepted('nozzle_max');
+  const diameter = getAccepted('diameter_mm');
+  const material = getAccepted('material');
+  const color = getAccepted('color_hex');
+  const brand = getAccepted('brand');
 
   if (material) {
     set('material', material);

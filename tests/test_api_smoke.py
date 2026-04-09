@@ -149,8 +149,8 @@ def test_cfs_route_shape() -> None:
         assert set(slot.keys()) == {"slot", "key", "spool"}
 
 
-def test_scan_label_response_contains_meta(monkeypatch) -> None:
-    """Validate OCR endpoint returns compatibility fields plus metadata.
+def test_scan_label_v2_response_contains_meta(monkeypatch) -> None:
+    """Validate OCR v2 endpoint returns expected fields and metadata.
 
     Returns:
     --------
@@ -164,28 +164,45 @@ def test_scan_label_response_contains_meta(monkeypatch) -> None:
 
     monkeypatch.setattr(
         ocr_router,
-        "ocr_image_with_engine",
-        lambda _: type("OCR", (), {
-            "text": "BAM8U LAB PLAA Color: WeisS Printing Temp: 200-220C Net Weight: 1KG 1.75mm",
+        "run_ocr_v2",
+        lambda _: {
             "engine": "tesseract",
-        })(),
+            "duration_ms": 180,
+            "raw_text": "GEEETECH PETG 1.75mm Color: White Net Weight: 1KG",
+            "warnings": [],
+            "fields": {
+                "brand": "Geeetech",
+                "material": "PETG",
+                "color_name": "White",
+                "color_hex": "#FFFFFF",
+                "diameter_mm": 1.75,
+                "weight_g": 1000,
+                "nozzle_min": 220,
+                "nozzle_max": 250,
+                "bed_min": 60,
+                "bed_max": 85,
+            },
+            "field_meta": {
+                "brand": {"confidence": 0.98, "status": "accepted", "source_lines": [], "accepted_value": "Geeetech", "candidates": ["Geeetech"]},
+                "material": {"confidence": 0.98, "status": "accepted", "source_lines": [], "accepted_value": "PETG", "candidates": ["PETG"]},
+            },
+        },
     )
     response = client.post(
-        "/api/scan-label",
+        "/api/ocr/v2/scan",
         files={"file": ("label.jpg", b"fake-image", "image/jpeg")},
     )
     assert response.status_code == 200
     payload = response.json()
-    for key in ["material", "weight_g", "field_meta", "warnings", "raw_text", "ocr_engine"]:
+    for key in ["engine", "duration_ms", "fields", "field_meta", "warnings", "raw_text"]:
         assert key in payload
+    assert isinstance(payload["fields"], dict)
     assert isinstance(payload["field_meta"], dict)
     assert isinstance(payload["warnings"], list)
-    assert payload["brand"] == "Bambu Lab"
-    assert payload["material"] == "PLA"
-    assert payload["ocr_engine"] == "tesseract"
-    assert payload["field_meta"]["brand"]["source"] == "ocr+db-match"
-    assert payload["field_meta"]["brand"]["match_source"] in {"db", "static"}
-    assert "match_applied" in payload["field_meta"]["brand"]
+    assert payload["engine"] == "tesseract"
+    assert payload["fields"]["brand"] == "Geeetech"
+    assert payload["fields"]["material"] == "PETG"
+    assert payload["field_meta"]["brand"]["status"] == "accepted"
 
 
 def test_jobs_route_returns_only_one_running_job() -> None:

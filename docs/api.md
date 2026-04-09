@@ -6,7 +6,6 @@ Base URL: `http://<host>:<port>`
 
 - JSON request/response for all non-upload routes.
 - Error payload follows FastAPI default shape (`{"detail": "..."}`).
-- Existing endpoint paths are backward compatible.
 
 ## Spools
 
@@ -91,12 +90,21 @@ Returns recent jobs with per-slot before/after values and total consumed grams.
 
 ## OCR
 
-### `POST /api/scan-label`
+### `POST /api/ocr/v2/scan`
 Multipart upload (`file`) for label OCR.
 
-Returns parsed fields like:
-- `brand`, `material`, `color`
-- `nozzle_min`, `nozzle_max`, `bed_min`, `bed_max`
-- `diameter`, `weight_g`, `raw_text`
-- `ocr_engine` (`paddle` or `tesseract`)
-- `field_meta` with per-field confidence and optional match metadata (`match_score`, `match_source`, `match_applied`)
+Returns:
+- `engine` (`paddle` or `tesseract`)
+- `duration_ms`
+- `raw_text`
+- `warnings`
+- `fields`:
+  - `brand`, `material`, `color_name`, `color_hex`
+  - `diameter_mm`, `weight_g`
+  - `nozzle_min`, `nozzle_max`, `bed_min`, `bed_max`
+- `field_meta` per field:
+  - `confidence`
+  - `status` (`accepted | low_confidence | missing | rejected_by_rule`)
+  - `source_lines`
+  - `accepted_value`
+  - `candidates`

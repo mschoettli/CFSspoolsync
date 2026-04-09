@@ -25,5 +25,3 @@ async def scan_label_v2(file: UploadFile = File(...)):
         )
     except asyncio.TimeoutError as exc:
         raise HTTPException(504, f"OCR-Analyse Timeout ({OCR_TIMEOUT_SECONDS}s)") from exc
-    except Exception as exc:
-        raise HTTPException(503, f"OCR fehlgeschlagen: {exc}") from exc

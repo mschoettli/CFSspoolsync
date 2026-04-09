@@ -64,6 +64,7 @@ MATERIAL_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("ASA", re.compile(r"\bASA\b", re.IGNORECASE)),
     ("TPU", re.compile(r"\bTPU\b", re.IGNORECASE)),
     ("NYLON", re.compile(r"\bNYLON\b", re.IGNORECASE)),
+    ("PLA", re.compile(r"\bCR[\s\-]?SILK\b", re.IGNORECASE)),
 ]
 
 BRAND_PATTERNS: list[tuple[str, re.Pattern[str], float]] = [
@@ -634,17 +635,69 @@ def parse_ocr_text_v2(text: str) -> dict:
     }
 
 
+def _build_empty_response(reason: str, duration_ms: int) -> dict:
+    """Build a fallback OCR response when extraction fails.
+
+    Args:
+    -----
+        reason (str):
+            Failure reason for warnings.
+        duration_ms (int):
+            Processing duration in milliseconds.
+
+    Returns:
+    --------
+        dict:
+            OCR v2-compatible empty payload.
+    """
+    fields = {
+        "brand": None,
+        "material": None,
+        "color_name": None,
+        "color_hex": None,
+        "diameter_mm": None,
+        "weight_g": None,
+        "nozzle_min": None,
+        "nozzle_max": None,
+        "bed_min": None,
+        "bed_max": None,
+    }
+    field_meta = {
+        key: {
+            "confidence": 0.0,
+            "status": "missing",
+            "source_lines": [],
+            "accepted_value": None,
+            "candidates": [],
+        }
+        for key in fields
+    }
+    return {
+        "engine": "none",
+        "duration_ms": duration_ms,
+        "raw_text": "",
+        "warnings": [f"ocr extraction failed: {reason}"],
+        "fields": fields,
+        "field_meta": field_meta,
+    }
+
+
 def run_ocr_v2(image_bytes: bytes) -> dict:
     """Run complete OCR v2 pipeline and return API payload."""
     started = time.perf_counter()
-    ocr = _extract_ocr_text(image_bytes)
-    parsed = parse_ocr_text_v2(ocr.text)
-    duration_ms = int((time.perf_counter() - started) * 1000)
-    return {
-        "engine": ocr.engine,
-        "duration_ms": duration_ms,
-        "raw_text": parsed["raw_text"],
-        "warnings": parsed["warnings"],
-        "fields": parsed["fields"],
-        "field_meta": parsed["field_meta"],
-    }
+    try:
+        ocr = _extract_ocr_text(image_bytes)
+        parsed = parse_ocr_text_v2(ocr.text)
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        return {
+            "engine": ocr.engine,
+            "duration_ms": duration_ms,
+            "raw_text": parsed["raw_text"],
+            "warnings": parsed["warnings"],
+            "fields": parsed["fields"],
+            "field_meta": parsed["field_meta"],
+        }
+    except Exception as exc:
+        logger.exception("OCR v2 extraction failed: %s", exc)
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        return _build_empty_response(str(exc), duration_ms)

@@ -135,3 +135,17 @@ def test_ocr_v2_falls_back_to_tesseract(monkeypatch) -> None:
     monkeypatch.setattr(label_ocr_v2, "_best_result", fake_best)
     result = label_ocr_v2._extract_ocr_text(b"dummy")
     assert result.engine == "tesseract"
+
+
+def test_run_ocr_v2_returns_empty_payload_when_extraction_fails(monkeypatch) -> None:
+    """Ensure OCR v2 returns structured empty payload on extraction failure."""
+    monkeypatch.setattr(
+        label_ocr_v2,
+        "_extract_ocr_text",
+        lambda _: (_ for _ in ()).throw(RuntimeError("broken engine")),
+    )
+    payload = label_ocr_v2.run_ocr_v2(b"dummy")
+    assert payload["engine"] == "none"
+    assert payload["fields"]["material"] is None
+    assert payload["field_meta"]["material"]["status"] == "missing"
+    assert payload["warnings"]

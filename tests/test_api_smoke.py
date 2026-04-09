@@ -77,6 +77,60 @@ def test_spool_crud_flow() -> None:
     assert deleted.json() == {"ok": True}
 
 
+def test_create_spool_from_cfs_source_assigns_active_slot() -> None:
+    """Ensure create endpoint can persist active spool with CFS slot.
+
+    Returns:
+    --------
+        None:
+            Asserts status/cfs_slot assignment for CFS-sourced spool creation.
+    """
+    response = client.post(
+        "/api/spools",
+        json={
+            "material": "PETG",
+            "initial_weight": 1000,
+            "status": "aktiv",
+            "cfs_slot": 2,
+        },
+    )
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["status"] == "aktiv"
+    assert payload["cfs_slot"] == 2
+
+
+def test_create_spool_rejects_occupied_active_slot() -> None:
+    """Prevent creating two active spools in the same CFS slot.
+
+    Returns:
+    --------
+        None:
+            Asserts conflict response on occupied CFS slot.
+    """
+    first = client.post(
+        "/api/spools",
+        json={
+            "material": "PLA",
+            "initial_weight": 1000,
+            "status": "aktiv",
+            "cfs_slot": 3,
+        },
+    )
+    assert first.status_code == 201
+
+    second = client.post(
+        "/api/spools",
+        json={
+            "material": "ABS",
+            "initial_weight": 1000,
+            "status": "aktiv",
+            "cfs_slot": 3,
+        },
+    )
+    assert second.status_code == 409
+
+
 def test_cfs_route_shape() -> None:
     """Validate stable CFS overview payload shape.
 

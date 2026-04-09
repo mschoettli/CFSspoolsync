@@ -22,6 +22,8 @@ class SpoolCreate(BaseModel):
     density: float = Field(default=1.24, gt=0)
     serial_num: str = ""
     notes: str = ""
+    status: Optional[str] = None
+    cfs_slot: Optional[int] = Field(default=None, ge=1, le=4)
 
     @model_validator(mode="after")
     def validate_ranges(self) -> "SpoolCreate":
@@ -30,6 +32,10 @@ class SpoolCreate(BaseModel):
             raise ValueError("nozzle_min must be <= nozzle_max")
         if self.remaining_weight is not None and self.remaining_weight > self.initial_weight:
             raise ValueError("remaining_weight must be <= initial_weight")
+        if self.status and self.status not in {"lager", "aktiv", "leer"}:
+            raise ValueError("status must be one of: lager, aktiv, leer")
+        if self.status == "aktiv" and self.cfs_slot is None:
+            raise ValueError("cfs_slot is required when status is aktiv")
         return self
 
 

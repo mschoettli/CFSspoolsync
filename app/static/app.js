@@ -810,6 +810,7 @@ function buildAddSpoolForm() {
 
 function setupAddSpoolForm() {
   let selectedSlot = null;
+  let loadedFromCfs = false;
 
   const sourcePanel = document.getElementById('addSpoolStepSource');
   const formPanel = document.getElementById('addSpoolForm');
@@ -864,6 +865,7 @@ function setupAddSpoolForm() {
       document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
       selectedSlot = parseInt(btn.dataset.slot);
+      loadedFromCfs = false;
       document.getElementById('btnReadFromK2').disabled = false;
     });
   });
@@ -876,9 +878,11 @@ function setupAddSpoolForm() {
       const data = await apiFetch(`/api/cfs/slot/${selectedSlot}/read`);
       fillFormFromK2(data);
       refreshDetectedStrip();
+      loadedFromCfs = true;
       statusEl.textContent = 'OK Daten geladen';
       statusEl.style.color = 'var(--accent)';
     } catch (e) {
+      loadedFromCfs = false;
       statusEl.textContent = 'Fehler: ' + e.message;
       statusEl.style.color = 'var(--warn)';
     }
@@ -888,6 +892,7 @@ function setupAddSpoolForm() {
   document.getElementById('btnCancelSpoolSource').addEventListener('click', closeModal);
 
   document.getElementById('btnScanLabel').addEventListener('click', async () => {
+    loadedFromCfs = false;
     const video = document.getElementById('labelVideo');
     const captureBtn = document.getElementById('btnCapture');
     try {
@@ -928,6 +933,7 @@ function setupAddSpoolForm() {
   });
 
   document.getElementById('labelImageInput').addEventListener('change', async e => {
+    loadedFromCfs = false;
     const file = e.target.files[0];
     if (!file) return;
     const statusEl = document.getElementById('k2ReadStatus');
@@ -964,6 +970,11 @@ function setupAddSpoolForm() {
       serial_num: fd.get('serial_num') || '',
       notes: fd.get('notes') || '',
     };
+
+    if (loadedFromCfs && Number.isInteger(selectedSlot)) {
+      payload.status = 'aktiv';
+      payload.cfs_slot = selectedSlot;
+    }
 
     try {
       if (!payload.material) throw new Error('Material ist erforderlich');

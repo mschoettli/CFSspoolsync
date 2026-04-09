@@ -30,9 +30,31 @@ def create_spool(payload: SpoolCreate, db: Session = Depends(get_db)):
     """Create a spool entry in storage."""
     data = payload.model_dump()
     remaining = data.pop("remaining_weight")
+    requested_status = data.pop("status")
+    requested_slot = data.pop("cfs_slot")
     if remaining is None:
         remaining = data["initial_weight"]
-    spool = Spool(**data, remaining_weight=remaining, status="lager")
+
+    status = requested_status or ("aktiv" if requested_slot is not None else "lager")
+    cfs_slot = requested_slot if status == "aktiv" else None
+
+    if status == "aktiv" and cfs_slot is None:
+        raise HTTPException(422, "cfs_slot ist erforderlich fuer aktive Spulen")
+    if cfs_slot is not None:
+        occupied = (
+            db.query(Spool)
+            .filter(Spool.status == "aktiv", Spool.cfs_slot == cfs_slot)
+            .first()
+        )
+        if occupied:
+            raise HTTPException(409, f"Slot {cfs_slot} ist bereits belegt")
+
+    spool = Spool(
+        **data,
+        remaining_weight=remaining,
+        status=status,
+        cfs_slot=cfs_slot,
+    )
     db.add(spool)
     db.commit()
     db.refresh(spool)

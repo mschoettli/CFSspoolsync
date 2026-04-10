@@ -17,6 +17,7 @@ Core responsibilities:
   - Registers API routers.
   - Runs lifespan hooks for Moonraker polling and HTTP client lifecycle.
 - **Routers (`app/routers/`)**
+  - `app_config`: public frontend config (`timezone`, `language`, `datetime_locale`).
   - `spools`: inventory CRUD.
   - `cfs`: slot mapping, live read, sync, assign/remove.
   - `printer`: printer telemetry summary.
@@ -25,7 +26,7 @@ Core responsibilities:
 - **Services (`app/services/`)**
   - `moonraker.py`: transition tracking (`printing -> complete/standby/error/cancelled`).
   - `ssh_client.py`: printer SSH access + CFS JSON parsing.
-  - `label_ocr_v2.py`: OCR v2 preprocessing, engine orchestration, and field parser.
+  - `label_ocr.py`: Tesseract OCR preprocessing, variant scoring, and field parser.
 - **Persistence**
   - SQLAlchemy ORM models in `app/models.py`.
   - SQLite in WAL mode (`app/database.py`).

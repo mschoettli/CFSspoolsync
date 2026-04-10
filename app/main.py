@@ -9,8 +9,9 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.database import Base, engine
-from app.routers import cfs, jobs, ocr, printer, spools
-from app.services.label_ocr_v2 import warmup_ocr_v2_background
+from app.routers import app_config, cfs, jobs, ocr, printer, spools
+from app.services.app_locale import resolve_app_locale
+from app.services.label_ocr import warmup_ocr_background
 from app.services import moonraker
 
 logging.basicConfig(
@@ -27,7 +28,14 @@ Base.metadata.create_all(bind=engine)
 async def lifespan(_app: FastAPI):
     """Manage background worker lifecycle for Moonraker polling."""
     await moonraker.init_http_client()
-    warmup_ocr_v2_background()
+    warmup_ocr_background()
+    locale_info = resolve_app_locale()
+    logger.info(
+        "UI locale resolved timezone=%s language=%s datetime_locale=%s",
+        locale_info["timezone"],
+        locale_info["language"],
+        locale_info["datetime_locale"],
+    )
 
     task = None
     if os.getenv("DISABLE_MOONRAKER_POLLING", "0") != "1":
@@ -54,6 +62,7 @@ def create_app() -> FastAPI:
     application.include_router(printer.router)
     application.include_router(jobs.router)
     application.include_router(ocr.router)
+    application.include_router(app_config.router)
 
     # Must be mounted last so API routes are not shadowed by static files.
     application.mount("/", StaticFiles(directory="app/static", html=True), name="static")

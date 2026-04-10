@@ -63,7 +63,7 @@ export async function uploadLabelImage(file) {
   const timeoutId = setTimeout(() => controller.abort(), OCR_TIMEOUT_MS);
   let response;
   try {
-    response = await fetch("/api/ocr/v2/scan", {
+    response = await fetch("/api/ocr/scan", {
       method: "POST",
       body: fd,
       signal: controller.signal,

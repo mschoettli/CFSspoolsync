@@ -7,16 +7,236 @@ import { state } from '/js/state.js';
 let lastCfsMarkup = null;
 let lastSpoolsMarkup = null;
 let lastJobsMarkup = null;
+let appConfig = {
+  timezone: 'UTC',
+  language: 'en',
+  datetime_locale: 'en-US',
+};
+let localizationObserver = null;
+
+const I18N = {
+  de: {
+    'CFS': 'CFS',
+    'Lager': 'Lager',
+    'Druckjobs': 'Druckjobs',
+    'Sync mit K2': 'Sync mit K2',
+    'Zuletzt: noch nie': 'Zuletzt: noch nie',
+    'Verbinde...': 'Verbinde...',
+  },
+  en: {
+    'CFS': 'CFS',
+    'Lager': 'Storage',
+    'Druckjobs': 'Print Jobs',
+    'Alle Status': 'All statuses',
+    'Aktiv': 'Active',
+    'Sync mit K2': 'Sync with K2',
+    'Zuletzt: noch nie': 'Last: never',
+    'Verbinde...': 'Connecting...',
+    'Offline': 'Offline',
+    'Druckt': 'Printing',
+    'Pausiert': 'Paused',
+    'Fertig': 'Finished',
+    'Bereit': 'Ready',
+    'Abgebrochen': 'Cancelled',
+    'Fehler': 'Error',
+    'Leer': 'Empty',
+    'Kein Filament': 'No filament',
+    'Verbleibend': 'Remaining',
+    'Restlaufzeit:': 'Remaining time:',
+    'Spulen laden fehlgeschlagen': 'Failed to load spools',
+    'CFS laden fehlgeschlagen': 'Failed to load CFS',
+    'Jobs laden fehlgeschlagen': 'Failed to load jobs',
+    'Keine Spulen vorhanden': 'No spools available',
+    'Aktive Filamente': 'Active filaments',
+    'Lager Filamente': 'Storage filaments',
+    'Leere Filamente': 'Empty filaments',
+    'Filament': 'Filament',
+    'Hersteller': 'Brand',
+    'Temp.': 'Temp.',
+    'Status': 'Status',
+    'Aktionen': 'Actions',
+    'Bearbeiten': 'Edit',
+    'Löschen': 'Delete',
+    'Aktuell im Druck': 'Currently printing',
+    'Noch keine Druckjobs erfasst': 'No print jobs yet',
+    'Unbekannte Datei': 'Unknown file',
+    'g Verbrauch': 'g consumed',
+    'Keine aktiven Slots zum Syncen': 'No active slots to sync',
+    'Sync fehlgeschlagen': 'Sync failed',
+    'Spule ins Lager zurückgelegt': 'Spool moved back to storage',
+    'Spule gelöscht': 'Spool deleted',
+    'Spule als leer markieren?': 'Mark spool as empty?',
+    'Als leer markiert': 'Marked as empty',
+    'Neue Spule hinzufügen': 'Add new spool',
+    'Daten automatisch einlesen': 'Read data automatically',
+    'Von CFS lesen': 'Read from CFS',
+    'Etikett scannen': 'Scan label',
+    'Foto aufnehmen': 'Take photo',
+    'Abbrechen': 'Cancel',
+    'Weiter': 'Continue',
+    'Pruefen & Speichern': 'Review & Save',
+    'Gewicht': 'Weight',
+    'Temperatur': 'Temperature',
+    'Erweitert': 'Advanced',
+    'Spule speichern': 'Save spool',
+    'Zurueck': 'Back',
+    'OCR Review': 'OCR Review',
+    'Noch kein Scan vorhanden.': 'No scan yet.',
+    'Schneller Fallback (manuell bestaetigt)': 'Quick fallback (manual confirmation)',
+    'Bitte waehlen': 'Please choose',
+    'Spule hinzugefuegt': 'Spool added',
+    'Gespeichert': 'Saved',
+    'Neueste zuerst': 'Newest first',
+    'Meiste Verbrauch': 'Highest consumption',
+  },
+  fr: {
+    'Lager': 'Stock',
+    'Druckjobs': "Tâches d'impression",
+    'Alle Status': 'Tous les statuts',
+    'Aktiv': 'Actif',
+    'Sync mit K2': 'Synchroniser avec K2',
+    'Zuletzt: noch nie': 'Dernière fois: jamais',
+    'Verbinde...': 'Connexion...',
+    'Sync fehlgeschlagen': 'Échec de la synchronisation',
+    'Neueste zuerst': 'Plus récent en premier',
+    'Meiste Verbrauch': 'Consommation la plus élevée',
+  },
+  it: {
+    'Lager': 'Magazzino',
+    'Druckjobs': 'Lavori di stampa',
+    'Alle Status': 'Tutti gli stati',
+    'Aktiv': 'Attivo',
+    'Sync mit K2': 'Sincronizza con K2',
+    'Zuletzt: noch nie': 'Ultimo: mai',
+    'Verbinde...': 'Connessione...',
+    'Sync fehlgeschlagen': 'Sincronizzazione non riuscita',
+    'Neueste zuerst': 'Più recenti prima',
+    'Meiste Verbrauch': 'Consumo più alto',
+  },
+};
 
 // ── Init ───────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadAppConfig();
+  applyStaticTranslations();
+  startLocalizationObserver();
   setupNav();
   setupModalClose();
   renderInitialPlaceholders();
   renderK2SyncMeta();
-  loadAll();
+  await loadAll();
   startPolling({ loadPrinterStatus, loadCFS, loadSpools });
 });
+
+async function loadAppConfig() {
+  try {
+    const cfg = await apiFetch('/api/app-config');
+    if (cfg && cfg.language && cfg.datetime_locale) {
+      appConfig = cfg;
+    }
+  } catch {
+    appConfig = { timezone: 'UTC', language: 'en', datetime_locale: 'en-US' };
+  }
+  document.documentElement.lang = appConfig.language;
+}
+
+function tr(text) {
+  if (!text) return text;
+  const language = appConfig.language || 'en';
+  if (language === 'de') return text;
+  const dictionary = I18N[language] || I18N.en;
+  let translated = dictionary[text] || I18N.en[text] || text;
+  translated = translated
+    .replace(/^Zuletzt: fehlgeschlagen \((.+)\)$/u, (_m, p1) => {
+      if (language === 'fr') return `Dernière fois: échec (${p1})`;
+      if (language === 'it') return `Ultimo: non riuscito (${p1})`;
+      return `Last: failed (${p1})`;
+    })
+    .replace(/^Zuletzt: (.+)$/u, (_m, p1) => {
+      if (language === 'fr') return `Dernière fois: ${p1}`;
+      if (language === 'it') return `Ultimo: ${p1}`;
+      return `Last: ${p1}`;
+    })
+    .replace(/^(\d+) Spule\(n\) aktualisiert$/u, (_m, p1) => {
+      if (language === 'fr') return `${p1} bobine(s) mise(s) à jour`;
+      if (language === 'it') return `${p1} bobina/e aggiornata/e`;
+      return `${p1} spool(s) updated`;
+    })
+    .replace(/^Filament in Slot (\d+) geladen$/u, (_m, p1) => {
+      if (language === 'fr') return `Filament chargé dans le slot ${p1}`;
+      if (language === 'it') return `Filamento caricato nello slot ${p1}`;
+      return `Filament loaded in slot ${p1}`;
+    });
+  return translated;
+}
+
+function applyStaticTranslations() {
+  const navButtons = document.querySelectorAll('.nav-btn, .mobile-nav-btn');
+  navButtons.forEach(btn => {
+    const labelNode = btn.querySelector('span:last-child') || btn;
+    labelNode.textContent = tr(labelNode.textContent.trim());
+  });
+
+  const syncBtn = document.getElementById('btnSyncK2');
+  if (syncBtn) syncBtn.textContent = `⟳ ${tr('Sync mit K2')}`;
+  const addBtn = document.getElementById('btnAddSpool');
+  if (addBtn) addBtn.textContent = `+ ${tr('Neue Spule hinzufügen')}`;
+
+  const statusLabel = document.getElementById('statusLabel');
+  if (statusLabel && statusLabel.textContent.trim() === 'Verbinde...') {
+    statusLabel.textContent = tr('Verbinde...');
+  }
+
+  const filterStatus = document.getElementById('filterStatus');
+  if (filterStatus && filterStatus.options.length >= 4) {
+    filterStatus.options[0].text = tr('Alle Status');
+    filterStatus.options[1].text = tr('Lager');
+    filterStatus.options[2].text = tr('Aktiv');
+    filterStatus.options[3].text = tr('Leer');
+  }
+  const jobsFilter = document.getElementById('jobsStatusFilter');
+  if (jobsFilter && jobsFilter.options.length >= 5) {
+    jobsFilter.options[0].text = tr('Alle Status');
+    jobsFilter.options[1].text = tr('Fertig');
+    jobsFilter.options[2].text = tr('Aktiv');
+    jobsFilter.options[3].text = tr('Abgebrochen');
+    jobsFilter.options[4].text = tr('Fehler');
+  }
+  const jobsSort = document.getElementById('jobsSortBy');
+  if (jobsSort && jobsSort.options.length >= 2) {
+    jobsSort.options[0].text = tr('Neueste zuerst');
+    jobsSort.options[1].text = tr('Meiste Verbrauch');
+  }
+
+  localizeTextNodes(document.body);
+}
+
+function localizeTextNodes(root) {
+  if (!root || appConfig.language === 'de') return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    const value = node.nodeValue;
+    if (!value || !value.trim()) continue;
+    const translated = tr(value.trim());
+    if (translated !== value.trim()) {
+      node.nodeValue = value.replace(value.trim(), translated);
+    }
+  }
+  root.querySelectorAll?.('[title],[aria-label],[placeholder]').forEach(el => {
+    if (el.title) el.title = tr(el.title);
+    if (el.getAttribute('aria-label')) el.setAttribute('aria-label', tr(el.getAttribute('aria-label')));
+    if (el.getAttribute('placeholder')) el.setAttribute('placeholder', tr(el.getAttribute('placeholder')));
+  });
+}
+
+function startLocalizationObserver() {
+  if (localizationObserver) return;
+  localizationObserver = new MutationObserver(() => {
+    localizeTextNodes(document.body);
+  });
+  localizationObserver.observe(document.body, { childList: true, subtree: true });
+}
 
 function setupNav() {
   document.querySelectorAll('.nav-btn, .mobile-nav-btn').forEach(btn => {
@@ -116,18 +336,18 @@ function renderPrinterStatus() {
 
   if (!p.reachable) {
     dot.className = 'status-dot offline';
-    label.textContent = 'Offline';
+    label.textContent = tr('Offline');
     temps.textContent = '';
     return;
   }
 
   const stateMap = {
-    printing:  { cls: 'printing', label: 'Druckt' },
-    paused:    { cls: 'online',   label: 'Pausiert' },
-    complete:  { cls: 'online',   label: 'Fertig' },
-    standby:   { cls: 'online',   label: 'Bereit' },
-    cancelled: { cls: 'online',   label: 'Abgebrochen' },
-    error:     { cls: 'offline',  label: 'Fehler' },
+    printing:  { cls: 'printing', label: tr('Druckt') },
+    paused:    { cls: 'online',   label: tr('Pausiert') },
+    complete:  { cls: 'online',   label: tr('Fertig') },
+    standby:   { cls: 'online',   label: tr('Bereit') },
+    cancelled: { cls: 'online',   label: tr('Abgebrochen') },
+    error:     { cls: 'offline',  label: tr('Fehler') },
   };
 
   const info = stateMap[p.state] || { cls: 'online', label: p.state };
@@ -586,7 +806,7 @@ async function syncFromK2() {
   try {
     const res = await apiFetch('/api/cfs/sync', { method: 'POST' });
     if (res.synced === 0) {
-      showToast('Keine aktiven Slots zum Syncen', 'info');
+      showToast(tr('Keine aktiven Slots zum Syncen'), 'info');
     } else {
       const lines = res.updates.map(u =>
         `${u.key}: ${u.old_g.toFixed(0)}g → ${u.new_g.toFixed(0)}g`
@@ -601,10 +821,10 @@ async function syncFromK2() {
   } catch (e) {
     state.lastSyncStatus = 'error';
     renderK2SyncMeta();
-    showToast('Sync fehlgeschlagen: ' + e.message, 'error');
+    showToast(`${tr('Sync fehlgeschlagen')}: ${e.message}`, 'error');
   } finally {
     btn.disabled = false;
-    btn.textContent = '⟳ Sync mit K2';
+    btn.textContent = `⟳ ${tr('Sync mit K2')}`;
   }
 }
 
@@ -613,19 +833,19 @@ function renderK2SyncMeta() {
   if (!el) return;
 
   if (!state.lastSyncAt) {
-    el.textContent = 'Zuletzt: noch nie';
+    el.textContent = tr('Zuletzt: noch nie');
     el.classList.remove('error');
     return;
   }
 
   const syncAt = fmtDate(state.lastSyncAt);
   if (state.lastSyncStatus === 'error') {
-    el.textContent = `Zuletzt: fehlgeschlagen (${syncAt})`;
+    el.textContent = tr(`Zuletzt: fehlgeschlagen (${syncAt})`);
     el.classList.add('error');
     return;
   }
 
-  el.textContent = `Zuletzt: ${syncAt}`;
+  el.textContent = tr(`Zuletzt: ${syncAt}`);
   el.classList.remove('error');
 }
 
@@ -1028,7 +1248,7 @@ function setupAddSpoolForm() {
       materialSelect.value = value;
       materialSelect.dispatchEvent(new Event('change'));
     });
-    pushSuggestionChips('ocrSuggestColor', suggestions.color_name || [], (value) => {
+    pushSuggestionChips('ocrSuggestColor', suggestions.color || [], (value) => {
       if (!colorSelect) return;
       const mapped = OCR_FALLBACK_COLOR_BY_NAME[String(value || '').toLowerCase()];
       if (mapped) {
@@ -1044,7 +1264,7 @@ function setupAddSpoolForm() {
     renderOCRReview(data);
     renderFallbackPanel(data);
     refreshDetectedStrip();
-    const acceptedCount = Object.values(data?.field_meta || {})
+    const acceptedCount = Object.values(data?.review || {})
       .filter(entry => entry?.status === 'accepted').length;
     const warnings = Array.isArray(data?.warnings) ? data.warnings.filter(Boolean) : [];
     const partialTimeout = Boolean(data?.timing?.partial_timeout);
@@ -1273,7 +1493,7 @@ function confidenceClass(score) {
 function renderOCRReview(data) {
   const panel = document.getElementById('ocrReviewPanel');
   if (!panel) return;
-  const fieldMeta = data?.field_meta || {};
+  const fieldMeta = data?.review || {};
   const fields = [
     ['material', 'Material'],
     ['brand', 'Brand'],
@@ -1294,9 +1514,7 @@ function renderOCRReview(data) {
         : 'n/a';
       const value = entry.accepted_value ?? (Array.isArray(entry.candidates) && entry.candidates.length ? entry.candidates[0] : '—');
       const sourceLabel = entry.status ? String(entry.status).toUpperCase() : '';
-      const lineHint = Array.isArray(entry.source_lines) && entry.source_lines.length
-        ? entry.source_lines[0]
-        : '';
+      const lineHint = entry.source_text || '';
       return `
         <div class="ocr-review-row">
           <span class="ocr-review-key">${label}</span>
@@ -1330,7 +1548,7 @@ function fillFormFromOCR(data) {
     input.value = val;
   };
 
-  const fields = data.fields || {};
+  const fields = data.result || {};
   const getAccepted = (key) => {
     const value = fields[key];
     if (value === undefined || value === null || value === '') return null;
@@ -1655,7 +1873,7 @@ function fmtDate(iso) {
   const normalized = /[Z+\-]\d*$/.test(iso) ? iso : iso + 'Z';
   const d = new Date(normalized);
   if (isNaN(d)) return iso;
-  return d.toLocaleString('de-DE', {
+  return d.toLocaleString(appConfig.datetime_locale || 'en-US', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });

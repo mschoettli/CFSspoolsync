@@ -88,13 +88,23 @@ Response keys:
 ### `GET /api/jobs?limit=30`
 Returns recent jobs with per-slot before/after values and total consumed grams.
 
+## App Config
+
+### `GET /api/app-config`
+Returns public app locale configuration derived from `TIMEZONE`.
+
+Response keys:
+- `timezone`
+- `language` (`de|en|fr|it`)
+- `datetime_locale` (`de-DE|en-US|fr-FR|it-IT`)
+
 ## OCR
 
-### `POST /api/ocr/v2/scan`
+### `POST /api/ocr/scan`
 Multipart upload (`file`) for label OCR.
 
 Returns:
-- `engine` (`paddle` or `tesseract`)
+- `engine` (`tesseract`)
 - `duration_ms`
 - `raw_text`
 - `warnings`
@@ -102,18 +112,18 @@ Returns:
 - `suggestions`:
   - `brand`: top fallback suggestions
   - `material`: top fallback suggestions
-  - `color_name`: top fallback suggestions
+  - `color`: top fallback suggestions
 - `timing`:
   - `total_ms`
   - `partial_timeout`
-  - `stages` (`preprocess_ms`, `fast_pass_ms`, `deep_pass_ms`, `paddle_ms`, `tesseract_ms`, `variants_fast`, `variants_deep`, `fast_phase_returned`, `timeout_reason`)
-- `fields`:
+  - `stages` (`preprocess_ms`, `ocr_ms`, `parse_ms`, `variants`, `selected_variant`, `selected_config`)
+- `result`:
   - `brand`, `material`, `color_name`, `color_hex`
   - `diameter_mm`, `weight_g`
   - `nozzle_min`, `nozzle_max`, `bed_min`, `bed_max`
-- `field_meta` per field:
+- `review` per field:
+  - `status` (`accepted | low_confidence | missing | rejected`)
   - `confidence`
-  - `status` (`accepted | low_confidence | missing | rejected_by_rule`)
-  - `source_lines`
+  - `source_text`
   - `accepted_value`
   - `candidates`

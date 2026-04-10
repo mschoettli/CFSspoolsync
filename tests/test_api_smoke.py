@@ -45,6 +45,21 @@ def test_printer_status_route_returns_shape() -> None:
         assert key in payload
 
 
+def test_app_config_route_returns_locale_shape() -> None:
+    """Validate app config route exposes timezone-driven locale metadata.
+
+    Returns:
+    --------
+        None:
+            Asserts public app-config contract keys.
+    """
+    response = client.get("/api/app-config")
+    assert response.status_code == 200
+    payload = response.json()
+    assert set(payload.keys()) == {"timezone", "language", "datetime_locale"}
+    assert payload["language"] in {"de", "en", "fr", "it"}
+
+
 def test_spool_crud_flow() -> None:
     """Cover basic spool create-read-update-delete flow.
 
@@ -149,8 +164,8 @@ def test_cfs_route_shape() -> None:
         assert set(slot.keys()) == {"slot", "key", "spool"}
 
 
-def test_scan_label_v2_response_contains_meta(monkeypatch) -> None:
-    """Validate OCR v2 endpoint returns expected fields and metadata.
+def test_scan_label_response_contains_meta(monkeypatch) -> None:
+    """Validate OCR endpoint returns expected fields and metadata.
 
     Returns:
     --------
@@ -164,13 +179,13 @@ def test_scan_label_v2_response_contains_meta(monkeypatch) -> None:
 
     monkeypatch.setattr(
         ocr_router,
-        "run_ocr_v2",
+        "run_ocr_scan",
         lambda *_args, **_kwargs: {
             "engine": "tesseract",
             "duration_ms": 180,
             "raw_text": "GEEETECH PETG 1.75mm Color: White Net Weight: 1KG",
             "warnings": [],
-            "fields": {
+            "result": {
                 "brand": "Geeetech",
                 "material": "PETG",
                 "color_name": "White",
@@ -182,30 +197,30 @@ def test_scan_label_v2_response_contains_meta(monkeypatch) -> None:
                 "bed_min": 60,
                 "bed_max": 85,
             },
-            "field_meta": {
-                "brand": {"confidence": 0.98, "status": "accepted", "source_lines": [], "accepted_value": "Geeetech", "candidates": ["Geeetech"]},
-                "material": {"confidence": 0.98, "status": "accepted", "source_lines": [], "accepted_value": "PETG", "candidates": ["PETG"]},
+            "review": {
+                "brand": {"confidence": 0.98, "status": "accepted", "source_text": "", "accepted_value": "Geeetech", "candidates": ["Geeetech"]},
+                "material": {"confidence": 0.98, "status": "accepted", "source_text": "", "accepted_value": "PETG", "candidates": ["PETG"]},
             },
             "fallback_recommended": False,
-            "suggestions": {"brand": ["Geeetech"], "material": ["PETG"], "color_name": ["White"]},
+            "suggestions": {"brand": ["Geeetech"], "material": ["PETG"], "color": ["White"]},
             "timing": {"total_ms": 180, "partial_timeout": False, "stages": {}},
         },
     )
     response = client.post(
-        "/api/ocr/v2/scan",
+        "/api/ocr/scan",
         files={"file": ("label.jpg", b"fake-image", "image/jpeg")},
     )
     assert response.status_code == 200
     payload = response.json()
-    for key in ["engine", "duration_ms", "fields", "field_meta", "warnings", "raw_text", "timing", "fallback_recommended", "suggestions"]:
+    for key in ["engine", "duration_ms", "result", "review", "warnings", "raw_text", "timing", "fallback_recommended", "suggestions"]:
         assert key in payload
-    assert isinstance(payload["fields"], dict)
-    assert isinstance(payload["field_meta"], dict)
+    assert isinstance(payload["result"], dict)
+    assert isinstance(payload["review"], dict)
     assert isinstance(payload["warnings"], list)
     assert payload["engine"] == "tesseract"
-    assert payload["fields"]["brand"] == "Geeetech"
-    assert payload["fields"]["material"] == "PETG"
-    assert payload["field_meta"]["brand"]["status"] == "accepted"
+    assert payload["result"]["brand"] == "Geeetech"
+    assert payload["result"]["material"] == "PETG"
+    assert payload["review"]["brand"]["status"] == "accepted"
 
 
 def test_jobs_route_returns_only_one_running_job() -> None:

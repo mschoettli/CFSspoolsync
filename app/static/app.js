@@ -1132,10 +1132,10 @@ function setupAddSpoolForm() {
     statusEl.textContent = 'Local OCR (Tesseract) laeuft...';
     statusEl.style.color = 'var(--text-muted)';
     scanStatusTimer = setTimeout(() => {
-      statusEl.textContent = 'Provider 1 wird geprueft...';
+      statusEl.textContent = 'Cloud-Fallback wird geprueft...';
       statusEl.style.color = 'var(--text-mid)';
       scanStatusTimer = setTimeout(() => {
-        statusEl.textContent = 'Provider 2 wird geprueft...';
+        statusEl.textContent = 'Analyse dauert laenger als erwartet...';
         statusEl.style.color = 'var(--text-mid)';
       }, 2200);
     }, 1400);

@@ -1274,7 +1274,10 @@ def run_ocr_scan(
             Final OCR payload including provider metadata.
     """
     started = time.perf_counter()
-    base = _run_tesseract_scan(image_bytes, timeout_seconds=timeout_seconds, debug=debug)
+    local_timeout = timeout_seconds
+    if OCR_ENABLE_CLOUD_FALLBACK:
+        local_timeout = min(timeout_seconds, 45.0)
+    base = _run_tesseract_scan(image_bytes, timeout_seconds=local_timeout, debug=debug)
     base.setdefault("provider_used", "tesseract")
     base.setdefault("provider_chain", ["tesseract"])
     base.setdefault("cloud_used", False)
@@ -1300,7 +1303,7 @@ def run_ocr_scan(
                 candidate = _call_cloud_provider(
                     provider,
                     image_bytes,
-                    timeout_seconds=max(3.0, OCR_CLOUD_TIMEOUT_SECONDS),
+                    timeout_seconds=max(3.0, min(OCR_CLOUD_TIMEOUT_SECONDS, 12.0)),
                 )
             except Exception as exc:
                 warnings.append(f"{provider} provider failed: {exc}")
@@ -1347,7 +1350,8 @@ def run_ocr_scan(
     if debug:
         response["debug"] = {
             "local_timeout_seconds": timeout_seconds,
-            "cloud_timeout_seconds": OCR_CLOUD_TIMEOUT_SECONDS,
+            "effective_local_timeout_seconds": local_timeout,
+            "cloud_timeout_seconds": min(OCR_CLOUD_TIMEOUT_SECONDS, 12.0),
             "provider_order": _provider_order(),
         }
     return response

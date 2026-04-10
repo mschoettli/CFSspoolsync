@@ -1,4 +1,4 @@
-"""HTTP routes for Tesseract OCR label scanning."""
+"""HTTP routes for OCR label scanning."""
 
 import asyncio
 import os
@@ -9,7 +9,14 @@ from app.services.label_ocr import run_ocr_scan
 
 router = APIRouter(prefix="/api/ocr", tags=["ocr"])
 OCR_TIMEOUT_SECONDS = int(os.getenv("OCR_TIMEOUT_SECONDS", "120"))
+OCR_CLOUD_TIMEOUT_SECONDS = float(os.getenv("OCR_CLOUD_TIMEOUT_SECONDS", "25"))
 OCR_DEBUG = os.getenv("OCR_DEBUG", "0") == "1"
+OCR_HTTP_TIMEOUT_SECONDS = float(
+    os.getenv(
+        "OCR_HTTP_TIMEOUT_SECONDS",
+        str(max(OCR_TIMEOUT_SECONDS + (OCR_CLOUD_TIMEOUT_SECONDS * 2) + 10, OCR_TIMEOUT_SECONDS)),
+    )
+)
 
 
 @router.post("/scan")
@@ -27,7 +34,7 @@ async def scan_label(file: UploadFile = File(...)):
                 timeout_seconds=OCR_TIMEOUT_SECONDS,
                 debug=OCR_DEBUG,
             ),
-            timeout=OCR_TIMEOUT_SECONDS,
+            timeout=OCR_HTTP_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError as exc:
         raise HTTPException(504, f"OCR-Analyse Timeout ({OCR_TIMEOUT_SECONDS}s)") from exc

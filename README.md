@@ -12,7 +12,7 @@ Filament management for Creality K2 Plus / K2 Combo with CFS.
 - Storage management for all spools
 - Print job history with per-slot consumption tracking
 - SSH-based live sync from K2 CFS JSON
-- Hybrid label OCR (PaddleOCR with Tesseract fallback) to pre-fill spool metadata
+- OCR scan with local Tesseract and optional OpenAI/Claude cloud fallback
 
 ## Quick Start
 
@@ -25,6 +25,11 @@ cp .env.example .env
 2. Edit `.env` values for your printer (`K2_HOST`, `K2_SSH_KEY_HOST`, `K2_SSH_KEY`, `MOONRAKER_URL`).
    - `K2_SSH_KEY_HOST`: absolute or project-relative key path on your Docker host.
    - `K2_SSH_KEY`: target path inside the container (default: `/root/.ssh/id_k2`).
+   - Optional OCR cloud fallback:
+     - `OCR_ENABLE_CLOUD_FALLBACK=1`
+     - `OCR_PROVIDER_1=openai`, `OCR_PROVIDER_2=claude`
+     - `OPENAI_API_KEY`, `OPENAI_MODEL`
+     - `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`
 
 3. Start with prebuilt image:
 

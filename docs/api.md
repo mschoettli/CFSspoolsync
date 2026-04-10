@@ -104,10 +104,14 @@ Response keys:
 Multipart upload (`file`) for label OCR.
 
 Returns:
-- `engine` (`tesseract`)
+- `engine` (`tesseract|openai|claude`)
 - `duration_ms`
 - `raw_text`
 - `warnings`
+- `provider_used` (`tesseract|openai|claude`)
+- `provider_chain` (provider execution order)
+- `fallback_reason` (`missing_required_fields|low_confidence|null`)
+- `cloud_used` (`true` if final payload comes from cloud provider)
 - `fallback_recommended` (`true` when required fields are missing/low confidence)
 - `suggestions`:
   - `brand`: top fallback suggestions

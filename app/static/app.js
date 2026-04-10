@@ -1129,11 +1129,15 @@ function setupAddSpoolForm() {
 
   const startScanStatusTicker = (statusEl) => {
     stopScanStatusTicker();
-    statusEl.textContent = 'Fast-Scan laeuft...';
+    statusEl.textContent = 'Local OCR (Tesseract) laeuft...';
     statusEl.style.color = 'var(--text-muted)';
     scanStatusTimer = setTimeout(() => {
-      statusEl.textContent = 'Vertiefte Analyse laeuft...';
+      statusEl.textContent = 'Provider 1 wird geprueft...';
       statusEl.style.color = 'var(--text-mid)';
+      scanStatusTimer = setTimeout(() => {
+        statusEl.textContent = 'Provider 2 wird geprueft...';
+        statusEl.style.color = 'var(--text-mid)';
+      }, 2200);
     }, 1400);
   };
 
@@ -1268,12 +1272,14 @@ function setupAddSpoolForm() {
       .filter(entry => entry?.status === 'accepted').length;
     const warnings = Array.isArray(data?.warnings) ? data.warnings.filter(Boolean) : [];
     const partialTimeout = Boolean(data?.timing?.partial_timeout);
+    const providerUsed = String(data?.provider_used || data?.engine || 'tesseract');
+    const providerLabel = providerUsed === 'tesseract' ? 'Local OCR' : providerUsed.toUpperCase();
     if (warnings.length || acceptedCount === 0 || partialTimeout) {
       const timeoutHint = partialTimeout ? ', Deep-Scan gekuerzt' : '';
-      statusEl.textContent = `OCR abgeschlossen (${acceptedCount} sichere Felder, ${warnings.length} Hinweis${warnings.length !== 1 ? 'e' : ''}${timeoutHint})`;
+      statusEl.textContent = `OCR abgeschlossen via ${providerLabel} (${acceptedCount} sichere Felder, ${warnings.length} Hinweis${warnings.length !== 1 ? 'e' : ''}${timeoutHint})`;
       statusEl.style.color = 'var(--text-mid)';
     } else {
-      statusEl.textContent = `OCR abgeschlossen (${acceptedCount} sichere Felder)`;
+      statusEl.textContent = `OCR abgeschlossen via ${providerLabel} (${acceptedCount} sichere Felder)`;
       statusEl.style.color = 'var(--accent)';
     }
     hasAutoDetectedData = acceptedCount > 0;
@@ -1494,6 +1500,9 @@ function renderOCRReview(data) {
   const panel = document.getElementById('ocrReviewPanel');
   if (!panel) return;
   const fieldMeta = data?.review || {};
+  const providerUsed = String(data?.provider_used || data?.engine || 'tesseract');
+  const providerChain = Array.isArray(data?.provider_chain) ? data.provider_chain.join(' -> ') : providerUsed;
+  const cloudUsed = data?.cloud_used ? 'Ja' : 'Nein';
   const fields = [
     ['material', 'Material'],
     ['brand', 'Brand'],
@@ -1529,6 +1538,7 @@ function renderOCRReview(data) {
   panel.classList.remove('ocr-review-empty');
   panel.innerHTML = `
     <div class="ocr-review-title">OCR Review</div>
+    <div class="ocr-review-meta">Quelle: ${esc(providerUsed)} · Kette: ${esc(providerChain)} · Cloud: ${esc(cloudUsed)}</div>
     <div class="ocr-review-grid">${rows.join('')}</div>
     ${
       warnings.length

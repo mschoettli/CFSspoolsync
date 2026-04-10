@@ -857,6 +857,13 @@ body {
   margin-bottom: 8px;
 }
 
+.ocr-review-meta {
+  margin-top: -4px;
+  margin-bottom: 10px;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
 .ocr-review-head {
   display: flex;
   align-items: center;

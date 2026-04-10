@@ -58,5 +58,6 @@ docker compose ps
 - **Container unhealthy**: inspect logs with `docker compose logs -f`.
 - **K2 unreachable**: verify host/IP, firewall, SSH key, and Moonraker URL.
 - **OCR errors**: confirm image quality and OCR runtime dependencies in container. The app
-  uses PaddleOCR first and falls back to Tesseract automatically when unavailable.
+  runs local Tesseract first and can automatically fall back to OpenAI/Claude when
+  `OCR_ENABLE_CLOUD_FALLBACK=1` and API keys are configured.
 - **Permission issue on mounted key**: ensure host path exists and is readable.

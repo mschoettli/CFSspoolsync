@@ -204,6 +204,10 @@ def test_scan_label_response_contains_meta(monkeypatch) -> None:
             "fallback_recommended": False,
             "suggestions": {"brand": ["Geeetech"], "material": ["PETG"], "color": ["White"]},
             "timing": {"total_ms": 180, "partial_timeout": False, "stages": {}},
+            "provider_used": "tesseract",
+            "provider_chain": ["tesseract"],
+            "fallback_reason": None,
+            "cloud_used": False,
         },
     )
     response = client.post(
@@ -212,7 +216,21 @@ def test_scan_label_response_contains_meta(monkeypatch) -> None:
     )
     assert response.status_code == 200
     payload = response.json()
-    for key in ["engine", "duration_ms", "result", "review", "warnings", "raw_text", "timing", "fallback_recommended", "suggestions"]:
+    for key in [
+        "engine",
+        "duration_ms",
+        "result",
+        "review",
+        "warnings",
+        "raw_text",
+        "timing",
+        "fallback_recommended",
+        "suggestions",
+        "provider_used",
+        "provider_chain",
+        "fallback_reason",
+        "cloud_used",
+    ]:
         assert key in payload
     assert isinstance(payload["result"], dict)
     assert isinstance(payload["review"], dict)

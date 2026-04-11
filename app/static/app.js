@@ -1016,36 +1016,48 @@ function buildAddSpoolForm() {
 
         <div class="spool-form-card">
           <h4>Basis</h4>
-          <div class="form-grid">
+          <div class="form-grid spool-form-grid spool-form-grid-essentials">
             <div class="form-group">
               <label class="form-label">Material *</label>
-              <input class="form-input" name="material" required placeholder="PLA, PETG, ABS...">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Farbe</label>
-              <input class="form-input" type="color" name="color" value="#888888">
+              <input class="form-input" name="material" required list="spoolMaterialList" placeholder="PLA, PETG, ABS...">
             </div>
             <div class="form-group">
               <label class="form-label">Hersteller</label>
-              <input class="form-input" name="brand" placeholder="Bambu Lab, eSUN...">
+              <input class="form-input" name="brand" list="spoolBrandList" placeholder="Bambu Lab, eSUN...">
+            </div>
+            <div class="form-group spool-color-field">
+              <label class="form-label">Farbe</label>
+              <div class="spool-color-stack">
+                <select class="form-input" id="spoolColorPreset">
+                  <option value="">Bitte waehlen</option>
+                  ${OCR_FALLBACK_COLORS.map(v => `<option value="${v.hex}">${v.name}</option>`).join('')}
+                </select>
+                <input class="form-input spool-color-picker" type="color" name="color" value="#888888" aria-label="Farbpicker">
+              </div>
             </div>
             <div class="form-group">
-              <label class="form-label">Name / Bezeichnung</label>
-              <input class="form-input" name="name" placeholder="Basic PLA Black">
+              <label class="form-label">Durchmesser (mm) *</label>
+              <input class="form-input" type="number" name="diameter" required step="0.01" min="1" placeholder="1.75">
             </div>
           </div>
+          <datalist id="spoolMaterialList">
+            ${OCR_FALLBACK_MATERIALS.map(v => `<option value="${v}"></option>`).join('')}
+          </datalist>
+          <datalist id="spoolBrandList">
+            ${OCR_FALLBACK_BRANDS.map(v => `<option value="${v}"></option>`).join('')}
+          </datalist>
         </div>
 
         <div class="spool-form-card">
           <h4>Gewicht</h4>
-          <div class="form-grid">
+          <div class="form-grid spool-form-grid spool-form-grid-weights">
             <div class="form-group">
               <label class="form-label">Anfangsgewicht (g) *</label>
               <input class="form-input" type="number" name="initial_weight" required min="1" step="0.1" placeholder="1000">
               <span class="form-hint">Vollspule ohne Spulenkoerper</span>
             </div>
             <div class="form-group">
-              <label class="form-label">Aktuell verbleibend (g)</label>
+              <label class="form-label">Verbleibend (g)</label>
               <input class="form-input" type="number" name="remaining_weight" min="0" step="0.1" placeholder="Leer = Anfangsgewicht">
             </div>
           </div>
@@ -1069,21 +1081,21 @@ function buildAddSpoolForm() {
           </div>
         </details>
 
-        <details class="spool-form-card">
-          <summary>Erweitert</summary>
-          <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label">Durchmesser (mm)</label>
-              <input class="form-input" type="number" name="diameter" step="0.01" min="1" placeholder="1.75">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Dichte (g/cm3)</label>
-              <input class="form-input" type="number" name="density" value="1.24" step="0.01" min="0.5">
-            </div>
-            <div class="form-group span2">
-              <label class="form-label">Seriennummer</label>
-              <input class="form-input" name="serial_num" placeholder="NFC Tag ID...">
-            </div>
+          <details class="spool-form-card">
+            <summary>Erweitert</summary>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Dichte (g/cm3)</label>
+                <input class="form-input" type="number" name="density" value="1.24" step="0.01" min="0.5">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Name / Bezeichnung</label>
+                <input class="form-input" name="name" placeholder="Basic PLA Black">
+              </div>
+              <div class="form-group span2">
+                <label class="form-label">Seriennummer</label>
+                <input class="form-input" name="serial_num" placeholder="NFC Tag ID...">
+              </div>
             <div class="form-group span2">
               <label class="form-label">Notizen</label>
               <input class="form-input" name="notes" placeholder="">
@@ -1231,6 +1243,30 @@ function setupAddSpoolForm() {
     });
   };
 
+  const bindEssentialsColorControls = () => {
+    const form = document.getElementById('addSpoolForm');
+    if (!form) return;
+    const presetSelect = form.querySelector('#spoolColorPreset');
+    const colorInput = form.querySelector('[name="color"]');
+    if (!presetSelect || !colorInput) return;
+
+    const syncPresetFromColor = () => {
+      const current = String(colorInput.value || '').toLowerCase();
+      const matched = OCR_FALLBACK_COLORS.find(item => String(item.hex || '').toLowerCase() === current);
+      presetSelect.value = matched ? matched.hex : '';
+    };
+
+    presetSelect.addEventListener('change', () => {
+      if (!presetSelect.value) return;
+      colorInput.value = presetSelect.value;
+      fallbackUsed = true;
+      refreshDetectedStrip();
+      maybeEmitReadyMetrics('preset-color');
+    });
+    colorInput.addEventListener('input', syncPresetFromColor);
+    syncPresetFromColor();
+  };
+
   const renderFallbackPanel = (data) => {
     if (!fallbackPanel) return;
     const show = Boolean(data?.fallback_recommended);
@@ -1290,6 +1326,7 @@ function setupAddSpoolForm() {
   setStep('source');
   refreshDetectedStrip();
   applyFallbackDropdowns();
+  bindEssentialsColorControls();
   document.querySelector('.spool-modal-add')?.addEventListener('click', () => {
     modalClicks += 1;
   });

@@ -732,6 +732,27 @@ body {
 .form-input[type="color"] { padding: 4px; }
 .form-hint { color: var(--text-muted); font-size: 0.72rem; }
 
+.spool-modal-add .spool-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 12px;
+  row-gap: 12px;
+}
+
+.spool-modal-add .spool-form-grid .form-group {
+  min-width: 0;
+}
+
+.spool-color-field .spool-color-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.spool-color-picker {
+  height: 42px;
+  padding: 4px;
+  border-radius: 10px;
+}
+
 .form-actions {
   margin-top: 16px;
   display: flex;
@@ -1481,6 +1502,10 @@ body {
   .form-group.span2,
   .form-section-title { grid-column: span 1; }
 
+  .spool-modal-add .spool-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .spool-detected-strip {
     grid-template-columns: 1fr;
   }
@@ -1516,6 +1541,12 @@ body {
   .toast {
     min-width: 0;
     width: 100%;
+  }
+}
+
+@media (max-width: 680px) {
+  .spool-modal-add .spool-form-grid {
+    grid-template-columns: 1fr;
   }
 }
 

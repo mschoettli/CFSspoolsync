@@ -937,12 +937,7 @@ function openAddSpoolModal() {
 function buildAddSpoolForm() {
   return `
     <div class="spool-modal-add">
-      <div class="spool-stepper" aria-label="Modal steps">
-        <div class="spool-step-pill is-active" id="stepPillSource">1 Quelle</div>
-        <div class="spool-step-pill" id="stepPillForm">2 Pruefen & Speichern</div>
-      </div>
-
-      <section class="spool-step-panel is-active" id="addSpoolStepSource">
+      <section class="spool-source-panel" id="addSpoolStepSource">
         <div class="k2-read-box k2-read-box-elevated">
           <p>Daten automatisch einlesen</p>
           <div class="k2-slot-selector">
@@ -958,13 +953,9 @@ function buildAddSpoolForm() {
           <button class="btn btn-primary btn-sm" id="btnCapture" type="button" style="display:none">Foto aufnehmen</button>
           <span id="k2ReadStatus" class="spool-read-status"></span>
         </div>
-        <div class="spool-source-footer">
-          <button class="btn btn-ghost btn-sm" id="btnCancelSpoolSource" type="button">Abbrechen</button>
-          <button class="btn btn-primary btn-sm" id="btnContinueToForm" type="button">Weiter</button>
-        </div>
       </section>
 
-      <form id="addSpoolForm" class="spool-step-panel">
+      <form id="addSpoolForm" class="spool-form-panel">
         <div class="spool-detected-strip" id="detectedStrip">
           <div class="spool-detected-item">
             <span>Material</span>
@@ -1104,7 +1095,6 @@ function buildAddSpoolForm() {
         </details>
 
         <div class="form-actions form-actions-sticky">
-          <button type="button" class="btn btn-ghost" id="btnBackToSource">Zurueck</button>
           <button type="button" class="btn btn-ghost" id="btnCancelSpool">Abbrechen</button>
           <button type="submit" class="btn btn-primary">Spule speichern</button>
         </div>
@@ -1122,11 +1112,6 @@ function setupAddSpoolForm() {
   let lastScanStartedAt = 0;
   let readyMetricsSent = false;
 
-  const sourcePanel = document.getElementById('addSpoolStepSource');
-  const formPanel = document.getElementById('addSpoolForm');
-  const stepPillSource = document.getElementById('stepPillSource');
-  const stepPillForm = document.getElementById('stepPillForm');
-  const continueBtn = document.getElementById('btnContinueToForm');
   const readFromCfsBtn = document.getElementById('btnReadFromK2');
   const scanBtn = document.getElementById('btnScanLabel');
   const fallbackPanel = document.getElementById('ocrFallbackPanel');
@@ -1155,17 +1140,8 @@ function setupAddSpoolForm() {
 
   const setScanBusy = (busy) => {
     scanInProgress = busy;
-    continueBtn.disabled = busy;
     scanBtn.disabled = busy;
     readFromCfsBtn.disabled = busy || !selectedSlot;
-  };
-
-  const setStep = (step) => {
-    const inSource = step === 'source';
-    sourcePanel.classList.toggle('is-active', inSource);
-    formPanel.classList.toggle('is-active', !inSource);
-    stepPillSource.classList.toggle('is-active', inSource);
-    stepPillForm.classList.toggle('is-active', !inSource);
   };
 
   const refreshDetectedStrip = () => {
@@ -1319,31 +1295,15 @@ function setupAddSpoolForm() {
       statusEl.style.color = 'var(--accent)';
     }
     hasAutoDetectedData = acceptedCount > 0;
-    setStep('form');
     maybeEmitReadyMetrics('ocr');
   };
 
-  setStep('source');
   refreshDetectedStrip();
   applyFallbackDropdowns();
   bindEssentialsColorControls();
   document.querySelector('.spool-modal-add')?.addEventListener('click', () => {
     modalClicks += 1;
   });
-
-  document.getElementById('btnContinueToForm').addEventListener('click', () => {
-    if (scanInProgress) {
-      showToast('OCR laeuft noch. Bitte warten.', 'info');
-      return;
-    }
-    if (!hasAutoDetectedData) {
-      showToast('Keine Daten erkannt. Felder bitte manuell pruefen/ausfuellen.', 'info');
-    }
-    setStep('form');
-    refreshDetectedStrip();
-  });
-
-  document.getElementById('btnBackToSource').addEventListener('click', () => setStep('source'));
 
   document.querySelectorAll('.slot-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1375,7 +1335,6 @@ function setupAddSpoolForm() {
   });
 
   document.getElementById('btnCancelSpool').addEventListener('click', closeModal);
-  document.getElementById('btnCancelSpoolSource').addEventListener('click', closeModal);
 
   document.getElementById('btnScanLabel').addEventListener('click', async () => {
     const video = document.getElementById('labelVideo');

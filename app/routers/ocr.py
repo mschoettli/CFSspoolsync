@@ -8,13 +8,13 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from app.services.label_ocr import run_ocr_scan
 
 router = APIRouter(prefix="/api/ocr", tags=["ocr"])
-OCR_TIMEOUT_SECONDS = int(os.getenv("OCR_TIMEOUT_SECONDS", "60"))
-OCR_CLOUD_TIMEOUT_SECONDS = float(os.getenv("OCR_CLOUD_TIMEOUT_SECONDS", "6"))
+OCR_TIMEOUT_SECONDS = int(os.getenv("OCR_TIMEOUT_SECONDS", "15"))
+OCR_CLOUD_TIMEOUT_SECONDS = float(os.getenv("OCR_CLOUD_TIMEOUT_SECONDS", "3.5"))
 OCR_DEBUG = os.getenv("OCR_DEBUG", "0") == "1"
 OCR_HTTP_TIMEOUT_SECONDS = float(
     os.getenv(
         "OCR_HTTP_TIMEOUT_SECONDS",
-        "90",
+        "25",
     )
 )
 

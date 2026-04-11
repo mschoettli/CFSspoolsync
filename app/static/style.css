@@ -742,8 +742,7 @@ body {
   min-width: 0;
 }
 
-.spool-color-field .spool-color-stack {
-  display: grid;
+.form-group-stack {
   gap: 8px;
 }
 
@@ -779,8 +778,18 @@ body {
   padding: 12px;
   margin-bottom: 14px;
 }
-.k2-read-box p { margin: 0 0 8px; color: var(--text-mid); font-size: 0.8rem; }
-.k2-slot-selector { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.spool-source-title {
+  margin: 0 0 10px;
+  color: var(--text-mid);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.k2-slot-selector {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
 .k2-read-box-elevated {
   border-color: rgba(80, 200, 120, 0.35);
   background: linear-gradient(180deg, rgba(32, 44, 36, 0.7), rgba(20, 31, 27, 0.72));
@@ -825,9 +834,14 @@ body {
 }
 
 .spool-source-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.spool-source-actions .btn {
+  width: 100%;
+  min-height: 40px;
 }
 
 .spool-source-footer {
@@ -1519,8 +1533,8 @@ body {
     gap: 2px;
   }
 
-  .spool-source-actions .btn {
-    flex: 1 1 auto;
+  .spool-source-actions {
+    grid-template-columns: 1fr;
   }
 
   .spool-source-footer {

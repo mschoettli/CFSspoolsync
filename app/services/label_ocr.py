@@ -27,8 +27,8 @@ MAX_IMAGE_BYTES = 10 * 1024 * 1024
 OCR_ENABLE_CLOUD_FALLBACK = os.getenv("OCR_ENABLE_CLOUD_FALLBACK", "1") == "1"
 OCR_PROVIDER_1 = os.getenv("OCR_PROVIDER_1", "openai").strip().lower()
 OCR_PROVIDER_2 = os.getenv("OCR_PROVIDER_2", "claude").strip().lower()
-OCR_CLOUD_TIMEOUT_SECONDS = float(os.getenv("OCR_CLOUD_TIMEOUT_SECONDS", "6"))
-OCR_TOTAL_BUDGET_SECONDS = float(os.getenv("OCR_TOTAL_BUDGET_SECONDS", "30"))
+OCR_CLOUD_TIMEOUT_SECONDS = float(os.getenv("OCR_CLOUD_TIMEOUT_SECONDS", "3.5"))
+OCR_TOTAL_BUDGET_SECONDS = float(os.getenv("OCR_TOTAL_BUDGET_SECONDS", "15"))
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini").strip()
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
@@ -1277,7 +1277,7 @@ def run_ocr_scan(
     started = time.perf_counter()
     local_timeout = timeout_seconds
     if OCR_ENABLE_CLOUD_FALLBACK:
-        local_timeout = min(timeout_seconds, 20.0)
+        local_timeout = min(timeout_seconds, 9.0)
     total_budget = max(8.0, OCR_TOTAL_BUDGET_SECONDS)
     hard_deadline = started + total_budget
     base = _run_tesseract_scan(image_bytes, timeout_seconds=local_timeout, debug=debug)
@@ -1310,7 +1310,7 @@ def run_ocr_scan(
                 candidate = _call_cloud_provider(
                     provider,
                     image_bytes,
-                    timeout_seconds=max(2.5, min(OCR_CLOUD_TIMEOUT_SECONDS, 6.0, remaining)),
+                    timeout_seconds=max(1.8, min(OCR_CLOUD_TIMEOUT_SECONDS, 4.0, remaining)),
                 )
             except Exception as exc:
                 warnings.append(f"{provider} provider failed: {exc}")
@@ -1358,7 +1358,7 @@ def run_ocr_scan(
         response["debug"] = {
             "local_timeout_seconds": timeout_seconds,
             "effective_local_timeout_seconds": local_timeout,
-            "cloud_timeout_seconds": min(OCR_CLOUD_TIMEOUT_SECONDS, 6.0),
+            "cloud_timeout_seconds": min(OCR_CLOUD_TIMEOUT_SECONDS, 4.0),
             "total_budget_seconds": total_budget,
             "provider_order": _provider_order(),
         }

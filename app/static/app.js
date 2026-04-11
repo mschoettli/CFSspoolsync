@@ -82,7 +82,7 @@ const I18N = {
     'Zurueck': 'Back',
     'OCR Review': 'OCR Review',
     'Noch kein Scan vorhanden.': 'No scan yet.',
-    'Schneller Fallback (manuell bestaetigt)': 'Quick fallback (manual confirmation)',
+    'Manuelle Aenderung': 'Manual edit',
     'Bitte waehlen': 'Please choose',
     'Spule hinzugefuegt': 'Spool added',
     'Gespeichert': 'Saved',
@@ -939,7 +939,7 @@ function buildAddSpoolForm() {
     <div class="spool-modal-add">
       <section class="spool-source-panel" id="addSpoolStepSource">
         <div class="k2-read-box k2-read-box-elevated">
-          <p>Daten automatisch einlesen</p>
+          <p class="spool-source-title">Daten automatisch einlesen</p>
           <div class="k2-slot-selector">
             ${[1, 2, 3, 4].map(n => `<button class="slot-btn" type="button" data-slot="${n}">Spule ${n}</button>`).join('')}
           </div>
@@ -975,10 +975,10 @@ function buildAddSpoolForm() {
           <div class="ocr-review-empty-text">Noch kein Scan vorhanden.</div>
         </div>
         <div id="ocrFallbackPanel" class="ocr-fallback-panel">
-          <div class="ocr-fallback-title">Schneller Fallback (manuell bestaetigt)</div>
+          <div class="ocr-fallback-title">Manuelle Aenderung</div>
           <div class="ocr-fallback-grid">
             <div class="form-group">
-              <label class="form-label">Hersteller Vorschlag</label>
+              <label class="form-label">Hersteller</label>
               <select class="form-input" id="ocrFallbackBrand">
                 <option value="">Bitte waehlen</option>
                 ${OCR_FALLBACK_BRANDS.map(v => `<option value="${v}">${v}</option>`).join('')}
@@ -986,7 +986,7 @@ function buildAddSpoolForm() {
               <div class="ocr-suggestion-row" id="ocrSuggestBrand"></div>
             </div>
             <div class="form-group">
-              <label class="form-label">Material Vorschlag</label>
+              <label class="form-label">Material</label>
               <select class="form-input" id="ocrFallbackMaterial">
                 <option value="">Bitte waehlen</option>
                 ${OCR_FALLBACK_MATERIALS.map(v => `<option value="${v}">${v}</option>`).join('')}
@@ -994,7 +994,7 @@ function buildAddSpoolForm() {
               <div class="ocr-suggestion-row" id="ocrSuggestMaterial"></div>
             </div>
             <div class="form-group">
-              <label class="form-label">Farbe Vorschlag</label>
+              <label class="form-label">Farbe</label>
               <select class="form-input" id="ocrFallbackColor">
                 <option value="">Bitte waehlen</option>
                 ${OCR_FALLBACK_COLORS.map(v => `<option value="${v.hex}">${v.name}</option>`).join('')}
@@ -1008,35 +1008,36 @@ function buildAddSpoolForm() {
         <div class="spool-form-card">
           <h4>Basis</h4>
           <div class="form-grid spool-form-grid spool-form-grid-essentials">
-            <div class="form-group">
+            <div class="form-group form-group-stack">
               <label class="form-label">Material *</label>
-              <input class="form-input" name="material" required list="spoolMaterialList" placeholder="PLA, PETG, ABS...">
+              <select class="form-input" id="spoolMaterialSelect">
+                <option value="">Bitte waehlen</option>
+                ${OCR_FALLBACK_MATERIALS.map(v => `<option value="${v}">${v}</option>`).join('')}
+              </select>
+              <input class="form-input" name="material" required placeholder="Eigener Materialwert (optional)">
             </div>
-            <div class="form-group">
+            <div class="form-group form-group-stack">
               <label class="form-label">Hersteller</label>
-              <input class="form-input" name="brand" list="spoolBrandList" placeholder="Bambu Lab, eSUN...">
+              <select class="form-input" id="spoolBrandSelect">
+                <option value="">Bitte waehlen</option>
+                ${OCR_FALLBACK_BRANDS.map(v => `<option value="${v}">${v}</option>`).join('')}
+              </select>
+              <input class="form-input" name="brand" placeholder="Eigener Herstellerwert (optional)">
             </div>
-            <div class="form-group spool-color-field">
+            <div class="form-group spool-color-field form-group-stack">
               <label class="form-label">Farbe</label>
-              <div class="spool-color-stack">
-                <select class="form-input" id="spoolColorPreset">
-                  <option value="">Bitte waehlen</option>
-                  ${OCR_FALLBACK_COLORS.map(v => `<option value="${v.hex}">${v.name}</option>`).join('')}
-                </select>
-                <input class="form-input spool-color-picker" type="color" name="color" value="#888888" aria-label="Farbpicker">
-              </div>
+              <select class="form-input" id="spoolColorPreset">
+                <option value="">Bitte waehlen</option>
+                ${OCR_FALLBACK_COLORS.map(v => `<option value="${v.hex}">${v.name}</option>`).join('')}
+              </select>
+              <input class="form-input" id="spoolColorText" placeholder="Eigene Farbe oder Hex (#888888)">
+              <input class="form-input spool-color-picker" type="color" name="color" value="#888888" aria-label="Farbpicker">
             </div>
             <div class="form-group">
               <label class="form-label">Durchmesser (mm) *</label>
               <input class="form-input" type="number" name="diameter" required step="0.01" min="1" placeholder="1.75">
             </div>
           </div>
-          <datalist id="spoolMaterialList">
-            ${OCR_FALLBACK_MATERIALS.map(v => `<option value="${v}"></option>`).join('')}
-          </datalist>
-          <datalist id="spoolBrandList">
-            ${OCR_FALLBACK_BRANDS.map(v => `<option value="${v}"></option>`).join('')}
-          </datalist>
         </div>
 
         <div class="spool-form-card">
@@ -1127,16 +1128,12 @@ function setupAddSpoolForm() {
 
   const startScanStatusTicker = (statusEl) => {
     stopScanStatusTicker();
-    statusEl.textContent = 'Local OCR (Tesseract) laeuft...';
+    statusEl.textContent = 'Bild wird analysiert...';
     statusEl.style.color = 'var(--text-muted)';
     scanStatusTimer = setTimeout(() => {
-      statusEl.textContent = 'Cloud-Fallback wird geprueft...';
+      statusEl.textContent = 'Zusaetzliche Erkennung wird geprueft...';
       statusEl.style.color = 'var(--text-mid)';
-      scanStatusTimer = setTimeout(() => {
-        statusEl.textContent = 'Analyse dauert laenger als erwartet...';
-        statusEl.style.color = 'var(--text-mid)';
-      }, 2200);
-    }, 1400);
+    }, 3500);
   };
 
   const setScanBusy = (busy) => {
@@ -1190,6 +1187,14 @@ function setupAddSpoolForm() {
     });
   };
 
+  const setFormFieldValue = (form, name, value) => {
+    if (!form || value === undefined || value === null || value === '') return;
+    const field = form.querySelector(`[name="${name}"]`);
+    if (!field) return;
+    field.value = value;
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
   const applyFallbackDropdowns = () => {
     const form = document.getElementById('addSpoolForm');
     if (!form) return;
@@ -1199,49 +1204,97 @@ function setupAddSpoolForm() {
 
     brandSelect?.addEventListener('change', () => {
       if (!brandSelect.value) return;
-      form.querySelector('[name="brand"]').value = brandSelect.value;
+      setFormFieldValue(form, 'brand', brandSelect.value);
       fallbackUsed = true;
       refreshDetectedStrip();
       maybeEmitReadyMetrics('fallback-brand');
     });
     materialSelect?.addEventListener('change', () => {
       if (!materialSelect.value) return;
-      form.querySelector('[name="material"]').value = materialSelect.value;
+      setFormFieldValue(form, 'material', materialSelect.value);
       fallbackUsed = true;
       refreshDetectedStrip();
       maybeEmitReadyMetrics('fallback-material');
     });
     colorSelect?.addEventListener('change', () => {
       if (!colorSelect.value) return;
-      form.querySelector('[name="color"]').value = colorSelect.value;
+      setFormFieldValue(form, 'color', colorSelect.value);
       fallbackUsed = true;
       refreshDetectedStrip();
       maybeEmitReadyMetrics('fallback-color');
     });
   };
 
-  const bindEssentialsColorControls = () => {
+  const bindEssentialsControls = () => {
     const form = document.getElementById('addSpoolForm');
     if (!form) return;
-    const presetSelect = form.querySelector('#spoolColorPreset');
+    const materialInput = form.querySelector('[name="material"]');
+    const materialSelect = form.querySelector('#spoolMaterialSelect');
+    const brandInput = form.querySelector('[name="brand"]');
+    const brandSelect = form.querySelector('#spoolBrandSelect');
+    const colorSelect = form.querySelector('#spoolColorPreset');
+    const colorText = form.querySelector('#spoolColorText');
     const colorInput = form.querySelector('[name="color"]');
-    if (!presetSelect || !colorInput) return;
+    if (!materialInput || !materialSelect || !brandInput || !brandSelect || !colorSelect || !colorText || !colorInput) return;
 
-    const syncPresetFromColor = () => {
-      const current = String(colorInput.value || '').toLowerCase();
-      const matched = OCR_FALLBACK_COLORS.find(item => String(item.hex || '').toLowerCase() === current);
-      presetSelect.value = matched ? matched.hex : '';
+    const syncSelectByText = (selectEl, value) => {
+      const normalized = String(value || '').trim().toLowerCase();
+      const option = Array.from(selectEl.options).find(o => String(o.value || '').trim().toLowerCase() === normalized);
+      selectEl.value = option ? option.value : '';
     };
 
-    presetSelect.addEventListener('change', () => {
-      if (!presetSelect.value) return;
-      colorInput.value = presetSelect.value;
-      fallbackUsed = true;
-      refreshDetectedStrip();
-      maybeEmitReadyMetrics('preset-color');
+    const syncColorControlsFromPicker = (updateText = false) => {
+      const current = String(colorInput.value || '').toLowerCase();
+      const matched = OCR_FALLBACK_COLORS.find(item => String(item.hex || '').toLowerCase() === current);
+      colorSelect.value = matched ? matched.hex : '';
+      if (updateText) {
+        colorText.value = matched ? matched.name : current;
+      }
+    };
+
+    materialSelect.addEventListener('change', () => {
+      if (!materialSelect.value) return;
+      materialInput.value = materialSelect.value;
+      materialInput.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    colorInput.addEventListener('input', syncPresetFromColor);
-    syncPresetFromColor();
+    materialInput.addEventListener('input', () => syncSelectByText(materialSelect, materialInput.value));
+
+    brandSelect.addEventListener('change', () => {
+      if (!brandSelect.value) return;
+      brandInput.value = brandSelect.value;
+      brandInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    brandInput.addEventListener('input', () => syncSelectByText(brandSelect, brandInput.value));
+
+    colorSelect.addEventListener('change', () => {
+      if (!colorSelect.value) return;
+      colorInput.value = colorSelect.value;
+      const selected = OCR_FALLBACK_COLORS.find(item => item.hex === colorSelect.value);
+      colorText.value = selected ? selected.name : colorSelect.value;
+      colorInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    colorText.addEventListener('input', () => {
+      const raw = String(colorText.value || '').trim();
+      if (!raw) return;
+      const asHex = /^#?[0-9a-fA-F]{6}$/.test(raw) ? (raw.startsWith('#') ? raw : `#${raw}`) : '';
+      if (asHex) {
+        colorInput.value = asHex;
+      } else {
+        const mapped = OCR_FALLBACK_COLOR_BY_NAME[raw.toLowerCase()];
+        if (mapped) colorInput.value = mapped;
+      }
+      colorInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    colorInput.addEventListener('input', () => {
+      syncColorControlsFromPicker(true);
+      refreshDetectedStrip();
+    });
+
+    syncSelectByText(materialSelect, materialInput.value);
+    syncSelectByText(brandSelect, brandInput.value);
+    syncColorControlsFromPicker(true);
   };
 
   const renderFallbackPanel = (data) => {
@@ -1283,13 +1336,11 @@ function setupAddSpoolForm() {
     refreshDetectedStrip();
     const acceptedCount = Object.values(data?.review || {})
       .filter(entry => entry?.status === 'accepted').length;
-    const providerUsed = String(data?.provider_used || data?.engine || 'tesseract');
-    const providerLabel = providerUsed === 'tesseract' ? 'Local OCR' : providerUsed.toUpperCase();
     if (acceptedCount === 0) {
-      statusEl.textContent = 'OCR abgeschlossen. Bitte Felder manuell auswaehlen oder ausfuellen.';
+      statusEl.textContent = 'Scan abgeschlossen. Bitte Felder manuell pruefen.';
       statusEl.style.color = 'var(--text-mid)';
     } else {
-      statusEl.textContent = `OCR abgeschlossen via ${providerLabel} (${acceptedCount} sichere Felder)`;
+      statusEl.textContent = `Scan abgeschlossen. ${acceptedCount} Felder wurden automatisch uebernommen.`;
       statusEl.style.color = 'var(--accent)';
     }
     hasAutoDetectedData = acceptedCount > 0;
@@ -1298,7 +1349,7 @@ function setupAddSpoolForm() {
 
   refreshDetectedStrip();
   applyFallbackDropdowns();
-  bindEssentialsColorControls();
+  bindEssentialsControls();
   document.querySelector('.spool-modal-add')?.addEventListener('click', () => {
     modalClicks += 1;
   });
@@ -1472,7 +1523,13 @@ function setupAddSpoolForm() {
 }
 function fillFormFromK2(data) {
   const f = document.getElementById('addSpoolForm');
-  const set = (name, val) => { if (val !== undefined && val !== null && val !== '') f.querySelector(`[name="${name}"]`).value = val; };
+  const set = (name, val) => {
+    if (!f || val === undefined || val === null || val === '') return;
+    const input = f.querySelector(`[name="${name}"]`);
+    if (!input) return;
+    input.value = val;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  };
   set('material',   data.material);
   set('color',      data.color);
   set('brand',      data.brand);
@@ -1494,9 +1551,6 @@ function renderOCRReview(data) {
   const panel = document.getElementById('ocrReviewPanel');
   if (!panel) return;
   const fieldMeta = data?.review || {};
-  const providerUsed = String(data?.provider_used || data?.engine || 'tesseract');
-  const providerChain = Array.isArray(data?.provider_chain) ? data.provider_chain.join(' -> ') : providerUsed;
-  const cloudUsed = data?.cloud_used ? 'Ja' : 'Nein';
   const fields = [
     ['material', 'Material'],
     ['brand', 'Brand'],
@@ -1515,7 +1569,7 @@ function renderOCRReview(data) {
       const score = typeof entry.confidence === 'number'
         ? `${Math.round(entry.confidence * 100)}%`
         : 'n/a';
-      const value = entry.accepted_value ?? (Array.isArray(entry.candidates) && entry.candidates.length ? entry.candidates[0] : '—');
+      const value = entry.accepted_value ?? (Array.isArray(entry.candidates) && entry.candidates.length ? entry.candidates[0] : '-');
       const lineHint = entry.source_text || '';
       return `
         <div class="ocr-review-row">
@@ -1530,7 +1584,6 @@ function renderOCRReview(data) {
   panel.classList.remove('ocr-review-empty');
   panel.innerHTML = `
     <div class="ocr-review-title">OCR Review</div>
-    <div class="ocr-review-meta">Quelle: ${esc(providerUsed)} · Kette: ${esc(providerChain)} · Cloud: ${esc(cloudUsed)}</div>
     <div class="ocr-review-grid">${rows.join('')}</div>
   `;
 }
@@ -1543,6 +1596,7 @@ function fillFormFromOCR(data) {
     if (!input) return;
     if (val === undefined || val === null || val === '') return;
     input.value = val;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
   };
 
   const fields = data.result || {};

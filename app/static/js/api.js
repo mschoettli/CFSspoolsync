@@ -1,7 +1,7 @@
 /** API helper functions for backend calls. */
 
 const API_BASE = "";
-const OCR_TIMEOUT_MS = 60_000;
+const OCR_TIMEOUT_MS = 20_000;
 
 /**
  * Execute a JSON API call and raise on non-2xx responses.

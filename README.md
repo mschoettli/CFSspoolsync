@@ -25,11 +25,14 @@ cp .env.example .env
 2. Edit `.env` values for your printer (`K2_HOST`, `K2_SSH_KEY_HOST`, `K2_SSH_KEY`, `MOONRAKER_URL`).
    - `K2_SSH_KEY_HOST`: absolute or project-relative key path on your Docker host.
    - `K2_SSH_KEY`: target path inside the container (default: `/root/.ssh/id_k2`).
-   - Optional OCR cloud fallback:
+   - OCR default profile:
      - `OCR_ENABLE_CLOUD_FALLBACK=1`
      - `OCR_PROVIDER_1=openai`, `OCR_PROVIDER_2=claude`
-     - `OPENAI_API_KEY`, `OPENAI_MODEL`
-     - `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`
+     - `OCR_TIMEOUT_SECONDS=60`
+     - `OCR_CLOUD_TIMEOUT_SECONDS=6`
+     - `OCR_TOTAL_BUDGET_SECONDS=30`
+     - `OCR_HTTP_TIMEOUT_SECONDS=90`
+     - Required for cloud fallback: `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY`
 
 3. Start with prebuilt image:
 

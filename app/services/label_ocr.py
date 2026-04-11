@@ -27,7 +27,7 @@ MAX_IMAGE_BYTES = 10 * 1024 * 1024
 OCR_ENABLE_CLOUD_FALLBACK = os.getenv("OCR_ENABLE_CLOUD_FALLBACK", "1") == "1"
 OCR_PROVIDER_1 = os.getenv("OCR_PROVIDER_1", "openai").strip().lower()
 OCR_PROVIDER_2 = os.getenv("OCR_PROVIDER_2", "claude").strip().lower()
-OCR_CLOUD_TIMEOUT_SECONDS = float(os.getenv("OCR_CLOUD_TIMEOUT_SECONDS", "25"))
+OCR_CLOUD_TIMEOUT_SECONDS = float(os.getenv("OCR_CLOUD_TIMEOUT_SECONDS", "6"))
 OCR_TOTAL_BUDGET_SECONDS = float(os.getenv("OCR_TOTAL_BUDGET_SECONDS", "30"))
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini").strip()
@@ -578,7 +578,7 @@ def parse_label_text(text: str) -> dict[str, Any]:
 def _run_tesseract_scan(
     image_bytes: bytes,
     *,
-    timeout_seconds: float = 120,
+    timeout_seconds: float = 60,
     debug: bool = False,
 ) -> dict[str, Any]:
     """Run the local Tesseract OCR pipeline and return API payload.
@@ -1255,7 +1255,7 @@ def _provider_order() -> list[str]:
 def run_ocr_scan(
     image_bytes: bytes,
     *,
-    timeout_seconds: float = 120,
+    timeout_seconds: float = 60,
     debug: bool = False,
 ) -> dict[str, Any]:
     """Run OCR with local-first and optional cloud fallback.

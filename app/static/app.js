@@ -1,4 +1,4 @@
-﻿/* â”€â”€ CFS Filament Tracker â€“ Frontend App â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── CFS Filament Tracker – Frontend App ──────────────────────────────────── */
 
 import { apiFetch, uploadLabelImage } from '/js/api.js';
 import { startPolling } from '/js/polling.js';
@@ -56,18 +56,18 @@ const I18N = {
     'Status': 'Status',
     'Aktionen': 'Actions',
     'Bearbeiten': 'Edit',
-    'LÃ¶schen': 'Delete',
+    'Löschen': 'Delete',
     'Aktuell im Druck': 'Currently printing',
     'Noch keine Druckjobs erfasst': 'No print jobs yet',
     'Unbekannte Datei': 'Unknown file',
     'g Verbrauch': 'g consumed',
     'Keine aktiven Slots zum Syncen': 'No active slots to sync',
     'Sync fehlgeschlagen': 'Sync failed',
-    'Spule ins Lager zurÃ¼ckgelegt': 'Spool moved back to storage',
-    'Spule gelÃ¶scht': 'Spool deleted',
+    'Spule ins Lager zurückgelegt': 'Spool moved back to storage',
+    'Spule gelöscht': 'Spool deleted',
     'Spule als leer markieren?': 'Mark spool as empty?',
     'Als leer markiert': 'Marked as empty',
-    'Neue Spule hinzufÃ¼gen': 'Add new spool',
+    'Neue Spule hinzufügen': 'Add new spool',
     'Daten automatisch einlesen': 'Read data automatically',
     'Von CFS lesen': 'Read from CFS',
     'Etikett scannen': 'Scan label',
@@ -91,15 +91,15 @@ const I18N = {
   },
   fr: {
     'Lager': 'Stock',
-    'Druckjobs': "TÃ¢ches d'impression",
+    'Druckjobs': "Tâches d'impression",
     'Alle Status': 'Tous les statuts',
     'Aktiv': 'Actif',
     'Sync mit K2': 'Synchroniser avec K2',
-    'Zuletzt: noch nie': 'DerniÃ¨re fois: jamais',
+    'Zuletzt: noch nie': 'Dernière fois: jamais',
     'Verbinde...': 'Connexion...',
-    'Sync fehlgeschlagen': 'Ã‰chec de la synchronisation',
-    'Neueste zuerst': 'Plus rÃ©cent en premier',
-    'Meiste Verbrauch': 'Consommation la plus Ã©levÃ©e',
+    'Sync fehlgeschlagen': 'Échec de la synchronisation',
+    'Neueste zuerst': 'Plus récent en premier',
+    'Meiste Verbrauch': 'Consommation la plus élevée',
   },
   it: {
     'Lager': 'Magazzino',
@@ -110,12 +110,12 @@ const I18N = {
     'Zuletzt: noch nie': 'Ultimo: mai',
     'Verbinde...': 'Connessione...',
     'Sync fehlgeschlagen': 'Sincronizzazione non riuscita',
-    'Neueste zuerst': 'PiÃ¹ recenti prima',
-    'Meiste Verbrauch': 'Consumo piÃ¹ alto',
+    'Neueste zuerst': 'Più recenti prima',
+    'Meiste Verbrauch': 'Consumo più alto',
   },
 };
 
-// â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   await loadAppConfig();
   applyStaticTranslations();
@@ -148,22 +148,22 @@ function tr(text) {
   let translated = dictionary[text] || I18N.en[text] || text;
   translated = translated
     .replace(/^Zuletzt: fehlgeschlagen \((.+)\)$/u, (_m, p1) => {
-      if (language === 'fr') return `DerniÃ¨re fois: Ã©chec (${p1})`;
+      if (language === 'fr') return `Dernière fois: échec (${p1})`;
       if (language === 'it') return `Ultimo: non riuscito (${p1})`;
       return `Last: failed (${p1})`;
     })
     .replace(/^Zuletzt: (.+)$/u, (_m, p1) => {
-      if (language === 'fr') return `DerniÃ¨re fois: ${p1}`;
+      if (language === 'fr') return `Dernière fois: ${p1}`;
       if (language === 'it') return `Ultimo: ${p1}`;
       return `Last: ${p1}`;
     })
     .replace(/^(\d+) Spule\(n\) aktualisiert$/u, (_m, p1) => {
-      if (language === 'fr') return `${p1} bobine(s) mise(s) Ã  jour`;
+      if (language === 'fr') return `${p1} bobine(s) mise(s) à jour`;
       if (language === 'it') return `${p1} bobina/e aggiornata/e`;
       return `${p1} spool(s) updated`;
     })
     .replace(/^Filament in Slot (\d+) geladen$/u, (_m, p1) => {
-      if (language === 'fr') return `Filament chargÃ© dans le slot ${p1}`;
+      if (language === 'fr') return `Filament chargé dans le slot ${p1}`;
       if (language === 'it') return `Filamento caricato nello slot ${p1}`;
       return `Filament loaded in slot ${p1}`;
     });
@@ -178,9 +178,9 @@ function applyStaticTranslations() {
   });
 
   const syncBtn = document.getElementById('btnSyncK2');
-  if (syncBtn) syncBtn.textContent = `âŸ³ ${tr('Sync mit K2')}`;
+  if (syncBtn) syncBtn.textContent = `⟳ ${tr('Sync mit K2')}`;
   const addBtn = document.getElementById('btnAddSpool');
-  if (addBtn) addBtn.textContent = `+ ${tr('Neue Spule hinzufÃ¼gen')}`;
+  if (addBtn) addBtn.textContent = `+ ${tr('Neue Spule hinzufügen')}`;
 
   const statusLabel = document.getElementById('statusLabel');
   if (statusLabel && statusLabel.textContent.trim() === 'Verbinde...') {
@@ -267,7 +267,7 @@ function setupModalClose() {
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 }
 
-// â”€â”€ View switching â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── View switching ─────────────────────────────────────────────────────────
 function switchView(name) {
   state.view = name;
   document.querySelectorAll('.nav-btn, .mobile-nav-btn').forEach(b =>
@@ -279,7 +279,7 @@ function switchView(name) {
   if (name === 'lager') loadSpools();
 }
 
-// â”€â”€ Load functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Load functions ─────────────────────────────────────────────────────────
 async function loadAll() {
   await Promise.all([loadPrinterStatus(), loadCFS(), loadSpools()]);
 }
@@ -327,7 +327,7 @@ async function loadJobs(render = true) {
   }
 }
 
-// â”€â”€ Render: Printer Status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Render: Printer Status ─────────────────────────────────────────────────
 function renderPrinterStatus() {
   const p = state.printer;
   const dot   = document.getElementById('statusDot');
@@ -355,8 +355,8 @@ function renderPrinterStatus() {
 
   if (p.state === 'printing' && p.filename) {
     const formatted = formatPrinterFilenameForStatus(p.filename);
-    label.textContent = `${info.label} Â· ${formatted}`;
-    label.title = `${info.label} Â· ${formatted}`;
+    label.textContent = `${info.label} · ${formatted}`;
+    label.title = `${info.label} · ${formatted}`;
   } else {
     label.textContent = info.label;
     label.title = info.label;
@@ -367,7 +367,7 @@ function renderPrinterStatus() {
     ? p.cfs_temp
     : null;
   if (typeof cfsTemp === 'number') {
-    tempParts.push(`ðŸŒ¡ ${cfsTemp.toFixed(0)}Â°C`);
+    tempParts.push(`🌡 ${cfsTemp.toFixed(0)}°C`);
   }
 
   const humidity = typeof p.cfs_humidity === 'number'
@@ -376,13 +376,13 @@ function renderPrinterStatus() {
     ? p.cfs_humidity
     : null;
   if (typeof humidity === 'number') {
-    tempParts.push(`ðŸ’§ ${humidity.toFixed(0)}%`);
+    tempParts.push(`💧 ${humidity.toFixed(0)}%`);
   }
 
   temps.textContent = tempParts.join('  ');
 }
 
-// â”€â”€ Render: CFS Slots â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Render: CFS Slots ──────────────────────────────────────────────────────
 function renderCFS() {
   const grid = document.getElementById('slotsGrid');
   const markup = state.cfs.map(slot => renderSlotCard(slot)).join('');
@@ -478,7 +478,7 @@ function renderSlotCard(slot) {
           <div class="color-swatch" style="background:${s.color}"></div>
           <div class="filament-meta">
             <div class="filament-material">${esc(s.material)}</div>
-            <div class="filament-brand">${esc(s.brand || 'â€”')}</div>
+            <div class="filament-brand">${esc(s.brand || '—')}</div>
           </div>
         </div>
 
@@ -538,11 +538,11 @@ function getSlotLiveJobMeta(slot) {
   return {
     remaining: fmtRemainingSeconds(state.printer.remaining_seconds),
     nozzle: typeof state.printer.extruder_temp === 'number'
-      ? `${state.printer.extruder_temp.toFixed(0)}Â°C`
-      : 'â€”',
+      ? `${state.printer.extruder_temp.toFixed(0)}°C`
+      : '—',
     bed: typeof state.printer.bed_temp === 'number'
-      ? `${state.printer.bed_temp.toFixed(0)}Â°C`
-      : 'â€”',
+      ? `${state.printer.bed_temp.toFixed(0)}°C`
+      : '—',
   };
 }
 
@@ -554,14 +554,14 @@ function renderLiveJobMeta(meta) {
   `;
 }
 
-// â”€â”€ Render: Spools â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Render: Spools ─────────────────────────────────────────────────────────
 function renderSpools() {
   const el = document.getElementById('spoolsList');
   let list = state.spools;
   if (state.filterStatus) list = list.filter(s => s.status === state.filterStatus);
 
   if (!list.length) {
-    const markup = `<div class="empty-state"><div class="empty-state-icon">ðŸ“¦</div>Keine Spulen vorhanden</div>`;
+    const markup = `<div class="empty-state"><div class="empty-state-icon">📦</div>Keine Spulen vorhanden</div>`;
     if (markup !== lastSpoolsMarkup) {
       el.innerHTML = markup;
       lastSpoolsMarkup = markup;
@@ -644,7 +644,7 @@ function renderSpoolRow(s) {
   let actions = `<button class="btn btn-ghost btn-sm btn-edit-spool" data-id="${s.id}">Bearbeiten</button>`;
   if (s.status === 'lager') {
     actions += `
-      <button class="btn btn-danger btn-sm btn-delete-spool" data-id="${s.id}">LÃ¶schen</button>`;
+      <button class="btn btn-danger btn-sm btn-delete-spool" data-id="${s.id}">Löschen</button>`;
   }
   if (s.status === 'lager' || s.status === 'aktiv') {
     actions += `<button class="btn btn-ghost btn-sm btn-mark-empty" data-id="${s.id}" style="color:var(--text-muted)">Leer</button>`;
@@ -664,15 +664,15 @@ function renderSpoolRow(s) {
           </div>
         </div>
       </td>
-      <td class="spool-brand-label">${esc(s.brand || 'â€”')}</td>
+      <td class="spool-brand-label">${esc(s.brand || '—')}</td>
       <td class="spool-weight-cell">
         ${s.remaining_weight.toFixed(0)} g
         <div class="weight-mini-bar">
           <div class="weight-mini-fill ${cls}" style="width:${Math.max(2,Math.min(100,pct)).toFixed(0)}%"></div>
         </div>
       </td>
-      <td class="monospace" style="font-size:0.72rem;color:var(--text-mid)">${s.nozzle_min}â€“${s.nozzle_max}Â°C</td>
-      <td class="spool-brand-label">${s.cfs_slot ? `T1${'ABCD'[s.cfs_slot - 1]}` : 'â€”'}</td>
+      <td class="monospace" style="font-size:0.72rem;color:var(--text-mid)">${s.nozzle_min}–${s.nozzle_max}°C</td>
+      <td class="spool-brand-label">${s.cfs_slot ? `T1${'ABCD'[s.cfs_slot - 1]}` : '—'}</td>
       <td>
         <span class="spool-status-badge ${s.status}">
           ${s.status === 'aktiv' ? slotLabel : s.status === 'lager' ? 'Lager' : s.status === 'leer' ? 'Leer' : s.status}
@@ -685,12 +685,12 @@ function renderSpoolRow(s) {
 function renderSpoolCard(s) {
   const pct = s.initial_weight > 0 ? (s.remaining_weight / s.initial_weight) * 100 : 0;
   const cls = pct > 50 ? 'high' : pct > 20 ? 'medium' : 'low';
-  const slotLabel = s.cfs_slot ? `T1${'ABCD'[s.cfs_slot - 1]}` : 'â€”';
+  const slotLabel = s.cfs_slot ? `T1${'ABCD'[s.cfs_slot - 1]}` : '—';
 
   let actions = `<button class="btn btn-ghost btn-sm btn-edit-spool" data-id="${s.id}">Bearbeiten</button>`;
   if (s.status === 'lager') {
     actions += `
-      <button class="btn btn-danger btn-sm btn-delete-spool" data-id="${s.id}">LÃ¶schen</button>
+      <button class="btn btn-danger btn-sm btn-delete-spool" data-id="${s.id}">Löschen</button>
     `;
   }
   if (s.status === 'lager' || s.status === 'aktiv') {
@@ -707,7 +707,7 @@ function renderSpoolCard(s) {
           <div class="spool-color-dot" style="background:${s.color}"></div>
           <div>
             <div class="spool-material-label">${esc(s.material)}</div>
-            <div class="spool-brand-label">${esc(s.brand || 'â€”')}</div>
+            <div class="spool-brand-label">${esc(s.brand || '—')}</div>
           </div>
         </div>
         <span class="spool-status-badge ${s.status}">
@@ -722,15 +722,15 @@ function renderSpoolCard(s) {
         <div class="weight-mini-fill ${cls}" style="width:${Math.max(2, Math.min(100, pct)).toFixed(0)}%"></div>
       </div>
       <div class="inventory-card-meta">
-        <span>DÃ¼se ${s.nozzle_min}â€“${s.nozzle_max}Â°C</span>
-        <span>Bett ${s.bed_temp}Â°C</span>
+        <span>Düse ${s.nozzle_min}–${s.nozzle_max}°C</span>
+        <span>Bett ${s.bed_temp}°C</span>
       </div>
       <div class="inventory-card-actions">${actions}</div>
     </article>
   `;
 }
 
-// â”€â”€ Render: Jobs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Render: Jobs ───────────────────────────────────────────────────────────
 function renderJobs() {
   const el = document.getElementById('jobsList');
   let list = [...state.jobs];
@@ -744,7 +744,7 @@ function renderJobs() {
   }
 
   if (!list.length) {
-    const markup = `<div class="empty-state"><div class="empty-state-icon">ðŸ–¨</div>Noch keine Druckjobs erfasst</div>`;
+    const markup = `<div class="empty-state"><div class="empty-state-icon">🖨</div>Noch keine Druckjobs erfasst</div>`;
     if (markup !== lastJobsMarkup) {
       el.innerHTML = markup;
       lastJobsMarkup = markup;
@@ -759,8 +759,8 @@ function renderJobs() {
 }
 
 function renderJobCard(j) {
-  const started = j.started_at ? fmtDate(j.started_at) : 'â€”';
-  const finished = j.finished_at ? fmtDate(j.finished_at) : 'â€”';
+  const started = j.started_at ? fmtDate(j.started_at) : '—';
+  const finished = j.finished_at ? fmtDate(j.finished_at) : '—';
   const dur = j.started_at && j.finished_at ? fmtDuration(j.started_at, j.finished_at) : '';
 
   const statusLabel = { finished: 'Fertig', running: 'Aktiv', cancelled: 'Abgebrochen', error: 'Fehler' };
@@ -773,12 +773,12 @@ function renderJobCard(j) {
         </div>
         <div class="job-filename ${j.filename ? '' : 'empty'}">${j.filename ? esc(j.filename) : 'Unbekannte Datei'}</div>
         <div class="job-meta">
-          ${started}${dur ? ` Â· ${dur}` : ''}
+          ${started}${dur ? ` · ${dur}` : ''}
         </div>
         ${renderJobSlots(j)}
       </div>
       <div class="job-consumed">
-        <div class="job-consumed-val">${j.total_consumed_g > 0 ? j.total_consumed_g.toFixed(0) : 'â€”'}</div>
+        <div class="job-consumed-val">${j.total_consumed_g > 0 ? j.total_consumed_g.toFixed(0) : '—'}</div>
         <div class="job-consumed-label">${j.total_consumed_g > 0 ? 'g Verbrauch' : ''}</div>
       </div>
     </div>`;
@@ -791,25 +791,25 @@ function renderJobSlots(j) {
       const consumed = slot.before_g - slot.after_g;
       const spool = state.spools.find(s => s.id === slot.spool_id);
       const name = spool ? `${spool.material} ${spool.brand}` : `Spule #${slot.spool_id}`;
-      parts.push(`<span style="margin-right:12px">T1${letter.toUpperCase()}: <strong>${consumed.toFixed(0)}g</strong> Â· ${esc(name)}</span>`);
+      parts.push(`<span style="margin-right:12px">T1${letter.toUpperCase()}: <strong>${consumed.toFixed(0)}g</strong> · ${esc(name)}</span>`);
     }
   }
   if (!parts.length) return '';
   return `<div class="job-meta" style="margin-top:6px">${parts.join('')}</div>`;
 }
 
-// â”€â”€ Actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Actions ────────────────────────────────────────────────────────────────
 async function syncFromK2() {
   const btn = document.getElementById('btnSyncK2');
   btn.disabled = true;
-  btn.textContent = 'âŸ³ Syncâ€¦';
+  btn.textContent = '⟳ Sync…';
   try {
     const res = await apiFetch('/api/cfs/sync', { method: 'POST' });
     if (res.synced === 0) {
       showToast(tr('Keine aktiven Slots zum Syncen'), 'info');
     } else {
       const lines = res.updates.map(u =>
-        `${u.key}: ${u.old_g.toFixed(0)}g â†’ ${u.new_g.toFixed(0)}g`
+        `${u.key}: ${u.old_g.toFixed(0)}g → ${u.new_g.toFixed(0)}g`
       ).join('\n');
       showToast(`${res.synced} Spule(n) aktualisiert`, 'success');
       console.info('[Sync]\n' + lines);
@@ -824,7 +824,7 @@ async function syncFromK2() {
     showToast(`${tr('Sync fehlgeschlagen')}: ${e.message}`, 'error');
   } finally {
     btn.disabled = false;
-    btn.textContent = `âŸ³ ${tr('Sync mit K2')}`;
+    btn.textContent = `⟳ ${tr('Sync mit K2')}`;
   }
 }
 
@@ -850,10 +850,10 @@ function renderK2SyncMeta() {
 }
 
 async function removeFromSlot(slotNum) {
-  if (!confirm(`Spule aus Slot ${slotNum} entfernen und ins Lager zurÃ¼cklegen?`)) return;
+  if (!confirm(`Spule aus Slot ${slotNum} entfernen und ins Lager zurücklegen?`)) return;
   try {
     await apiFetch(`/api/cfs/slot/${slotNum}/remove`, { method: 'POST' });
-    showToast('Spule ins Lager zurÃ¼ckgelegt', 'success');
+    showToast('Spule ins Lager zurückgelegt', 'success');
     await Promise.all([loadCFS(), loadSpools()]);
   } catch (e) {
     showToast(e.message, 'error');
@@ -862,10 +862,10 @@ async function removeFromSlot(slotNum) {
 
 async function deleteSpool(id) {
   const s = state.spools.find(x => x.id === id);
-  if (!confirm(`Spule "${s?.material || id}" unwiderruflich lÃ¶schen?`)) return;
+  if (!confirm(`Spule "${s?.material || id}" unwiderruflich löschen?`)) return;
   try {
     await apiFetch(`/api/spools/${id}`, { method: 'DELETE' });
-    showToast('Spule gelÃ¶scht', 'success');
+    showToast('Spule gelöscht', 'success');
     await loadSpools();
   } catch (e) {
     showToast(e.message, 'error');
@@ -886,7 +886,7 @@ async function markEmpty(id) {
   }
 }
 
-// â”€â”€ Modal: Add Spool â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Modal: Add Spool ──────────────────────────────────────────────────────
 let _addSpoolFormSetup = false;
 let _labelScanStream = null;
 const OCR_FALLBACK_BRANDS = ['JAYO', 'Geeetech', 'Creality', 'Bambu Lab', 'Sunlu', 'eSUN', 'Anycubic'];
@@ -927,7 +927,7 @@ function stopLabelScanStream() {
 
 function openAddSpoolModal() {
   _addSpoolFormSetup = false;
-  openModal('Neue Spule hinzufÃ¼gen', buildAddSpoolForm());
+  openModal('Neue Spule hinzufügen', buildAddSpoolForm());
   if (!_addSpoolFormSetup) {
     _addSpoolFormSetup = true;
     setupAddSpoolForm();
@@ -1515,7 +1515,7 @@ function renderOCRReview(data) {
       const score = typeof entry.confidence === 'number'
         ? `${Math.round(entry.confidence * 100)}%`
         : 'n/a';
-      const value = entry.accepted_value ?? (Array.isArray(entry.candidates) && entry.candidates.length ? entry.candidates[0] : 'â€”');
+      const value = entry.accepted_value ?? (Array.isArray(entry.candidates) && entry.candidates.length ? entry.candidates[0] : '—');
       const lineHint = entry.source_text || '';
       return `
         <div class="ocr-review-row">
@@ -1530,7 +1530,7 @@ function renderOCRReview(data) {
   panel.classList.remove('ocr-review-empty');
   panel.innerHTML = `
     <div class="ocr-review-title">OCR Review</div>
-    <div class="ocr-review-meta">Quelle: ${esc(providerUsed)} Â· Kette: ${esc(providerChain)} Â· Cloud: ${esc(cloudUsed)}</div>
+    <div class="ocr-review-meta">Quelle: ${esc(providerUsed)} · Kette: ${esc(providerChain)} · Cloud: ${esc(cloudUsed)}</div>
     <div class="ocr-review-grid">${rows.join('')}</div>
   `;
 }
@@ -1592,7 +1592,7 @@ function fillFormFromOCR(data) {
 function openEditModal(id) {
   const s = state.spools.find(x => x.id === id);
   if (!s) return;
-  openModal(`Spule bearbeiten Â· #${id}`, buildEditForm(s));
+  openModal(`Spule bearbeiten · #${id}`, buildEditForm(s));
   document.getElementById('editSpoolForm').addEventListener('submit', async e => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -1679,15 +1679,15 @@ function buildEditForm(s) {
         <div class="form-section-title">Temperatur</div>
 
         <div class="form-group">
-          <label class="form-label">DÃ¼se min (Â°C)</label>
+          <label class="form-label">Düse min (°C)</label>
           <input class="form-input" type="number" name="nozzle_min" value="${s.nozzle_min}">
         </div>
         <div class="form-group">
-          <label class="form-label">DÃ¼se max (Â°C)</label>
+          <label class="form-label">Düse max (°C)</label>
           <input class="form-input" type="number" name="nozzle_max" value="${s.nozzle_max}">
         </div>
         <div class="form-group">
-          <label class="form-label">Bett (Â°C)</label>
+          <label class="form-label">Bett (°C)</label>
           <input class="form-input" type="number" name="bed_temp" value="${s.bed_temp}">
         </div>
 
@@ -1698,7 +1698,7 @@ function buildEditForm(s) {
           <input class="form-input" type="number" name="diameter" value="${s.diameter}" step="0.01">
         </div>
         <div class="form-group">
-          <label class="form-label">Dichte (g/cmÂ³)</label>
+          <label class="form-label">Dichte (g/cm³)</label>
           <input class="form-input" type="number" name="density" value="${s.density}" step="0.01">
         </div>
         <div class="form-group span2">
@@ -1713,37 +1713,37 @@ function buildEditForm(s) {
     </form>`;
 }
 
-// â”€â”€ Modal: Assign spool to slot (from CFS view) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Modal: Assign spool to slot (from CFS view) ────────────────────────────
 function openAssignModal(slotNum) {
   const key = `T1${'ABCD'[slotNum - 1]}`;
   const available = state.spools.filter(s => s.status === 'lager');
 
-  openModal(`Spule einlegen Â· Slot ${key}`, buildAssignList(slotNum, key, available));
+  openModal(`Spule einlegen · Slot ${key}`, buildAssignList(slotNum, key, available));
 }
 
 function buildAssignList(slotNum, key, spools) {
   if (!spools.length) {
-    return `<div class="empty-state"><div class="empty-state-icon">ðŸ“¦</div>Keine Spulen im Lager<br><br>
-      <button class="btn btn-primary btn-sm" id="btnOpenAddFromAssign">+ Neue Spule hinzufÃ¼gen</button></div>`;
+    return `<div class="empty-state"><div class="empty-state-icon">📦</div>Keine Spulen im Lager<br><br>
+      <button class="btn btn-primary btn-sm" id="btnOpenAddFromAssign">+ Neue Spule hinzufügen</button></div>`;
   }
   return `
     <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:14px">
-      Spule auswÃ¤hlen, die in Slot <strong style="color:var(--text)">${key}</strong> eingelegt werden soll:
+      Spule auswählen, die in Slot <strong style="color:var(--text)">${key}</strong> eingelegt werden soll:
     </p>
     <div class="assign-spool-list">
       ${spools.map(s => `
         <div class="assign-spool-item" data-id="${s.id}" data-slot="${slotNum}">
           <div class="assign-spool-dot" style="background:${s.color}"></div>
           <div class="assign-spool-info">
-            <div class="assign-spool-name">${esc(s.material)}${s.brand ? ' Â· ' + esc(s.brand) : ''}</div>
-            <div class="assign-spool-sub">${s.name || ''} ${s.nozzle_min}â€“${s.nozzle_max}Â°C</div>
+            <div class="assign-spool-name">${esc(s.material)}${s.brand ? ' · ' + esc(s.brand) : ''}</div>
+            <div class="assign-spool-sub">${s.name || ''} ${s.nozzle_min}–${s.nozzle_max}°C</div>
           </div>
           <div class="assign-spool-weight">${s.remaining_weight.toFixed(0)} g</div>
         </div>`).join('')}
     </div>`;
 }
 
-// â”€â”€ Modal: Assign spool to slot (from Lager view) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Modal: Assign spool to slot (from Lager view) ──────────────────────────
 function openAssignSpoolModal(spoolId) {
   const s = state.spools.find(x => x.id === spoolId);
   if (!s) return;
@@ -1758,7 +1758,7 @@ function openAssignSpoolModal(spoolId) {
   }
 
   openModal(`Spule einlegen: ${s.material}`, `
-    <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:16px">Slot auswÃ¤hlen:</p>
+    <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:16px">Slot auswählen:</p>
     <div class="k2-slot-selector" style="justify-content:center">
       ${freeSlots.map(n => `
         <button class="slot-btn btn-slot-pick" data-slot="${n}" data-spool="${spoolId}">
@@ -1787,7 +1787,7 @@ function openAssignSpoolModal(spoolId) {
   });
 }
 
-// â”€â”€ Modal helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Modal helpers ──────────────────────────────────────────────────────────
 let _modalBodyHandler = null;
 
 function openModal(title, body) {
@@ -1836,9 +1836,9 @@ function closeModal() {
   document.getElementById('modalBody').innerHTML = '';
 }
 
-// â”€â”€ Toast â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Toast ──────────────────────────────────────────────────────────────────
 function showToast(msg, type = 'info') {
-  const icon = { success: 'âœ“', error: 'âš ', info: 'i' }[type] || 'i';
+  const icon = { success: '✓', error: '⚠', info: 'i' }[type] || 'i';
   const el = document.createElement('div');
   el.className = `toast ${type}`;
   el.innerHTML = `<span class="toast-icon">${icon}</span><span>${esc(msg)}</span>`;
@@ -1850,7 +1850,7 @@ function showToast(msg, type = 'info') {
   }, 3500);
 }
 
-// â”€â”€ Utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Utilities ──────────────────────────────────────────────────────────────
 function esc(str) {
   if (!str) return '';
   return String(str)
@@ -1865,8 +1865,8 @@ function filamentColor(hex) {
 }
 
 function fmtDate(iso) {
-  if (!iso) return 'â€”';
-  // Backend returns naive UTC timestamps â€“ append Z if no offset present
+  if (!iso) return '—';
+  // Backend returns naive UTC timestamps – append Z if no offset present
   const normalized = /[Z+\-]\d*$/.test(iso) ? iso : iso + 'Z';
   const d = new Date(normalized);
   if (isNaN(d)) return iso;
@@ -1886,7 +1886,7 @@ function fmtDuration(start, end) {
 }
 
 function fmtRemainingSeconds(seconds) {
-  if (typeof seconds !== 'number' || !isFinite(seconds) || seconds <= 0) return 'â€”';
+  if (typeof seconds !== 'number' || !isFinite(seconds) || seconds <= 0) return '—';
   const total = Math.round(seconds);
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
@@ -1920,7 +1920,7 @@ function formatPrinterFilenameForStatus(filename) {
 }
 
 function formatRemainingWeight(weight) {
-  if (typeof weight !== 'number' || !isFinite(weight)) return 'â€”';
+  if (typeof weight !== 'number' || !isFinite(weight)) return '—';
   return `${weight.toFixed(0)} g`;
 }
 

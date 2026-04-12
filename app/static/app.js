@@ -947,10 +947,15 @@ function buildAddSpoolForm() {
             <div class="spool-source-actions">
               <button class="btn btn-ghost btn-sm" id="btnReadFromK2" type="button" disabled>Von CFS lesen</button>
             </div>
+            <span id="k2ReadStatus" class="spool-read-status"></span>
           </div>
 
           <div class="k2-read-box spool-source-card spool-source-card-scan">
             <p class="spool-source-title">Etikett scannen</p>
+            <div class="spool-scan-info-wrap">
+              <span id="scanStatusText" class="spool-scan-status">Bereit zum Scannen</span>
+              <span id="scanFileName" class="spool-scan-file">Datei: -</span>
+            </div>
             <div class="spool-source-actions">
               <button class="btn btn-ghost btn-sm" id="btnScanLabel" type="button">Etikett scannen</button>
             </div>
@@ -961,7 +966,6 @@ function buildAddSpoolForm() {
           <input type="file" id="labelImageInput" accept="image/*" style="display:none">
           <canvas id="labelCanvas" style="display:none"></canvas>
         </div>
-        <span id="k2ReadStatus" class="spool-read-status"></span>
       </section>
 
       <form id="addSpoolForm" class="spool-form-panel">
@@ -1106,7 +1110,27 @@ function setupAddSpoolForm() {
   const scanBtn = document.getElementById('btnScanLabel');
   const fallbackPanel = document.getElementById('ocrFallbackPanel');
   const formPanel = document.getElementById('addSpoolForm');
+  const cfsStatusEl = document.getElementById('k2ReadStatus');
+  const scanStatusEl = document.getElementById('scanStatusText');
+  const scanFileEl = document.getElementById('scanFileName');
   let scanStatusTimer = null;
+
+  const setScanStatus = (text, tone = 'muted') => {
+    if (!scanStatusEl) return;
+    scanStatusEl.textContent = text;
+    const colorMap = {
+      muted: 'var(--text-muted)',
+      mid: 'var(--text-mid)',
+      success: 'var(--accent)',
+      warn: 'var(--warn)',
+    };
+    scanStatusEl.style.color = colorMap[tone] || colorMap.muted;
+  };
+
+  const setScanFileName = (name) => {
+    if (!scanFileEl) return;
+    scanFileEl.textContent = `Datei: ${name || '-'}`;
+  };
 
   const stopScanStatusTicker = () => {
     if (scanStatusTimer) {
@@ -1115,13 +1139,11 @@ function setupAddSpoolForm() {
     }
   };
 
-  const startScanStatusTicker = (statusEl) => {
+  const startScanStatusTicker = () => {
     stopScanStatusTicker();
-    statusEl.textContent = 'Bild wird analysiert...';
-    statusEl.style.color = 'var(--text-muted)';
+    setScanStatus('Bild wird analysiert...', 'muted');
     scanStatusTimer = setTimeout(() => {
-      statusEl.textContent = 'Zusaetzliche Erkennung wird geprueft...';
-      statusEl.style.color = 'var(--text-mid)';
+      setScanStatus('Zusaetzliche Erkennung wird geprueft...', 'mid');
     }, 3500);
   };
 
@@ -1313,7 +1335,7 @@ function setupAddSpoolForm() {
     });
   };
 
-  const applyOCRResult = (data, statusEl) => {
+  const applyOCRResult = (data) => {
     stopScanStatusTicker();
     fillFormFromOCR(data);
     renderOCRReview(data);
@@ -1322,11 +1344,9 @@ function setupAddSpoolForm() {
     const acceptedCount = Object.values(data?.review || {})
       .filter(entry => entry?.status === 'accepted').length;
     if (acceptedCount === 0) {
-      statusEl.textContent = 'Scan abgeschlossen. Bitte Felder manuell pruefen.';
-      statusEl.style.color = 'var(--text-mid)';
+      setScanStatus('Scan abgeschlossen. Bitte Felder manuell pruefen.', 'mid');
     } else {
-      statusEl.textContent = `Scan abgeschlossen. ${acceptedCount} Felder wurden automatisch uebernommen.`;
-      statusEl.style.color = 'var(--accent)';
+      setScanStatus(`Scan abgeschlossen. ${acceptedCount} Felder wurden automatisch uebernommen.`, 'success');
     }
     hasAutoDetectedData = acceptedCount > 0;
     maybeEmitReadyMetrics('ocr');
@@ -1351,20 +1371,26 @@ function setupAddSpoolForm() {
 
   document.getElementById('btnReadFromK2').addEventListener('click', async () => {
     if (!selectedSlot) return;
-    const statusEl = document.getElementById('k2ReadStatus');
-    statusEl.textContent = 'Lese...';
+    if (cfsStatusEl) {
+      cfsStatusEl.textContent = 'Lese...';
+      cfsStatusEl.style.color = 'var(--text-muted)';
+    }
     try {
       const data = await apiFetch(`/api/cfs/slot/${selectedSlot}/read`);
       fillFormFromK2(data);
       refreshDetectedStrip();
       loadedFromCfs = true;
       hasAutoDetectedData = true;
-      statusEl.textContent = 'OK Daten geladen';
-      statusEl.style.color = 'var(--accent)';
+      if (cfsStatusEl) {
+        cfsStatusEl.textContent = 'OK Daten geladen';
+        cfsStatusEl.style.color = 'var(--accent)';
+      }
     } catch (e) {
       loadedFromCfs = false;
-      statusEl.textContent = 'Fehler: ' + e.message;
-      statusEl.style.color = 'var(--warn)';
+      if (cfsStatusEl) {
+        cfsStatusEl.textContent = 'Fehler: ' + e.message;
+        cfsStatusEl.style.color = 'var(--warn)';
+      }
     }
   });
 
@@ -1390,24 +1416,22 @@ function setupAddSpoolForm() {
         canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video, 0, 0);
         stopLabelScanStream();
-        const statusEl = document.getElementById('k2ReadStatus');
-        startScanStatusTicker(statusEl);
+        setScanFileName('Kameraaufnahme');
+        startScanStatusTicker();
         setScanBusy(true);
         canvas.toBlob(async (blob) => {
           if (!blob) {
             stopScanStatusTicker();
-            statusEl.textContent = 'Fehler: Bild konnte nicht verarbeitet werden';
-            statusEl.style.color = 'var(--warn)';
+            setScanStatus('Fehler: Bild konnte nicht verarbeitet werden', 'warn');
             setScanBusy(false);
             return;
           }
           try {
             const data = await uploadLabelImage(blob);
-            applyOCRResult(data, statusEl);
+            applyOCRResult(data);
           } catch (err) {
             stopScanStatusTicker();
-            statusEl.textContent = 'OCR konnte nicht abgeschlossen werden. Bitte anderes Foto versuchen.';
-            statusEl.style.color = 'var(--warn)';
+            setScanStatus('OCR konnte nicht abgeschlossen werden. Bitte anderes Foto versuchen.', 'warn');
           } finally {
             setScanBusy(false);
           }
@@ -1427,16 +1451,15 @@ function setupAddSpoolForm() {
     modalClicks = 0;
     fallbackUsed = false;
     readyMetricsSent = false;
-    const statusEl = document.getElementById('k2ReadStatus');
-    startScanStatusTicker(statusEl);
+    setScanFileName(file.name);
+    startScanStatusTicker();
     setScanBusy(true);
     try {
       const data = await uploadLabelImage(file);
-      applyOCRResult(data, statusEl);
+      applyOCRResult(data);
     } catch (err) {
       stopScanStatusTicker();
-      statusEl.textContent = 'OCR konnte nicht abgeschlossen werden. Bitte anderes Foto versuchen.';
-      statusEl.style.color = 'var(--warn)';
+      setScanStatus('OCR konnte nicht abgeschlossen werden. Bitte anderes Foto versuchen.', 'warn');
     } finally {
       setScanBusy(false);
       e.target.value = '';
@@ -1597,7 +1620,9 @@ function fillFormFromOCR(data) {
   const nozzleMax = getAccepted('nozzle_max');
   const diameter = getAccepted('diameter_mm');
   const material = getAccepted('material');
-  const color = getAccepted('color_hex');
+  const colorHex = getAccepted('color_hex');
+  const colorName = getAccepted('color_name');
+  const color = colorHex || (colorName ? OCR_FALLBACK_COLOR_BY_NAME[String(colorName).toLowerCase()] : null);
   const brand = getAccepted('brand');
 
   if (material) {

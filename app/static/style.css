@@ -813,9 +813,9 @@ body {
 }
 
 .spool-source-card {
-  min-height: 116px;
-  display: grid;
-  align-content: start;
+  min-height: 176px;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 .spool-source-title {
@@ -879,6 +879,7 @@ body {
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
+  margin-top: auto;
 }
 
 .spool-source-actions .btn {
@@ -902,8 +903,36 @@ body {
 .spool-read-status {
   font-size: 0.72rem;
   color: var(--text-muted);
-  margin-top: 8px;
+  margin-top: 6px;
   display: block;
+}
+
+.spool-source-card-scan .spool-source-actions {
+  margin-top: 0;
+}
+
+.spool-scan-info-wrap {
+  flex: 1 1 auto;
+  min-height: 48px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+  gap: 3px;
+}
+
+.spool-scan-status {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.spool-scan-file {
+  font-size: 0.7rem;
+  color: var(--text-mid);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .spool-detected-strip {

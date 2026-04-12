@@ -55,6 +55,9 @@ Reads live slot values from K2 via SSH.
 
 ### `POST /api/cfs/sync`
 Updates active spool weights from live remain-length values.
+Response includes:
+- `synced` and `updates` for weight updates
+- `removed_count` and `removed` for active slots automatically moved back to storage when K2 reports `loaded=false`
 
 ### `GET /api/cfs/slot/{slot_num}/read`
 Reads one live slot from K2 (`slot_num` in `1..4`).

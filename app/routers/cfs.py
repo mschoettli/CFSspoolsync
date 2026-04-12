@@ -57,11 +57,29 @@ async def sync_from_k2(db: Session = Depends(get_db)):
     }
 
     updated = []
+    removed = []
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
     for slot_num, slot_data in slots.items():
-        if not slot_data or not slot_data.get("loaded"):
+        if slot_data is None:
             continue
 
         spool = active_spools.get(slot_num)
+        if not slot_data.get("loaded"):
+            if spool:
+                spool.cfs_slot = None
+                spool.status = "lager"
+                spool.updated_at = now
+                removed.append(
+                    {
+                        "slot": slot_num,
+                        "spool_id": spool.id,
+                        "old_status": "aktiv",
+                        "new_status": "lager",
+                    }
+                )
+            continue
+
         if not spool:
             continue
 
@@ -73,7 +91,7 @@ async def sync_from_k2(db: Session = Depends(get_db)):
         )
         old_weight = spool.remaining_weight
         spool.remaining_weight = new_weight
-        spool.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        spool.updated_at = now
         updated.append(
             {
                 "slot": slot_num,
@@ -85,7 +103,12 @@ async def sync_from_k2(db: Session = Depends(get_db)):
         )
 
     db.commit()
-    return {"synced": len(updated), "updates": updated}
+    return {
+        "synced": len(updated),
+        "updates": updated,
+        "removed_count": len(removed),
+        "removed": removed,
+    }
 
 
 @router.get("/slot/{slot_num}/read")

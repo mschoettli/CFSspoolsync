@@ -921,14 +921,21 @@ async function syncFromK2() {
   btn.textContent = '⟳ Sync…';
   try {
     const res = await apiFetch('/api/cfs/sync', { method: 'POST' });
-    if (res.synced === 0) {
+    const syncedCount = Number(res.synced || 0);
+    const removedCount = Number(res.removed_count || 0);
+    if (syncedCount === 0 && removedCount === 0) {
       showToast(tr('Keine aktiven Slots zum Syncen'), 'info');
     } else {
       const lines = res.updates.map(u =>
         `${u.key}: ${u.old_g.toFixed(0)}g → ${u.new_g.toFixed(0)}g`
       ).join('\n');
-      showToast(`${res.synced} Spule(n) aktualisiert`, 'success');
-      console.info('[Sync]\n' + lines);
+      const parts = [];
+      if (syncedCount > 0) parts.push(`${syncedCount} Spule(n) aktualisiert`);
+      if (removedCount > 0) parts.push(`${removedCount} leere Slot-Zuordnung(en) bereinigt`);
+      showToast(parts.join(' · '), 'success');
+      if (lines) {
+        console.info('[Sync]\n' + lines);
+      }
     }
     state.lastSyncAt = new Date().toISOString();
     state.lastSyncStatus = 'ok';

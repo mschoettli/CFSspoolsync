@@ -1898,7 +1898,6 @@ function fillFormFromOCR(data) {
   }
   if (typeof weightValue === 'number' && weightValue > 0) {
     set('initial_weight', weightValue);
-    set('remaining_weight', weightValue);
   }
 }
 

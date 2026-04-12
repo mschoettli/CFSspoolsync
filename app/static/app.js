@@ -282,9 +282,6 @@ function setupNav() {
 
 function setupModalClose() {
   document.getElementById('modalClose').addEventListener('click', closeModal);
-  document.getElementById('modalOverlay').addEventListener('click', e => {
-    if (e.target === document.getElementById('modalOverlay')) closeModal();
-  });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 }
 

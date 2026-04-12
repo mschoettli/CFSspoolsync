@@ -1042,6 +1042,63 @@ const OCR_FALLBACK_COLOR_BY_NAME = OCR_FALLBACK_COLORS.reduce((acc, item) => {
 OCR_FALLBACK_COLOR_BY_NAME.grey = '#888888';
 OCR_FALLBACK_COLOR_BY_NAME.wood = '#8B4513';
 
+function normalizeColorHex(value) {
+  if (!value) return null;
+  let hex = String(value).trim().replace(/^#/u, '');
+  if (/^[0-9a-f]{7}$/iu.test(hex) && hex[0] === '0') {
+    hex = hex.slice(1);
+  }
+  if (/^[0-9a-f]{3}$/iu.test(hex)) {
+    hex = hex.split('').map(ch => ch + ch).join('');
+  }
+  if (!/^[0-9a-f]{6}$/iu.test(hex)) return null;
+  return `#${hex.toUpperCase()}`;
+}
+
+function hexToRgb(hex) {
+  const normalized = normalizeColorHex(hex);
+  if (!normalized) return null;
+  return {
+    r: Number.parseInt(normalized.slice(1, 3), 16),
+    g: Number.parseInt(normalized.slice(3, 5), 16),
+    b: Number.parseInt(normalized.slice(5, 7), 16),
+  };
+}
+
+function mapColorToPresetHex(value) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  const byName = OCR_FALLBACK_COLOR_BY_NAME[raw.toLowerCase()];
+  if (byName) return byName;
+
+  const normalizedHex = normalizeColorHex(raw);
+  if (!normalizedHex) return null;
+
+  const exact = OCR_FALLBACK_COLORS.find(
+    item => String(item.hex).toLowerCase() === normalizedHex.toLowerCase(),
+  );
+  if (exact) return exact.hex;
+
+  const target = hexToRgb(normalizedHex);
+  if (!target) return null;
+
+  let nearest = OCR_FALLBACK_COLORS[0]?.hex || null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const item of OCR_FALLBACK_COLORS) {
+    const rgb = hexToRgb(item.hex);
+    if (!rgb) continue;
+    const distance =
+      (target.r - rgb.r) ** 2 +
+      (target.g - rgb.g) ** 2 +
+      (target.b - rgb.b) ** 2;
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearest = item.hex;
+    }
+  }
+  return nearest;
+}
+
 function stopLabelScanStream() {
   if (_labelScanStream) {
     _labelScanStream.getTracks().forEach(track => track.stop());
@@ -1201,6 +1258,12 @@ function buildAddSpoolForm() {
               <label class="form-label">Verbleibend (g)</label>
               <input class="form-input" type="number" name="remaining_weight" min="0" step="0.1" placeholder="Leer = Anfangsgewicht">
             </div>
+          </div>
+        </div>
+
+        <details class="spool-form-card">
+          <summary>Kalibrierung (optional)</summary>
+          <div class="form-grid spool-form-grid spool-form-grid-weights">
             <div class="form-group">
               <label class="form-label">Bruttogewicht (g)</label>
               <input class="form-input" type="number" name="gross_weight_g" min="1" step="0.1" placeholder="optional, z.B. 338">
@@ -1210,7 +1273,7 @@ function buildAddSpoolForm() {
               <input class="form-input" type="number" name="tare_weight_g" min="0" step="0.1" placeholder="optional, z.B. 175">
             </div>
           </div>
-        </div>
+        </details>
 
         <details class="spool-form-card" open>
           <summary>Temperatur</summary>
@@ -1401,12 +1464,19 @@ function setupAddSpoolForm() {
     };
 
     const syncColorControlsFromValue = (updateText = false) => {
-      const current = String(colorInput.value || '').toLowerCase();
-      const matched = OCR_FALLBACK_COLORS.find(item => String(item.hex || '').toLowerCase() === current);
-      colorSelect.value = matched ? matched.hex : '';
+      const current = String(colorInput.value || '').trim();
+      const presetHex = mapColorToPresetHex(current);
+      colorSelect.value = presetHex || '';
+      if (presetHex && colorInput.value !== presetHex) {
+        colorInput.value = presetHex;
+      }
       if (colorSwatch) {
-        colorSwatch.style.background = current || 'transparent';
-        colorSwatch.classList.toggle('is-empty', !current);
+        const swatchColor = presetHex || normalizeColorHex(current) || '';
+        colorSwatch.style.background = swatchColor || 'transparent';
+        colorSwatch.classList.toggle('is-empty', !swatchColor);
+      }
+      if (fallbackColorSelect) {
+        fallbackColorSelect.value = presetHex || '';
       }
     };
 
@@ -1434,9 +1504,6 @@ function setupAddSpoolForm() {
 
     colorInput.addEventListener('input', () => {
       syncColorControlsFromValue(true);
-      if (fallbackColorSelect) {
-        fallbackColorSelect.value = colorSelect.value || '';
-      }
       refreshDetectedStrip();
     });
 
@@ -1469,7 +1536,7 @@ function setupAddSpoolForm() {
     });
     pushSuggestionChips('ocrSuggestColor', suggestions.color || [], (value) => {
       if (!colorSelect) return;
-      const mapped = OCR_FALLBACK_COLOR_BY_NAME[String(value || '').toLowerCase()];
+      const mapped = mapColorToPresetHex(value);
       if (mapped) {
         colorSelect.value = mapped;
         colorSelect.dispatchEvent(new Event('change'));
@@ -1808,7 +1875,7 @@ function fillFormFromOCR(data) {
   const material = getAccepted('material');
   const colorHex = getAccepted('color_hex') || getReviewValue('color_hex');
   const colorName = getAccepted('color_name') || getReviewValue('color_name');
-  const color = colorHex || (colorName ? OCR_FALLBACK_COLOR_BY_NAME[String(colorName).toLowerCase()] : null);
+  const color = mapColorToPresetHex(colorHex || colorName);
   const brand = getAccepted('brand');
 
   if (material) {

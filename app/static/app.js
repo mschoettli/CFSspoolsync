@@ -984,24 +984,15 @@ async function removeFromSlot(slotNum) {
 }
 
 function openDeleteSpoolModal(id) {
-  const spool = state.spools.find(x => x.id === id);
-  const label = spool
-    ? `${spool.material}${spool.brand ? ` · ${spool.brand}` : ''}`
-    : `#${id}`;
   const body = `
-    <div class="confirm-modal">
-      <div class="confirm-modal-head">Spule wirklich löschen?</div>
-      <p class="confirm-modal-copy">
-        Die Spule <strong>${esc(label)}</strong> wird dauerhaft entfernt.
-      </p>
-      <p class="confirm-modal-hint">Dieser Schritt kann nicht rueckgaengig gemacht werden.</p>
+    <div class="confirm-modal confirm-modal-compact">
       <div class="confirm-modal-actions">
         <button type="button" class="btn btn-ghost" data-action="cancel-delete-spool">Abbrechen</button>
-        <button type="button" class="btn btn-danger" data-action="confirm-delete-spool" data-id="${id}">Loeschen</button>
+        <button type="button" class="btn btn-danger" data-action="confirm-delete-spool" data-id="${id}">Löschen</button>
       </div>
     </div>
   `;
-  openModal('Spule löschen', body);
+  openModal('Spule wirklich löschen?', body, { className: 'modal-compact' });
 }
 
 async function deleteSpool(id) {
@@ -2104,9 +2095,16 @@ function openAssignSpoolModal(spoolId) {
 // ── Modal helpers ──────────────────────────────────────────────────────────
 let _modalBodyHandler = null;
 
-function openModal(title, body) {
+function openModal(title, body, options = {}) {
   document.getElementById('modalTitle').textContent = title;
   const modalBody = document.getElementById('modalBody');
+  const modal = document.querySelector('#modalOverlay .modal');
+  if (modal) {
+    modal.classList.remove('modal-compact');
+    if (options.className) {
+      modal.classList.add(options.className);
+    }
+  }
   modalBody.innerHTML = body;
   document.getElementById('modalOverlay').classList.remove('hidden');
 
@@ -2164,6 +2162,10 @@ function closeModal() {
   stopLabelScanStream();
   document.getElementById('modalOverlay').classList.add('hidden');
   document.getElementById('modalBody').innerHTML = '';
+  const modal = document.querySelector('#modalOverlay .modal');
+  if (modal) {
+    modal.classList.remove('modal-compact');
+  }
 }
 
 // ── Toast ──────────────────────────────────────────────────────────────────

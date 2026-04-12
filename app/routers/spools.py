@@ -2,6 +2,7 @@
 
 import asyncio
 from datetime import datetime, timezone
+import os
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -21,8 +22,8 @@ from app.services.spool_defaults import get_default_tare_weight_g
 
 router = APIRouter(prefix="/api/spools", tags=["spools"])
 
-MIN_CALIBRATION_FACTOR = 0.25
-MAX_CALIBRATION_FACTOR = 4.0
+MIN_CALIBRATION_FACTOR = float(os.getenv("CALIBRATION_FACTOR_MIN", "0.1"))
+MAX_CALIBRATION_FACTOR = float(os.getenv("CALIBRATION_FACTOR_MAX", "12.0"))
 
 
 @router.get("", response_model=list[SpoolOut])

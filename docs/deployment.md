@@ -66,6 +66,8 @@ Required credentials for cloud fallback:
 | `OCR_DEBUG` | `0` | Adds debug metadata in OCR response. | `1` gives richer diagnostics. | `0` keeps payload leaner. |
 | `OPENAI_MODEL` | `gpt-4.1-mini` | OpenAI model used for provider 1. | Larger model can improve extraction quality but cost/time may rise. | Smaller model can be faster/cheaper but less accurate. |
 | `ANTHROPIC_MODEL` | `claude-3-5-sonnet-latest` | Anthropic model used for provider 2. | Stronger model can improve fallback quality but cost/time may rise. | Smaller model can be faster/cheaper but less accurate. |
+| `CALIBRATION_FACTOR_MIN` | `0.1` | Lower bound for accepted weight calibration factor. | Accepts more aggressive down-scaling of K2 estimate. | Rejects low factors earlier. |
+| `CALIBRATION_FACTOR_MAX` | `12.0` | Upper bound for accepted weight calibration factor. | Accepts stronger correction when K2 estimate is very low. | Rejects high factors earlier. |
 
 ## Option A: Prebuilt image
 

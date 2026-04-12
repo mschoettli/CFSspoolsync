@@ -1254,6 +1254,7 @@ function buildAddSpoolForm() {
             <div class="form-group">
               <label class="form-label">Verbleibend (g)</label>
               <input class="form-input" type="number" name="remaining_weight" min="0" step="0.1" placeholder="Leer = Anfangsgewicht" autocomplete="off">
+              <span class="form-hint">Wird nicht automatisch aus CFS uebernommen</span>
             </div>
           </div>
         </div>
@@ -1301,7 +1302,6 @@ function buildAddSpoolForm() {
 function setupAddSpoolForm() {
   let selectedSlot = null;
   let loadedFromCfs = false;
-  let remainingFromCfs = false;
   let scanInProgress = false;
   let hasAutoDetectedData = false;
   let fallbackUsed = false;
@@ -1547,7 +1547,7 @@ function setupAddSpoolForm() {
   const applyOCRResult = (data) => {
     stopScanStatusTicker();
     fillFormFromOCR(data);
-    if (!remainingFromCfs && !remainingManuallyEdited && remainingInput) {
+    if (!remainingManuallyEdited && remainingInput) {
       remainingInput.value = '';
       remainingInput.dispatchEvent(new Event('input', { bubbles: true }));
     }
@@ -1588,7 +1588,6 @@ function setupAddSpoolForm() {
       btn.classList.add('selected');
       selectedSlot = parseInt(btn.dataset.slot);
       loadedFromCfs = false;
-      remainingFromCfs = false;
       readFromCfsBtn.disabled = scanInProgress ? true : false;
     });
   });
@@ -1604,7 +1603,6 @@ function setupAddSpoolForm() {
       fillFormFromK2(data);
       refreshDetectedStrip();
       loadedFromCfs = true;
-      remainingFromCfs = true;
       remainingManuallyEdited = false;
       hasAutoDetectedData = true;
       if (cfsStatusEl) {
@@ -1797,7 +1795,6 @@ function fillFormFromK2(data) {
   set('nozzle_min', data.nozzle_min);
   set('nozzle_max', data.nozzle_max);
   set('serial_num', data.serial_num);
-  set('remaining_weight', data.remaining_grams);
 }
 
 function confidenceClass(score) {

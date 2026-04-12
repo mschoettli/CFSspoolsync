@@ -841,6 +841,39 @@ body {
 }
 .modal-close:hover { color: var(--text); border-color: var(--line-strong); }
 
+.confirm-modal {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(26, 37, 54, 0.92), rgba(20, 30, 45, 0.96));
+  padding: 16px;
+}
+
+.confirm-modal-head {
+  font-family: var(--font-head);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.confirm-modal-copy {
+  margin: 0 0 8px;
+  color: var(--text-mid);
+  line-height: 1.45;
+}
+
+.confirm-modal-hint {
+  margin: 0 0 14px;
+  color: #d4a7a7;
+  font-size: 0.8rem;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

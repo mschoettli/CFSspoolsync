@@ -615,7 +615,7 @@ function renderSpools() {
   el.querySelectorAll('.btn-edit-spool').forEach(btn =>
     btn.addEventListener('click', () => openEditModal(parseInt(btn.dataset.id))));
   el.querySelectorAll('.btn-delete-spool').forEach(btn =>
-    btn.addEventListener('click', () => deleteSpool(parseInt(btn.dataset.id))));
+    btn.addEventListener('click', () => openDeleteSpoolModal(parseInt(btn.dataset.id))));
   el.querySelectorAll('.btn-mark-empty').forEach(btn =>
     btn.addEventListener('click', () => markEmpty(parseInt(btn.dataset.id))));
 }
@@ -983,12 +983,32 @@ async function removeFromSlot(slotNum) {
   }
 }
 
+function openDeleteSpoolModal(id) {
+  const spool = state.spools.find(x => x.id === id);
+  const label = spool
+    ? `${spool.material}${spool.brand ? ` · ${spool.brand}` : ''}`
+    : `#${id}`;
+  const body = `
+    <div class="confirm-modal">
+      <div class="confirm-modal-head">Spule wirklich löschen?</div>
+      <p class="confirm-modal-copy">
+        Die Spule <strong>${esc(label)}</strong> wird dauerhaft entfernt.
+      </p>
+      <p class="confirm-modal-hint">Dieser Schritt kann nicht rueckgaengig gemacht werden.</p>
+      <div class="confirm-modal-actions">
+        <button type="button" class="btn btn-ghost" data-action="cancel-delete-spool">Abbrechen</button>
+        <button type="button" class="btn btn-danger" data-action="confirm-delete-spool" data-id="${id}">Loeschen</button>
+      </div>
+    </div>
+  `;
+  openModal('Spule löschen', body);
+}
+
 async function deleteSpool(id) {
-  const s = state.spools.find(x => x.id === id);
-  if (!confirm(`Spule "${s?.material || id}" unwiderruflich löschen?`)) return;
   try {
     await apiFetch(`/api/spools/${id}`, { method: 'DELETE' });
     showToast('Spule gelöscht', 'success');
+    closeModal();
     await loadSpools();
   } catch (e) {
     showToast(e.message, 'error');
@@ -2078,6 +2098,22 @@ function openModal(title, body) {
   }
 
   _modalBodyHandler = async e => {
+    const cancelDeleteBtn = e.target.closest('[data-action="cancel-delete-spool"]');
+    if (cancelDeleteBtn) {
+      closeModal();
+      return;
+    }
+
+    const confirmDeleteBtn = e.target.closest('[data-action="confirm-delete-spool"]');
+    if (confirmDeleteBtn) {
+      if (confirmDeleteBtn.dataset.loading) return;
+      confirmDeleteBtn.dataset.loading = '1';
+      confirmDeleteBtn.disabled = true;
+      const spoolId = Number(confirmDeleteBtn.dataset.id);
+      await deleteSpool(spoolId);
+      return;
+    }
+
     const item = e.target.closest('.assign-spool-item');
     if (item) {
       if (item.dataset.loading) return;

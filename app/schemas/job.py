@@ -22,5 +22,6 @@ class JobOut(BaseModel):
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
     status: str
+    duration_seconds: Optional[float]
     total_consumed_g: float
     slots: dict[str, JobSlotOut]

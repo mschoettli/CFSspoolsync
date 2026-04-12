@@ -80,6 +80,10 @@ Response keys:
 - `bed_temp`
 - `bed_target`
 - `remaining_seconds`
+- `current_layer`
+- `total_layer`
+- `print_duration_seconds`
+- `estimated_finish_at`
 - `cfs_temp`
 - `cfs_humidity`
 
@@ -87,6 +91,8 @@ Response keys:
 
 ### `GET /api/jobs?limit=30`
 Returns recent jobs with per-slot before/after values and total consumed grams.
+Also includes:
+- `duration_seconds` (`null` for running jobs, numeric for finished/cancelled/error)
 
 ## App Config
 
@@ -97,6 +103,7 @@ Response keys:
 - `timezone`
 - `language` (`de|en|fr|it`)
 - `datetime_locale` (`de-DE|en-US|fr-FR|it-IT`)
+- `camera_stream_url`
 
 ## OCR
 

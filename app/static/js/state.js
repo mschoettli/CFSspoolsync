@@ -6,6 +6,7 @@ export const state = {
   spools: [],
   jobs: [],
   printer: {},
+  cameraStreamUrl: "",
   filterStatus: "",
   jobsStatusFilter: "",
   jobsSortBy: "recent",

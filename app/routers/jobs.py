@@ -35,6 +35,17 @@ def list_jobs(limit: int = Query(30, le=100), db: Session = Depends(get_db)):
             if before is not None and after is not None:
                 consumed += before - after
 
+        duration_seconds = None
+        if (
+            job.status in {"finished", "cancelled", "error"}
+            and job.started_at is not None
+            and job.finished_at is not None
+        ):
+            duration_seconds = round(
+                max(0.0, (job.finished_at - job.started_at).total_seconds()),
+                1,
+            )
+
         result.append(
             {
                 "id": job.id,
@@ -42,6 +53,7 @@ def list_jobs(limit: int = Query(30, le=100), db: Session = Depends(get_db)):
                 "started_at": job.started_at,
                 "finished_at": job.finished_at,
                 "status": job.status,
+                "duration_seconds": duration_seconds,
                 "total_consumed_g": round(consumed, 1),
                 "slots": {
                     letter: {

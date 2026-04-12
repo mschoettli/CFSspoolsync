@@ -1,6 +1,7 @@
 """HTTP routes for printer telemetry."""
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter
 
@@ -95,6 +96,13 @@ async def printer_status():
 
     cfs_temp = _pick_env_metric(status, "temperature")
     cfs_humidity = _pick_env_metric(status, "humidity")
+    layer_info = print_stats.get("info", {}) or {}
+    current_layer = layer_info.get("current_layer")
+    total_layer = layer_info.get("total_layer")
+    estimated_finish_at = None
+    if remaining_seconds is not None:
+        finish_ts = datetime.now(timezone.utc) + timedelta(seconds=remaining_seconds)
+        estimated_finish_at = finish_ts.isoformat()
 
     if cfs_temp is None or cfs_humidity is None:
         box_env = await asyncio.to_thread(ssh_client.get_box_environment)
@@ -104,6 +112,9 @@ async def printer_status():
         if cfs_humidity is None:
             humidity = _to_float(box_env.get("humidity"))
             cfs_humidity = round(humidity, 1) if humidity is not None else None
+
+    current_layer_val = _to_float(current_layer)
+    total_layer_val = _to_float(total_layer)
 
     return {
         "reachable": bool(status),
@@ -115,6 +126,10 @@ async def printer_status():
         "bed_temp": round(bed.get("temperature", 0), 1),
         "bed_target": round(bed.get("target", 0), 1),
         "remaining_seconds": remaining_seconds,
+        "current_layer": int(current_layer_val) if current_layer_val is not None else None,
+        "total_layer": int(total_layer_val) if total_layer_val is not None else None,
+        "print_duration_seconds": round(elapsed_seconds, 1),
+        "estimated_finish_at": estimated_finish_at,
         "cfs_temp": cfs_temp,
         "cfs_humidity": cfs_humidity,
     }

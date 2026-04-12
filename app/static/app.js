@@ -1,4 +1,4 @@
-/* ── CFS Filament Tracker – Frontend App ──────────────────────────────────── */
+﻿/* ── CFS Filament Tracker – Frontend App ──────────────────────────────────── */
 
 import { apiFetch, uploadLabelImage } from '/js/api.js';
 import { startPolling } from '/js/polling.js';
@@ -11,6 +11,7 @@ let appConfig = {
   timezone: 'UTC',
   language: 'en',
   datetime_locale: 'en-US',
+  camera_stream_url: '',
 };
 let localizationObserver = null;
 
@@ -88,6 +89,20 @@ const I18N = {
     'Gespeichert': 'Saved',
     'Neueste zuerst': 'Newest first',
     'Meiste Verbrauch': 'Highest consumption',
+    'Kamera': 'Camera',
+    'Kein Kamerastream konfiguriert': 'No camera stream configured',
+    'Kamerastream': 'Camera stream',
+    'Kamerastream nicht erreichbar': 'Camera stream unreachable',
+    'Aktiver Job': 'Active job',
+    'Kein aktiver Druckjob': 'No active print job',
+    'Datei': 'File',
+    'Fortschritt': 'Progress',
+    'Layer': 'Layer',
+    'Druckzeit': 'Print time',
+    'Restzeit': 'Remaining time',
+    'Fertig um': 'Finish at',
+    'Bett': 'Bed',
+    'Erledigte Jobs': 'Completed jobs',
   },
   fr: {
     'Lager': 'Stock',
@@ -135,8 +150,14 @@ async function loadAppConfig() {
       appConfig = cfg;
     }
   } catch {
-    appConfig = { timezone: 'UTC', language: 'en', datetime_locale: 'en-US' };
+    appConfig = {
+      timezone: 'UTC',
+      language: 'en',
+      datetime_locale: 'en-US',
+      camera_stream_url: '',
+    };
   }
+  state.cameraStreamUrl = appConfig.camera_stream_url || '';
   document.documentElement.lang = appConfig.language;
 }
 
@@ -428,12 +449,14 @@ function renderJobsSkeleton() {
   if (!el) return;
   lastJobsMarkup = null;
   el.innerHTML = `
-    <div class="jobs-list">
-      ${Array.from({ length: 4 }).map(() => `
-        <article class="job-card skeleton">
-          <div style="height:92px"></div>
-        </article>
-      `).join('')}
+    <div class="jobs-layout">
+      <section class="jobs-top-grid">
+        <article class="jobs-panel skeleton"><div style="height:220px"></div></article>
+        <article class="jobs-panel skeleton"><div style="height:220px"></div></article>
+      </section>
+      <section class="jobs-completed-panel skeleton">
+        <div style="height:160px"></div>
+      </section>
     </div>
   `;
 }
@@ -733,69 +756,162 @@ function renderSpoolCard(s) {
 // ── Render: Jobs ───────────────────────────────────────────────────────────
 function renderJobs() {
   const el = document.getElementById('jobsList');
-  let list = [...state.jobs];
+  if (!el) return;
+
+  const runningJob = getRunningJob();
+  let completed = state.jobs.filter(job => job.status === 'finished');
   if (state.jobsStatusFilter) {
-    list = list.filter(job => job.status === state.jobsStatusFilter);
+    completed = completed.filter(job => job.status === state.jobsStatusFilter);
   }
+
   if (state.jobsSortBy === 'consumed') {
-    list.sort((a, b) => (b.total_consumed_g || 0) - (a.total_consumed_g || 0));
+    completed.sort((a, b) => (b.total_consumed_g || 0) - (a.total_consumed_g || 0));
   } else {
-    list.sort((a, b) => new Date(b.started_at || 0) - new Date(a.started_at || 0));
+    completed.sort((a, b) => new Date(b.started_at || 0) - new Date(a.started_at || 0));
   }
 
-  if (!list.length) {
-    const markup = `<div class="empty-state"><div class="empty-state-icon">🖨</div>Noch keine Druckjobs erfasst</div>`;
-    if (markup !== lastJobsMarkup) {
-      el.innerHTML = markup;
-      lastJobsMarkup = markup;
-    }
-    return;
-  }
-
-  const markup = `<div class="jobs-list">${list.map(renderJobCard).join('')}</div>`;
+  const markup = `
+    <div class="jobs-layout">
+      <section class="jobs-top-grid">
+        ${renderJobsCameraPanel()}
+        ${renderActiveJobPanel(runningJob)}
+      </section>
+      ${renderCompletedJobsList(completed)}
+    </div>
+  `;
   if (markup === lastJobsMarkup) return;
   el.innerHTML = markup;
   lastJobsMarkup = markup;
 }
 
-function renderJobCard(j) {
-  const started = j.started_at ? fmtDate(j.started_at) : '—';
-  const finished = j.finished_at ? fmtDate(j.finished_at) : '—';
-  const dur = j.started_at && j.finished_at ? fmtDuration(j.started_at, j.finished_at) : '';
-
-  const statusLabel = { finished: 'Fertig', running: 'Aktiv', cancelled: 'Abgebrochen', error: 'Fehler' };
-
+function renderJobsCameraPanel() {
+  const rawUrl = (state.cameraStreamUrl || '').trim();
+  if (!rawUrl) {
+    return `
+      <article class="jobs-panel jobs-camera-panel">
+        <header class="jobs-panel-head"><h3>${tr('Kamera')}</h3></header>
+        <div class="jobs-camera-empty">${tr('Kein Kamerastream konfiguriert')}</div>
+      </article>
+    `;
+  }
+  const streamUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `http://${rawUrl}`;
   return `
-    <div class="job-card">
-      <div>
-        <div>
-          <span class="job-status-badge ${j.status}">${statusLabel[j.status] || j.status}</span>
-        </div>
-        <div class="job-filename ${j.filename ? '' : 'empty'}">${j.filename ? esc(j.filename) : 'Unbekannte Datei'}</div>
-        <div class="job-meta">
-          ${started}${dur ? ` · ${dur}` : ''}
-        </div>
-        ${renderJobSlots(j)}
+    <article class="jobs-panel jobs-camera-panel">
+      <header class="jobs-panel-head">
+        <h3>${tr('Kamera')}</h3>
+        <span class="jobs-camera-url">${esc(rawUrl)}</span>
+      </header>
+      <div class="jobs-camera-frame">
+        <img
+          src="${esc(streamUrl)}"
+          alt="${tr('Kamerastream')}"
+          loading="lazy"
+          referrerpolicy="no-referrer"
+          onerror="this.closest('.jobs-camera-frame')?.classList.add('is-error')"
+        />
+        <div class="jobs-camera-fallback">${tr('Kamerastream nicht erreichbar')}</div>
       </div>
-      <div class="job-consumed">
-        <div class="job-consumed-val">${j.total_consumed_g > 0 ? j.total_consumed_g.toFixed(0) : '—'}</div>
-        <div class="job-consumed-label">${j.total_consumed_g > 0 ? 'g Verbrauch' : ''}</div>
-      </div>
-    </div>`;
+    </article>
+  `;
 }
 
-function renderJobSlots(j) {
-  const parts = [];
-  for (const [letter, slot] of Object.entries(j.slots)) {
-    if (slot.before_g !== null && slot.after_g !== null) {
-      const consumed = slot.before_g - slot.after_g;
-      const spool = state.spools.find(s => s.id === slot.spool_id);
-      const name = spool ? `${spool.material} ${spool.brand}` : `Spule #${slot.spool_id}`;
-      parts.push(`<span style="margin-right:12px">T1${letter.toUpperCase()}: <strong>${consumed.toFixed(0)}g</strong> · ${esc(name)}</span>`);
-    }
+function renderActiveJobPanel(runningJob) {
+  const p = state.printer || {};
+  if (!runningJob && p.state !== 'printing') {
+    return `
+      <article class="jobs-panel jobs-active-panel">
+        <header class="jobs-panel-head"><h3>${tr('Aktiver Job')}</h3></header>
+        <div class="jobs-active-empty">${tr('Kein aktiver Druckjob')}</div>
+      </article>
+    `;
   }
-  if (!parts.length) return '';
-  return `<div class="job-meta" style="margin-top:6px">${parts.join('')}</div>`;
+
+  const filename = esc(p.filename || runningJob?.filename || tr('Unbekannte Datei'));
+  const progress = typeof p.progress === 'number' ? Math.max(0, Math.min(100, p.progress)) : 0;
+  const currentLayer = Number.isFinite(p.current_layer) ? Number(p.current_layer) : null;
+  const totalLayer = Number.isFinite(p.total_layer) ? Number(p.total_layer) : null;
+  const printingTime = fmtSeconds(p.print_duration_seconds);
+  const remainingTime = fmtRemainingSeconds(p.remaining_seconds);
+  const finishTime = p.estimated_finish_at ? fmtDate(p.estimated_finish_at) : '—';
+  const nozzle = formatTempPair(p.extruder_temp, p.extruder_target);
+  const bed = formatTempPair(p.bed_temp, p.bed_target);
+
+  return `
+    <article class="jobs-panel jobs-active-panel">
+      <header class="jobs-panel-head"><h3>${tr('Aktiver Job')}</h3></header>
+      <div class="jobs-kv-grid">
+        <div class="jobs-kv"><span>${tr('Datei')}</span><strong title="${filename}">${filename}</strong></div>
+        <div class="jobs-kv"><span>${tr('Fortschritt')}</span><strong>${progress.toFixed(1)}%</strong></div>
+        <div class="jobs-kv"><span>${tr('Layer')}</span><strong>${currentLayer !== null && totalLayer !== null ? `${currentLayer} / ${totalLayer}` : '—'}</strong></div>
+        <div class="jobs-kv"><span>${tr('Druckzeit')}</span><strong>${printingTime}</strong></div>
+        <div class="jobs-kv"><span>${tr('Restzeit')}</span><strong>${remainingTime}</strong></div>
+        <div class="jobs-kv"><span>${tr('Fertig um')}</span><strong>${finishTime}</strong></div>
+        <div class="jobs-kv"><span>${tr('Nozzle')}</span><strong>${nozzle}</strong></div>
+        <div class="jobs-kv"><span>${tr('Bett')}</span><strong>${bed}</strong></div>
+      </div>
+      <div class="jobs-progress-track" role="progressbar" aria-valuenow="${progress.toFixed(1)}" aria-valuemin="0" aria-valuemax="100">
+        <div class="jobs-progress-fill" style="width:${progress.toFixed(1)}%"></div>
+        <span class="jobs-progress-label">${progress.toFixed(1)}%</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderCompletedJobsList(list) {
+  if (!list.length) {
+    return `
+      <section class="jobs-completed-panel">
+        <header class="jobs-panel-head"><h3>${tr('Erledigte Jobs')}</h3></header>
+        <div class="jobs-completed-empty">${tr('Noch keine Druckjobs erfasst')}</div>
+      </section>
+    `;
+  }
+
+  const rows = list.map(job => {
+    const filename = job.filename ? esc(job.filename) : tr('Unbekannte Datei');
+    const duration = formatJobDuration(job);
+    return `
+      <li class="jobs-completed-row">
+        <span class="jobs-completed-file" title="${filename}">${filename}</span>
+        <span class="jobs-completed-time">${duration}</span>
+      </li>
+    `;
+  }).join('');
+
+  return `
+    <section class="jobs-completed-panel">
+      <header class="jobs-panel-head"><h3>${tr('Erledigte Jobs')}</h3></header>
+      <ul class="jobs-completed-list">
+        ${rows}
+      </ul>
+    </section>
+  `;
+}
+
+function formatJobDuration(job) {
+  if (typeof job.duration_seconds === 'number' && Number.isFinite(job.duration_seconds)) {
+    return fmtSeconds(job.duration_seconds);
+  }
+  if (job.started_at && job.finished_at) {
+    return fmtDuration(job.started_at, job.finished_at);
+  }
+  return '—';
+}
+
+function formatTempPair(current, target) {
+  if (!Number.isFinite(current) && !Number.isFinite(target)) return '—';
+  const currentText = Number.isFinite(current) ? `${Number(current).toFixed(1)}°C` : '—';
+  const targetText = Number.isFinite(target) ? `${Number(target).toFixed(1)}°C` : '—';
+  return `${currentText} / ${targetText}`;
+}
+
+function fmtSeconds(seconds) {
+  if (!Number.isFinite(seconds) || Number(seconds) < 0) return '—';
+  const total = Math.round(Number(seconds));
+  const hrs = Math.floor(total / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
 // ── Actions ────────────────────────────────────────────────────────────────

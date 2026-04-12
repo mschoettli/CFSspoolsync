@@ -580,6 +580,21 @@ body {
   margin-left: 6px;
 }
 
+.spool-calibration-badge {
+  display: inline-flex;
+  margin-left: 6px;
+  padding: 0 6px;
+  height: 18px;
+  border-radius: 999px;
+  align-items: center;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: #7ff0c2;
+  background: rgba(45, 212, 160, 0.14);
+  border: 1px solid rgba(45, 212, 160, 0.32);
+  vertical-align: middle;
+}
+
 .weight-mini-bar {
   margin-top: 6px;
   width: 96px;

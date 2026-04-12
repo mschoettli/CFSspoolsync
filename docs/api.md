@@ -30,6 +30,17 @@ Read one spool.
 ### `PUT /api/spools/{spool_id}`
 Update spool fields (partial).
 
+### `POST /api/spools/{spool_id}/calibrate-weight`
+Calibrate one spool from a scale measurement.
+
+Example request:
+```json
+{
+  "gross_weight_g": 338.0,
+  "tare_weight_g": 175.0
+}
+```
+
 ### `DELETE /api/spools/{spool_id}`
 Delete spool (fails for active slot assignments).
 
@@ -58,6 +69,7 @@ Updates active spool weights from live remain-length values.
 Response includes:
 - `synced` and `updates` for weight updates
 - `removed_count` and `removed` for active slots automatically moved back to storage when K2 reports `loaded=false`
+- `updates[*].raw_k2_g`, `updates[*].applied_factor`, `updates[*].source` (`k2_raw|k2_calibrated`)
 
 ### `GET /api/cfs/slot/{slot_num}/read`
 Reads one live slot from K2 (`slot_num` in `1..4`).

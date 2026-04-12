@@ -89,6 +89,11 @@ async def sync_from_k2(db: Session = Depends(get_db)):
             ),
             1,
         )
+        raw_k2_g = new_weight
+        applied_factor = spool.calibration_factor if spool.calibration_factor else None
+        if applied_factor is not None:
+            new_weight = round(raw_k2_g * applied_factor, 1)
+        new_weight = max(0.0, min(new_weight, spool.initial_weight))
         old_weight = spool.remaining_weight
         spool.remaining_weight = new_weight
         spool.updated_at = now
@@ -99,6 +104,9 @@ async def sync_from_k2(db: Session = Depends(get_db)):
                 "spool_id": spool.id,
                 "old_g": old_weight,
                 "new_g": new_weight,
+                "raw_k2_g": raw_k2_g,
+                "applied_factor": applied_factor,
+                "source": "k2_calibrated" if applied_factor is not None else "k2_raw",
             }
         )
 

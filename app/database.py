@@ -3,7 +3,7 @@
 import os
 from typing import Generator
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:////app/data/cfs.db")
@@ -29,6 +29,31 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 class Base(DeclarativeBase):
     """Base declarative model class."""
 
+
+def ensure_runtime_schema() -> None:
+    """Apply lightweight runtime schema migrations for SQLite deployments."""
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    if "spools" not in table_names:
+        return
+
+    existing = {col["name"] for col in inspector.get_columns("spools")}
+    required = {
+        "tare_weight_g": "FLOAT",
+        "last_gross_weight_g": "FLOAT",
+        "calibration_factor": "FLOAT",
+        "calibrated_at": "DATETIME",
+    }
+
+    with engine.begin() as conn:
+        for column_name, column_type in required.items():
+            if column_name in existing:
+                continue
+            conn.execute(
+                text(
+                    f"ALTER TABLE spools ADD COLUMN {column_name} {column_type}"
+                )
+            )
 
 
 def get_db() -> Generator[Session, None, None]:

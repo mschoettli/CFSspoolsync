@@ -20,6 +20,9 @@ class SpoolCreate(BaseModel):
     remaining_weight: Optional[float] = Field(default=None, ge=0)
     diameter: float = Field(default=1.75, gt=0)
     density: float = Field(default=1.24, gt=0)
+    tare_weight_g: Optional[float] = Field(default=None, ge=0)
+    last_gross_weight_g: Optional[float] = Field(default=None, ge=0)
+    calibration_factor: Optional[float] = Field(default=None, gt=0)
     serial_num: str = ""
     notes: str = ""
     status: Optional[str] = None
@@ -55,6 +58,9 @@ class SpoolUpdate(BaseModel):
     notes: Optional[str] = None
     diameter: Optional[float] = Field(default=None, gt=0)
     density: Optional[float] = Field(default=None, gt=0)
+    tare_weight_g: Optional[float] = Field(default=None, ge=0)
+    last_gross_weight_g: Optional[float] = Field(default=None, ge=0)
+    calibration_factor: Optional[float] = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def validate_ranges(self) -> "SpoolUpdate":
@@ -92,8 +98,29 @@ class SpoolOut(BaseModel):
     serial_num: str
     diameter: float
     density: float
+    tare_weight_g: Optional[float] = None
+    last_gross_weight_g: Optional[float] = None
+    calibration_factor: Optional[float] = None
+    calibrated_at: Optional[datetime] = None
     notes: str
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class SpoolCalibrationIn(BaseModel):
+    """Payload for calibrating spool remaining weight from a scale reading."""
+
+    gross_weight_g: float = Field(gt=0)
+    tare_weight_g: Optional[float] = Field(default=None, ge=0)
+
+
+class SpoolCalibrationOut(BaseModel):
+    """Result of spool calibration against K2 estimated remaining weight."""
+
+    spool_id: int
+    remaining_weight: float
+    raw_k2_g: Optional[float]
+    calibration_factor: Optional[float]
+    calibrated_at: Optional[datetime]

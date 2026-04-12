@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.database import Base, engine
+from app.database import Base, engine, ensure_runtime_schema
 from app.routers import app_config, cfs, jobs, ocr, printer, spools
 from app.services.app_locale import resolve_app_locale
 from app.services.label_ocr import warmup_ocr_background
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 # Create DB tables on startup.
 Base.metadata.create_all(bind=engine)
+ensure_runtime_schema()
 
 
 @asynccontextmanager

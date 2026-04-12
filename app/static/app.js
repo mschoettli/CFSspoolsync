@@ -501,7 +501,7 @@ function renderSlotCard(slot) {
           <div class="color-swatch" style="background:${s.color}"></div>
           <div class="filament-meta">
             <div class="filament-material">${esc(s.material)}</div>
-            <div class="filament-brand">${esc(s.brand || '—')}</div>
+            <div class="filament-brand">${esc(s.brand || '—')} ${renderCalibrationBadge(s)}</div>
           </div>
         </div>
 
@@ -687,7 +687,7 @@ function renderSpoolRow(s) {
           </div>
         </div>
       </td>
-      <td class="spool-brand-label">${esc(s.brand || '—')}</td>
+      <td class="spool-brand-label">${esc(s.brand || '—')} ${renderCalibrationBadge(s)}</td>
       <td class="spool-weight-cell">
         ${s.remaining_weight.toFixed(0)} g
         <div class="weight-mini-bar">
@@ -730,7 +730,7 @@ function renderSpoolCard(s) {
           <div class="spool-color-dot" style="background:${s.color}"></div>
           <div>
             <div class="spool-material-label">${esc(s.material)}</div>
-            <div class="spool-brand-label">${esc(s.brand || '—')}</div>
+            <div class="spool-brand-label">${esc(s.brand || '—')} ${renderCalibrationBadge(s)}</div>
           </div>
         </div>
         <span class="spool-status-badge ${s.status}">
@@ -1780,6 +1780,44 @@ function openEditModal(id) {
   const s = state.spools.find(x => x.id === id);
   if (!s) return;
   openModal(`Spule bearbeiten · #${id}`, buildEditForm(s));
+  const calibrateBtn = document.getElementById('btnCalibrateWeight');
+  if (calibrateBtn) {
+    calibrateBtn.addEventListener('click', async () => {
+      const form = document.getElementById('editSpoolForm');
+      if (!form) return;
+      const fd = new FormData(form);
+      const gross = parseFloat(fd.get('gross_weight_g'));
+      const tareInput = String(fd.get('tare_weight_g') || '').trim();
+      const tare = tareInput ? parseFloat(tareInput) : null;
+      try {
+        if (!Number.isFinite(gross) || gross <= 0) {
+          throw new Error('Bruttogewicht muss > 0 sein');
+        }
+        if (tare !== null && (!Number.isFinite(tare) || tare < 0)) {
+          throw new Error('Tara muss >= 0 sein');
+        }
+
+        calibrateBtn.disabled = true;
+        calibrateBtn.textContent = 'Kalibriere...';
+        await apiFetch(`/api/spools/${id}/calibrate-weight`, {
+          method: 'POST',
+          body: JSON.stringify({
+            gross_weight_g: gross,
+            tare_weight_g: tare,
+          }),
+        });
+        showToast('Kalibrierung gespeichert', 'success');
+        closeModal();
+        await Promise.all([loadSpools(), loadCFS()]);
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        calibrateBtn.disabled = false;
+        calibrateBtn.textContent = 'Kalibrieren';
+      }
+    });
+  }
+
   document.getElementById('editSpoolForm').addEventListener('submit', async e => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -1832,6 +1870,11 @@ function openEditModal(id) {
 }
 
 function buildEditForm(s) {
+  const tareDefault = Number.isFinite(s.tare_weight_g) ? s.tare_weight_g : '';
+  const factorText = Number.isFinite(s.calibration_factor)
+    ? `x${Number(s.calibration_factor).toFixed(3)}`
+    : 'nicht kalibriert';
+
   return `
     <form id="editSpoolForm">
       <div class="form-grid">
@@ -1861,6 +1904,18 @@ function buildEditForm(s) {
         <div class="form-group">
           <label class="form-label">Verbleibend (g) *</label>
           <input class="form-input" type="number" name="remaining_weight" value="${s.remaining_weight}" min="0" step="0.1" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Bruttogewicht (g)</label>
+          <input class="form-input" type="number" name="gross_weight_g" min="1" step="0.1" placeholder="z.B. 338">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tara Spule (g)</label>
+          <input class="form-input" type="number" name="tare_weight_g" min="0" step="0.1" value="${tareDefault}">
+        </div>
+        <div class="form-group span2">
+          <div class="form-hint">Kalibrierfaktor: <strong>${factorText}</strong></div>
+          <button type="button" class="btn btn-ghost btn-sm" id="btnCalibrateWeight">Kalibrieren</button>
         </div>
 
         <div class="form-section-title">Temperatur</div>
@@ -2109,6 +2164,11 @@ function formatPrinterFilenameForStatus(filename) {
 function formatRemainingWeight(weight) {
   if (typeof weight !== 'number' || !isFinite(weight)) return '—';
   return `${weight.toFixed(0)} g`;
+}
+
+function renderCalibrationBadge(spool) {
+  if (!spool || !Number.isFinite(spool.calibration_factor)) return '';
+  return `<span class="spool-calibration-badge" title="Kalibriert">x${Number(spool.calibration_factor).toFixed(2)}</span>`;
 }
 
 

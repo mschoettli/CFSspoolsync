@@ -1,5 +1,6 @@
 """HTTP routes for spool management."""
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -8,9 +9,19 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Spool
-from app.schemas.spool import SpoolCreate, SpoolOut, SpoolUpdate
+from app.schemas.spool import (
+    SpoolCalibrationIn,
+    SpoolCalibrationOut,
+    SpoolCreate,
+    SpoolOut,
+    SpoolUpdate,
+)
+from app.services import ssh_client
 
 router = APIRouter(prefix="/api/spools", tags=["spools"])
+
+MIN_CALIBRATION_FACTOR = 0.25
+MAX_CALIBRATION_FACTOR = 4.0
 
 
 @router.get("", response_model=list[SpoolOut])
@@ -109,3 +120,67 @@ def delete_spool(spool_id: int, db: Session = Depends(get_db)):
     db.delete(spool)
     db.commit()
     return {"ok": True}
+
+
+@router.post("/{spool_id}/calibrate-weight", response_model=SpoolCalibrationOut)
+async def calibrate_spool_weight(
+    spool_id: int,
+    payload: SpoolCalibrationIn,
+    db: Session = Depends(get_db),
+):
+    """Calibrate one spool using gross and tare scale readings."""
+    spool = db.query(Spool).filter(Spool.id == spool_id).first()
+    if not spool:
+        raise HTTPException(404, "Spule nicht gefunden")
+
+    tare_weight = payload.tare_weight_g
+    if tare_weight is None:
+        tare_weight = spool.tare_weight_g or 0.0
+    gross_weight = payload.gross_weight_g
+    if gross_weight < tare_weight:
+        raise HTTPException(422, "Bruttogewicht darf nicht kleiner als Tara sein")
+
+    net_measured = round(max(0.0, gross_weight - tare_weight), 1)
+    raw_k2_g: Optional[float] = None
+    factor = spool.calibration_factor
+
+    if spool.status == "aktiv" and spool.cfs_slot in (1, 2, 3, 4):
+        slot_data = await asyncio.to_thread(ssh_client.get_slot, spool.cfs_slot)
+        if slot_data and slot_data.get("loaded"):
+            raw_k2_g = round(
+                ssh_client.meters_to_grams(
+                    slot_data.get("remain_len", 0),
+                    spool.diameter,
+                    spool.density,
+                ),
+                1,
+            )
+            if raw_k2_g > 0:
+                candidate = net_measured / raw_k2_g
+                if candidate < MIN_CALIBRATION_FACTOR or candidate > MAX_CALIBRATION_FACTOR:
+                    raise HTTPException(
+                        422,
+                        (
+                            "Kalibrierfaktor ausserhalb erlaubtem Bereich "
+                            f"({MIN_CALIBRATION_FACTOR}..{MAX_CALIBRATION_FACTOR})"
+                        ),
+                    )
+                factor = round(candidate, 4)
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    spool.tare_weight_g = round(tare_weight, 1)
+    spool.last_gross_weight_g = round(gross_weight, 1)
+    spool.remaining_weight = min(net_measured, spool.initial_weight)
+    spool.calibration_factor = factor
+    spool.calibrated_at = now
+    spool.updated_at = now
+
+    db.commit()
+    db.refresh(spool)
+    return {
+        "spool_id": spool.id,
+        "remaining_weight": spool.remaining_weight,
+        "raw_k2_g": raw_k2_g,
+        "calibration_factor": spool.calibration_factor,
+        "calibrated_at": spool.calibrated_at,
+    }

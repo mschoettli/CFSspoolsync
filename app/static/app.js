@@ -1304,6 +1304,7 @@ function setupAddSpoolForm() {
   let scanInProgress = false;
   let hasAutoDetectedData = false;
   let fallbackUsed = false;
+  let remainingManuallyEdited = false;
   let modalClicks = 0;
   let lastScanStartedAt = 0;
   let readyMetricsSent = false;
@@ -1315,6 +1316,7 @@ function setupAddSpoolForm() {
   const cfsStatusEl = document.getElementById('k2ReadStatus');
   const scanStatusEl = document.getElementById('scanStatusText');
   const scanFileEl = document.getElementById('scanFileName');
+  const remainingInput = document.querySelector('#addSpoolForm [name="remaining_weight"]');
   let scanStatusTimer = null;
 
   const setScanStatus = (text, tone = 'muted') => {
@@ -1544,6 +1546,10 @@ function setupAddSpoolForm() {
   const applyOCRResult = (data) => {
     stopScanStatusTicker();
     fillFormFromOCR(data);
+    if (!loadedFromCfs && !remainingManuallyEdited && remainingInput) {
+      remainingInput.value = '';
+      remainingInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
     renderOCRReview(data);
     renderFallbackPanel(data);
     refreshDetectedStrip();
@@ -1561,6 +1567,11 @@ function setupAddSpoolForm() {
   refreshDetectedStrip();
   applyFallbackDropdowns();
   bindEssentialsControls();
+  if (remainingInput) {
+    remainingInput.addEventListener('input', () => {
+      remainingManuallyEdited = true;
+    });
+  }
   document.querySelector('.spool-modal-add')?.addEventListener('click', () => {
     modalClicks += 1;
   });
@@ -1586,6 +1597,7 @@ function setupAddSpoolForm() {
       fillFormFromK2(data);
       refreshDetectedStrip();
       loadedFromCfs = true;
+      remainingManuallyEdited = false;
       hasAutoDetectedData = true;
       if (cfsStatusEl) {
         cfsStatusEl.textContent = 'OK Daten geladen';

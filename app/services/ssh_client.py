@@ -133,6 +133,72 @@ def _get_slot_list(data: dict[str, Any]) -> list[dict[str, Any]]:
         return []
 
 
+def _to_float(value: Any) -> Optional[float]:
+    """Convert values to float safely.
+
+    Args:
+    -----
+        value (Any):
+            Value to parse.
+
+    Returns:
+    --------
+        Optional[float]:
+            Parsed float or ``None`` when parsing fails.
+    """
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def get_box_environment() -> dict[str, Optional[float]]:
+    """Read CFS box-level environment values from K2 JSON.
+
+    Args:
+    -----
+        None.
+
+    Returns:
+    --------
+        dict[str, Optional[float]]:
+            Parsed environment values with keys ``temperature`` and ``humidity``.
+            Values are ``None`` when unavailable.
+    """
+    data = read_cfs_json()
+    if not data:
+        return {"temperature": None, "humidity": None}
+
+    info_entries = (
+        data.get("Material", {})
+        .get("info", [])
+    )
+    if not isinstance(info_entries, list):
+        return {"temperature": None, "humidity": None}
+
+    preferred: Optional[dict[str, Any]] = None
+    for entry in info_entries:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("state", "")).lower() == "connect":
+            preferred = entry
+            break
+
+    if preferred is None:
+        preferred = next(
+            (entry for entry in info_entries if isinstance(entry, dict)),
+            None,
+        )
+
+    if preferred is None:
+        return {"temperature": None, "humidity": None}
+
+    temperature = _to_float(preferred.get("temperature"))
+    humidity = _to_float(preferred.get("dry_and_humidity"))
+
+    return {"temperature": temperature, "humidity": humidity}
+
+
 def parse_slot(data: dict[str, Any], slot_num: int) -> Optional[dict[str, Any]]:
     """Parse one slot from the CFS JSON payload."""
     entries = _get_slot_list(data)

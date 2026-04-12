@@ -1,9 +1,11 @@
 """HTTP routes for printer telemetry."""
 
+import asyncio
+
 from fastapi import APIRouter
 
 from app.schemas.printer import PrinterStatusOut
-from app.services import moonraker
+from app.services import moonraker, ssh_client
 
 router = APIRouter(prefix="/api/printer", tags=["printer"])
 
@@ -48,14 +50,19 @@ def _pick_env_metric(status: dict, metric: str):
             continue
 
         lower = str(name).lower()
-        if not any(token in lower for token in ("cfs", "ams")):
+        if not any(token in lower for token in ("cfs", "ams", "chamber", "box", "cabinet")):
             continue
 
         value = _to_float(payload.get(metric))
         if value is None:
             continue
 
-        priority = 3 if "cfs" in lower else 2
+        if any(token in lower for token in ("cfs", "ams")):
+            priority = 3
+        elif any(token in lower for token in ("chamber", "box", "cabinet")):
+            priority = 2
+        else:
+            priority = 1
         candidates.append((priority, value))
 
     if not candidates:
@@ -86,6 +93,18 @@ async def printer_status():
         total_seconds = elapsed_seconds / progress_raw
         remaining_seconds = round(max(0.0, total_seconds - elapsed_seconds), 1)
 
+    cfs_temp = _pick_env_metric(status, "temperature")
+    cfs_humidity = _pick_env_metric(status, "humidity")
+
+    if cfs_temp is None or cfs_humidity is None:
+        box_env = await asyncio.to_thread(ssh_client.get_box_environment)
+        if cfs_temp is None:
+            temp = _to_float(box_env.get("temperature"))
+            cfs_temp = round(temp, 1) if temp is not None else None
+        if cfs_humidity is None:
+            humidity = _to_float(box_env.get("humidity"))
+            cfs_humidity = round(humidity, 1) if humidity is not None else None
+
     return {
         "reachable": bool(status),
         "state": print_stats.get("state", "unknown"),
@@ -96,6 +115,6 @@ async def printer_status():
         "bed_temp": round(bed.get("temperature", 0), 1),
         "bed_target": round(bed.get("target", 0), 1),
         "remaining_seconds": remaining_seconds,
-        "cfs_temp": _pick_env_metric(status, "temperature"),
-        "cfs_humidity": _pick_env_metric(status, "humidity"),
+        "cfs_temp": cfs_temp,
+        "cfs_humidity": cfs_humidity,
     }

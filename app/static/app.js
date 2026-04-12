@@ -944,10 +944,10 @@ function buildAddSpoolForm() {
             <div class="k2-slot-selector">
               ${[1, 2, 3, 4].map(n => `<button class="slot-btn" type="button" data-slot="${n}">Spule ${n}</button>`).join('')}
             </div>
+            <span id="k2ReadStatus" class="spool-read-status"></span>
             <div class="spool-source-actions">
               <button class="btn btn-ghost btn-sm" id="btnReadFromK2" type="button" disabled>Von CFS lesen</button>
             </div>
-            <span id="k2ReadStatus" class="spool-read-status"></span>
           </div>
 
           <div class="k2-read-box spool-source-card spool-source-card-scan">

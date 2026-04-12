@@ -1565,20 +1565,26 @@ body {
     justify-content: flex-end;
     text-align: right;
     min-width: 0;
-    max-width: 54vw;
+    max-width: 58vw;
   }
   .status-label {
-    display: none;
+    display: inline-block;
+    width: auto;
+    max-width: calc(58vw - 72px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.66rem;
   }
   .status-sep { display: none; }
   .status-temp {
     display: inline-block;
     width: auto;
-    max-width: calc(54vw - 16px);
+    max-width: calc(58vw - 16px);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     color: var(--text-muted);
   }
 
@@ -1601,15 +1607,20 @@ body {
     gap: 8px;
   }
 
+  #view-lager .view-actions,
+  #view-jobs .view-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: center;
+  }
+
   #view-cfs .header-actions {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .view-actions .select-filter,
-  .view-actions .btn,
-  .header-actions .btn,
-  .header-actions .sync-meta {
+  #view-cfs .header-actions .btn,
+  #view-cfs .header-actions .sync-meta {
     width: 100%;
   }
 
@@ -1730,6 +1741,13 @@ body {
     align-self: end;
   }
 
+  .modal.modal-compact {
+    width: min(92vw, 420px);
+    max-height: 80vh;
+    border-radius: 16px;
+    align-self: center;
+  }
+
   .modal-overlay {
     align-items: end;
     padding: 0;
@@ -1768,6 +1786,24 @@ body {
 
   .spool-source-layout {
     grid-template-columns: 1fr;
+  }
+
+  .spool-source-card {
+    min-height: auto;
+    gap: 8px;
+  }
+
+  .spool-source-title {
+    margin: 0 0 6px;
+  }
+
+  .spool-scan-info-wrap {
+    min-height: 34px;
+    gap: 2px;
+  }
+
+  .k2-slot-selector {
+    gap: 6px;
   }
 
   .spool-source-footer {

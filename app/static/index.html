@@ -10,8 +10,6 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-
-<!-- ── Header ─────────────────────────────────────────────────────────────── -->
 <header id="header">
   <div class="logo">
     <svg width="26" height="26" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">
@@ -43,10 +41,7 @@
   </div>
 </header>
 
-<!-- ── Main ───────────────────────────────────────────────────────────────── -->
 <main id="main">
-
-  <!-- CFS View -->
   <section id="view-cfs" class="view active">
     <div class="view-header">
       <div class="header-actions">
@@ -57,7 +52,6 @@
     <div class="slots-grid" id="slotsGrid"></div>
   </section>
 
-  <!-- Lager View -->
   <section id="view-lager" class="view">
     <div class="view-header">
       <div class="view-actions">
@@ -73,7 +67,6 @@
     <div id="spoolsList"></div>
   </section>
 
-  <!-- Jobs View -->
   <section id="view-jobs" class="view">
     <div class="view-header">
       <div class="view-actions">
@@ -92,26 +85,22 @@
     </div>
     <div id="jobsList"></div>
   </section>
-
 </main>
 
-<!-- ── Modal ─────────────────────────────────────────────────────────────── -->
 <div id="modalOverlay" class="modal-overlay hidden">
   <div class="modal" id="modal">
     <div class="modal-header">
       <h3 id="modalTitle">Modal</h3>
-      <button class="modal-close" id="modalClose">✕</button>
+      <button class="modal-close" id="modalClose">×</button>
     </div>
     <div class="modal-body" id="modalBody"></div>
   </div>
 </div>
 
-<!-- ── Toast ──────────────────────────────────────────────────────────────── -->
 <div id="toastContainer"></div>
 
-<!-- ── Footer ─────────────────────────────────────────────────────────────── -->
 <footer class="app-footer">
-  CFSspoolsync v1.0 &nbsp;·&nbsp; &copy; 2026 mschoettli &nbsp;·&nbsp;
+  CFSspoolsync v1.0 · © 2026 mschoettli ·
   <a href="https://www.gnu.org/licenses/gpl-3.0" target="_blank">GPL v3</a>
 </footer>
 
@@ -125,7 +114,7 @@
     <span>Lager</span>
   </button>
   <button class="mobile-nav-btn" data-view="jobs" type="button">
-    <span class="mobile-nav-icon">◌</span>
+    <span class="mobile-nav-icon">◎</span>
     <span>Jobs</span>
   </button>
 </nav>

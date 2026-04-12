@@ -17,6 +17,7 @@ from app.schemas.spool import (
     SpoolUpdate,
 )
 from app.services import ssh_client
+from app.services.spool_defaults import get_default_tare_weight_g
 
 router = APIRouter(prefix="/api/spools", tags=["spools"])
 
@@ -45,6 +46,11 @@ def create_spool(payload: SpoolCreate, db: Session = Depends(get_db)):
     requested_slot = data.pop("cfs_slot")
     if remaining is None:
         remaining = data["initial_weight"]
+    if data.get("tare_weight_g") is None:
+        data["tare_weight_g"] = get_default_tare_weight_g(
+            data.get("brand"),
+            data.get("material"),
+        )
 
     status = requested_status or ("aktiv" if requested_slot is not None else "lager")
     cfs_slot = requested_slot if status == "aktiv" else None
@@ -135,7 +141,14 @@ async def calibrate_spool_weight(
 
     tare_weight = payload.tare_weight_g
     if tare_weight is None:
-        tare_weight = spool.tare_weight_g or 0.0
+        tare_weight = (
+            spool.tare_weight_g
+            if spool.tare_weight_g is not None
+            else (
+                get_default_tare_weight_g(spool.brand, spool.material)
+                or 0.0
+            )
+        )
     gross_weight = payload.gross_weight_g
     if gross_weight < tare_weight:
         raise HTTPException(422, "Bruttogewicht darf nicht kleiner als Tara sein")
@@ -184,3 +197,41 @@ async def calibrate_spool_weight(
         "calibration_factor": spool.calibration_factor,
         "calibrated_at": spool.calibrated_at,
     }
+
+
+@router.post("/apply-brand-defaults")
+def apply_brand_defaults(db: Session = Depends(get_db)):
+    """Apply known brand default tare weights to unconfigured spools.
+
+    Args:
+    -----
+        db (Session):
+            Active SQLAlchemy session.
+
+    Returns:
+    --------
+        dict[str, object]:
+            Number of updated spools and changed entries.
+    """
+    changed = []
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    spools = db.query(Spool).all()
+    for spool in spools:
+        if spool.tare_weight_g is not None:
+            continue
+        default_tare = get_default_tare_weight_g(spool.brand, spool.material)
+        if default_tare is None:
+            continue
+        spool.tare_weight_g = default_tare
+        spool.updated_at = now
+        changed.append(
+            {
+                "spool_id": spool.id,
+                "brand": spool.brand,
+                "material": spool.material,
+                "tare_weight_g": default_tare,
+            }
+        )
+
+    db.commit()
+    return {"updated": len(changed), "entries": changed}

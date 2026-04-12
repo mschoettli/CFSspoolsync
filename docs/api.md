@@ -41,6 +41,24 @@ Example request:
 }
 ```
 
+If `tare_weight_g` is omitted, the API uses this order:
+1. stored `spool.tare_weight_g`
+2. known brand default tare
+3. `0.0`
+
+### `POST /api/spools/apply-brand-defaults`
+Apply known brand default tare weights to all spools with missing `tare_weight_g`.
+
+Example response:
+```json
+{
+  "updated": 3,
+  "entries": [
+    {"spool_id": 2, "brand": "Creality", "material": "PLA", "tare_weight_g": 175.0}
+  ]
+}
+```
+
 ### `DELETE /api/spools/{spool_id}`
 Delete spool (fails for active slot assignments).
 

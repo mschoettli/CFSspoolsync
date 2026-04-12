@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models import Spool
 from app.schemas.spool import SpoolOut
 from app.services import ssh_client
+from app.services.spool_defaults import get_default_tare_weight_g
 
 router = APIRouter(prefix="/api/cfs", tags=["cfs"])
 
@@ -82,6 +83,11 @@ async def sync_from_k2(db: Session = Depends(get_db)):
 
         if not spool:
             continue
+
+        if spool.tare_weight_g is None:
+            default_tare = get_default_tare_weight_g(spool.brand, spool.material)
+            if default_tare is not None:
+                spool.tare_weight_g = default_tare
 
         new_weight = round(
             ssh_client.meters_to_grams(

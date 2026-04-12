@@ -1173,7 +1173,7 @@ function buildAddSpoolForm() {
             </div>
             <div class="form-group">
               <label class="form-label">Durchmesser (mm) *</label>
-              <input class="form-input" type="number" name="diameter" required step="0.01" min="1" placeholder="1.75">
+              <input class="form-input" type="number" name="diameter" required step="0.01" min="1" value="1.75" placeholder="1.75">
             </div>
           </div>
         </div>

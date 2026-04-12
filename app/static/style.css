@@ -899,6 +899,31 @@ body {
 .form-input[type="color"] { padding: 4px; }
 .form-hint { color: var(--text-muted); font-size: 0.72rem; }
 
+.spool-net-preview {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(24, 35, 52, 0.6);
+  display: grid;
+  gap: 4px;
+}
+
+.spool-net-preview-label {
+  font-size: 0.72rem;
+  color: var(--text-mid);
+}
+
+.spool-net-preview strong {
+  font-size: 1rem;
+  color: #e9fff2;
+}
+
+.spool-net-preview-note {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
 .spool-modal-add .spool-form-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: 10px;
@@ -949,6 +974,7 @@ body {
 .form-actions {
   margin-top: 16px;
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }

@@ -16,8 +16,9 @@ class SpoolCreate(BaseModel):
     nozzle_min: int = Field(default=190, ge=0, le=500)
     nozzle_max: int = Field(default=230, ge=0, le=500)
     bed_temp: int = Field(default=60, ge=0, le=150)
-    initial_weight: float = Field(gt=0)
+    initial_weight: Optional[float] = Field(default=None, gt=0)
     remaining_weight: Optional[float] = Field(default=None, ge=0)
+    gross_weight_g: Optional[float] = Field(default=None, gt=0)
     diameter: float = Field(default=1.75, gt=0)
     density: float = Field(default=1.24, gt=0)
     tare_weight_g: Optional[float] = Field(default=None, ge=0)
@@ -33,7 +34,15 @@ class SpoolCreate(BaseModel):
         """Validate cross-field spool constraints."""
         if self.nozzle_min > self.nozzle_max:
             raise ValueError("nozzle_min must be <= nozzle_max")
-        if self.remaining_weight is not None and self.remaining_weight > self.initial_weight:
+        if self.gross_weight_g is None and self.initial_weight is None:
+            raise ValueError("initial_weight is required when gross_weight_g is missing")
+        if self.gross_weight_g is not None and self.tare_weight_g is not None and self.gross_weight_g < self.tare_weight_g:
+            raise ValueError("gross_weight_g must be >= tare_weight_g")
+        if (
+            self.remaining_weight is not None
+            and self.initial_weight is not None
+            and self.remaining_weight > self.initial_weight
+        ):
             raise ValueError("remaining_weight must be <= initial_weight")
         if self.status and self.status not in {"lager", "aktiv", "leer"}:
             raise ValueError("status must be one of: lager, aktiv, leer")

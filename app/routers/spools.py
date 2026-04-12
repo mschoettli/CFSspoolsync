@@ -42,16 +42,33 @@ def list_spools(
 def create_spool(payload: SpoolCreate, db: Session = Depends(get_db)):
     """Create a spool entry in storage."""
     data = payload.model_dump()
+    gross_weight = data.pop("gross_weight_g", None)
     remaining = data.pop("remaining_weight")
     requested_status = data.pop("status")
     requested_slot = data.pop("cfs_slot")
-    if remaining is None:
-        remaining = data["initial_weight"]
+
     if data.get("tare_weight_g") is None:
         data["tare_weight_g"] = get_default_tare_weight_g(
             data.get("brand"),
             data.get("material"),
         )
+    tare_weight = data.get("tare_weight_g") or 0.0
+
+    if gross_weight is not None:
+        if gross_weight < tare_weight:
+            raise HTTPException(422, "Bruttogewicht darf nicht kleiner als Tara sein")
+        net_weight = round(max(0.0, gross_weight - tare_weight), 1)
+        if net_weight <= 0:
+            raise HTTPException(422, "Berechnetes Nettogewicht muss > 0 sein")
+        data["initial_weight"] = net_weight
+        remaining = net_weight
+        data["last_gross_weight_g"] = round(gross_weight, 1)
+        data["tare_weight_g"] = round(tare_weight, 1)
+    else:
+        if data.get("initial_weight") is None:
+            raise HTTPException(422, "Anfangsgewicht ist erforderlich")
+        if remaining is None:
+            remaining = data["initial_weight"]
 
     status = requested_status or ("aktiv" if requested_slot is not None else "lager")
     cfs_slot = requested_slot if status == "aktiv" else None

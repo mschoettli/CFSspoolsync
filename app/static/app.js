@@ -75,17 +75,18 @@ const I18N = {
     'Foto aufnehmen': 'Take photo',
     'Abbrechen': 'Cancel',
     'Weiter': 'Continue',
-    'Pruefen & Speichern': 'Review & Save',
+    'Prüfen & Speichern': 'Review & Save',
     'Gewicht': 'Weight',
     'Temperatur': 'Temperature',
     'Erweitert': 'Advanced',
     'Spule speichern': 'Save spool',
-    'Zurueck': 'Back',
+    'Zurück': 'Back',
     'OCR Review': 'OCR Review',
     'Noch kein Scan vorhanden.': 'No scan yet.',
-    'Manuelle Aenderung': 'Manual edit',
-    'Bitte waehlen': 'Please choose',
-    'Spule hinzugefuegt': 'Spool added',
+    'Manuelle Änderung': 'Manual edit',
+    'Bitte wählen': 'Please choose',
+    'Spule hinzugefügt': 'Spool added',
+    'Zurücksetzen': 'Reset',
     'Gespeichert': 'Saved',
     'Neueste zuerst': 'Newest first',
     'Meiste Verbrauch': 'Highest consumption',
@@ -1039,6 +1040,28 @@ const OCR_FALLBACK_COLOR_BY_NAME = OCR_FALLBACK_COLORS.reduce((acc, item) => {
 OCR_FALLBACK_COLOR_BY_NAME.grey = '#888888';
 OCR_FALLBACK_COLOR_BY_NAME.wood = '#8B4513';
 
+const BRAND_DEFAULT_TARE_G = {
+  'bambu lab': 246.0,
+  creality: 175.0,
+  esun: 245.0,
+  geeetech: 185.0,
+  jayo: 190.0,
+  sunlu: 190.0,
+};
+
+const MATERIAL_TARE_ADJUST_G = {
+  TPU: 15.0,
+};
+
+function getDefaultTareWeight(brand, material) {
+  const brandKey = String(brand || '').trim().toLowerCase().replace(/\s+/gu, ' ');
+  const base = BRAND_DEFAULT_TARE_G[brandKey];
+  if (!Number.isFinite(base)) return null;
+  const materialKey = String(material || '').trim().toUpperCase();
+  const adjustment = MATERIAL_TARE_ADJUST_G[materialKey] || 0;
+  return Math.round((base + adjustment) * 10) / 10;
+}
+
 function normalizeColorHex(value) {
   if (!value) return null;
   let hex = String(value).trim().replace(/^#/u, '');
@@ -1176,12 +1199,12 @@ function buildAddSpoolForm() {
           <div class="ocr-review-empty-text">Noch kein Scan vorhanden.</div>
         </div>
         <div id="ocrFallbackPanel" class="ocr-fallback-panel is-visible">
-          <div class="ocr-fallback-title">Manuelle Aenderung</div>
+          <div class="ocr-fallback-title">Manuelle Änderung</div>
           <div class="ocr-fallback-grid">
             <div class="form-group">
               <label class="form-label">Hersteller</label>
               <select class="form-input" id="ocrFallbackBrand">
-                <option value="">Bitte waehlen</option>
+                <option value="">Bitte wählen</option>
                 ${OCR_FALLBACK_BRANDS.map(v => `<option value="${v}">${v}</option>`).join('')}
               </select>
               <div class="ocr-suggestion-row" id="ocrSuggestBrand"></div>
@@ -1189,7 +1212,7 @@ function buildAddSpoolForm() {
             <div class="form-group">
               <label class="form-label">Material</label>
               <select class="form-input" id="ocrFallbackMaterial">
-                <option value="">Bitte waehlen</option>
+                <option value="">Bitte wählen</option>
                 ${OCR_FALLBACK_MATERIALS.map(v => `<option value="${v}">${v}</option>`).join('')}
               </select>
               <div class="ocr-suggestion-row" id="ocrSuggestMaterial"></div>
@@ -1197,13 +1220,13 @@ function buildAddSpoolForm() {
             <div class="form-group">
               <label class="form-label">Farbe</label>
               <select class="form-input" id="ocrFallbackColor">
-                <option value="">Bitte waehlen</option>
+                <option value="">Bitte wählen</option>
                 ${OCR_FALLBACK_COLORS.map(v => `<option value="${v.hex}">${v.name}</option>`).join('')}
               </select>
               <div class="ocr-suggestion-row" id="ocrSuggestColor"></div>
             </div>
           </div>
-          <div class="ocr-fallback-note">Dropdown-Auswahl hat Vorrang und wird als manuell bestaetigt uebernommen.</div>
+          <div class="ocr-fallback-note">Dropdown-Auswahl hat Vorrang und wird als manuell bestätigt übernommen.</div>
         </div>
 
         <div class="spool-form-card">
@@ -1215,14 +1238,14 @@ function buildAddSpoolForm() {
             <div class="form-group">
               <label class="form-label">Material *</label>
               <select class="form-input" id="spoolMaterialSelect">
-                <option value="">Bitte waehlen</option>
+                <option value="">Bitte wählen</option>
                 ${OCR_FALLBACK_MATERIALS.map(v => `<option value="${v}">${v}</option>`).join('')}
               </select>
             </div>
             <div class="form-group">
               <label class="form-label">Hersteller</label>
               <select class="form-input" id="spoolBrandSelect">
-                <option value="">Bitte waehlen</option>
+                <option value="">Bitte wählen</option>
                 ${OCR_FALLBACK_BRANDS.map(v => `<option value="${v}">${v}</option>`).join('')}
               </select>
             </div>
@@ -1230,7 +1253,7 @@ function buildAddSpoolForm() {
               <label class="form-label">Farbe</label>
               <div class="spool-color-inline">
                 <select class="form-input" id="spoolColorPreset">
-                  <option value="">Bitte waehlen</option>
+                  <option value="">Bitte wählen</option>
                   ${OCR_FALLBACK_COLORS.map(v => `<option value="${v.hex}">${v.name}</option>`).join('')}
                 </select>
                 <span class="spool-color-swatch" id="spoolColorSwatch" aria-hidden="true"></span>
@@ -1247,41 +1270,32 @@ function buildAddSpoolForm() {
           <h4>Gewicht</h4>
           <div class="form-grid spool-form-grid spool-form-grid-weights">
             <div class="form-group">
-              <label class="form-label">Anfangsgewicht (g) *</label>
-              <input class="form-input" type="number" name="initial_weight" required min="1" step="0.1" placeholder="1000">
-              <span class="form-hint">Vollspule ohne Spulenkoerper</span>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Verbleibend (g)</label>
-              <input class="form-input" type="number" name="remaining_weight" min="0" step="0.1" placeholder="Leer = Anfangsgewicht" autocomplete="off">
-              <span class="form-hint">Wird nicht automatisch aus CFS uebernommen</span>
-            </div>
-          </div>
-        </div>
-
-        <details class="spool-form-card">
-          <summary>Kalibrierung (optional)</summary>
-          <div class="form-grid spool-form-grid spool-form-grid-weights">
-            <div class="form-group">
-              <label class="form-label">Bruttogewicht (g)</label>
-              <input class="form-input" type="number" name="gross_weight_g" min="1" step="0.1" placeholder="optional, z.B. 338">
+              <label class="form-label">Bruttogewicht (g) *</label>
+              <input class="form-input" type="number" name="gross_weight_g" required min="1" step="0.1" placeholder="z.B. 1183">
+              <span class="form-hint">Gemessenes Gewicht mit Spule</span>
             </div>
             <div class="form-group">
               <label class="form-label">Tara Spule (g)</label>
-              <input class="form-input" type="number" name="tare_weight_g" min="0" step="0.1" placeholder="optional, z.B. 175">
+              <input class="form-input" type="number" name="tare_weight_g" min="0" step="0.1" placeholder="z.B. 175">
+              <span class="form-hint">Leergewicht der Spule, editierbar</span>
             </div>
           </div>
-        </details>
+          <div class="spool-net-preview">
+            <span class="spool-net-preview-label">Berechnetes Nettogewicht</span>
+            <strong id="computedNetWeight">-</strong>
+            <span class="spool-net-preview-note">Netto = Brutto - Tara</span>
+          </div>
+        </div>
 
         <details class="spool-form-card" open>
           <summary>Temperatur</summary>
           <div class="form-grid">
             <div class="form-group">
-              <label class="form-label">Duese min (C)</label>
+              <label class="form-label">Düse min (C)</label>
               <input class="form-input" type="number" name="nozzle_min" value="190" min="0" max="500">
             </div>
             <div class="form-group">
-              <label class="form-label">Duese max (C)</label>
+              <label class="form-label">Düse max (C)</label>
               <input class="form-input" type="number" name="nozzle_max" value="230" min="0" max="500">
             </div>
             <div class="form-group">
@@ -1293,6 +1307,7 @@ function buildAddSpoolForm() {
 
         <div class="form-actions form-actions-sticky">
           <button type="button" class="btn btn-ghost" id="btnCancelSpool">Abbrechen</button>
+          <button type="button" class="btn btn-ghost" id="btnResetSpool">Zurücksetzen</button>
           <button type="submit" class="btn btn-primary">Spule speichern</button>
         </div>
       </form>
@@ -1305,7 +1320,7 @@ function setupAddSpoolForm() {
   let scanInProgress = false;
   let hasAutoDetectedData = false;
   let fallbackUsed = false;
-  let remainingManuallyEdited = false;
+  let tareManuallyEdited = false;
   let modalClicks = 0;
   let lastScanStartedAt = 0;
   let readyMetricsSent = false;
@@ -1317,7 +1332,9 @@ function setupAddSpoolForm() {
   const cfsStatusEl = document.getElementById('k2ReadStatus');
   const scanStatusEl = document.getElementById('scanStatusText');
   const scanFileEl = document.getElementById('scanFileName');
-  const remainingInput = document.querySelector('#addSpoolForm [name="remaining_weight"]');
+  const grossInput = document.querySelector('#addSpoolForm [name="gross_weight_g"]');
+  const tareInput = document.querySelector('#addSpoolForm [name="tare_weight_g"]');
+  const netPreviewEl = document.getElementById('computedNetWeight');
   let scanStatusTimer = null;
 
   const setScanStatus = (text, tone = 'muted') => {
@@ -1348,7 +1365,7 @@ function setupAddSpoolForm() {
     stopScanStatusTicker();
     setScanStatus('Bild wird analysiert...', 'muted');
     scanStatusTimer = setTimeout(() => {
-      setScanStatus('Zusaetzliche Erkennung wird geprueft...', 'mid');
+      setScanStatus('Zusätzliche Erkennung wird geprüft...', 'mid');
     }, 3500);
   };
 
@@ -1363,10 +1380,13 @@ function setupAddSpoolForm() {
     if (!f) return;
     const material = String(f.querySelector('[name="material"]').value || '').trim() || '-';
     const brand = String(f.querySelector('[name="brand"]').value || '').trim() || '-';
-    const initial = parseFloat(f.querySelector('[name="initial_weight"]').value);
+    const gross = parseFloat(f.querySelector('[name="gross_weight_g"]').value);
+    const tare = parseFloat(f.querySelector('[name="tare_weight_g"]').value);
+    const effectiveTare = Number.isFinite(tare) ? tare : 0;
+    const net = Number.isFinite(gross) ? Math.max(0, gross - effectiveTare) : Number.NaN;
     document.getElementById('detectedMaterial').textContent = material;
     document.getElementById('detectedBrand').textContent = brand;
-    document.getElementById('detectedWeight').textContent = Number.isFinite(initial) ? `${initial.toFixed(0)} g` : '-';
+    document.getElementById('detectedWeight').textContent = Number.isFinite(net) && net > 0 ? `${net.toFixed(0)} g` : '-';
   };
 
   const isSaveReady = () => {
@@ -1374,8 +1394,36 @@ function setupAddSpoolForm() {
     if (!f) return false;
     const material = String(f.querySelector('[name="material"]').value || '').trim();
     const diameter = parseFloat(f.querySelector('[name="diameter"]').value);
-    const initialWeight = parseFloat(f.querySelector('[name="initial_weight"]').value);
-    return Boolean(material) && Number.isFinite(diameter) && diameter > 0 && Number.isFinite(initialWeight) && initialWeight > 0;
+    const gross = parseFloat(f.querySelector('[name="gross_weight_g"]').value);
+    const tare = parseFloat(f.querySelector('[name="tare_weight_g"]').value);
+    const effectiveTare = Number.isFinite(tare) ? tare : 0;
+    const hasValidNet = Number.isFinite(gross) && gross >= effectiveTare && (gross - effectiveTare) > 0;
+    return Boolean(material) && Number.isFinite(diameter) && diameter > 0 && hasValidNet;
+  };
+
+  const updateComputedNetWeight = () => {
+    if (!netPreviewEl) return;
+    const gross = parseFloat(grossInput?.value || '');
+    const tare = parseFloat(tareInput?.value || '');
+    if (!Number.isFinite(gross)) {
+      netPreviewEl.textContent = '-';
+      return;
+    }
+    const effectiveTare = Number.isFinite(tare) ? tare : 0;
+    const net = Math.max(0, gross - effectiveTare);
+    netPreviewEl.textContent = `${net.toFixed(1)} g`;
+  };
+
+  const applyDefaultTareIfNeeded = () => {
+    if (!tareInput || tareManuallyEdited) return;
+    const form = document.getElementById('addSpoolForm');
+    if (!form) return;
+    const brand = form.querySelector('[name="brand"]')?.value;
+    const material = form.querySelector('[name="material"]')?.value;
+    const defaultTare = getDefaultTareWeight(brand, material);
+    if (!Number.isFinite(defaultTare)) return;
+    tareInput.value = String(defaultTare);
+    tareInput.dispatchEvent(new Event('input', { bubbles: true }));
   };
 
   const maybeEmitReadyMetrics = (source) => {
@@ -1545,39 +1593,54 @@ function setupAddSpoolForm() {
   };
 
   const applyOCRResult = (data) => {
+    if (!formPanel?.isConnected) return;
     stopScanStatusTicker();
     fillFormFromOCR(data);
-    if (!remainingManuallyEdited && remainingInput) {
-      remainingInput.value = '';
-      remainingInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
     renderOCRReview(data);
     renderFallbackPanel(data);
+    applyDefaultTareIfNeeded();
+    updateComputedNetWeight();
     refreshDetectedStrip();
     const acceptedCount = Object.values(data?.review || {})
       .filter(entry => entry?.status === 'accepted').length;
     if (acceptedCount === 0) {
-      setScanStatus('Scan abgeschlossen. Bitte Felder manuell pruefen.', 'mid');
+      setScanStatus('Scan abgeschlossen. Bitte Felder manuell prüfen.', 'mid');
     } else {
-      setScanStatus(`Scan abgeschlossen. ${acceptedCount} Felder wurden automatisch uebernommen.`, 'success');
+      setScanStatus(`Scan abgeschlossen. ${acceptedCount} Felder wurden automatisch übernommen.`, 'success');
     }
     hasAutoDetectedData = acceptedCount > 0;
     maybeEmitReadyMetrics('ocr');
   };
 
+  const resetAddSpoolFlow = () => {
+    stopScanStatusTicker();
+    stopLabelScanStream();
+    const modalBody = document.getElementById('modalBody');
+    if (!modalBody) return;
+    modalBody.innerHTML = buildAddSpoolForm();
+    setupAddSpoolForm();
+  };
+
   refreshDetectedStrip();
   applyFallbackDropdowns();
   bindEssentialsControls();
-  if (remainingInput) {
+  if (tareInput) {
     const markManual = (event) => {
       if (event?.isTrusted) {
-        remainingManuallyEdited = true;
+        tareManuallyEdited = true;
       }
     };
-    remainingInput.addEventListener('keydown', markManual);
-    remainingInput.addEventListener('change', markManual);
-    remainingInput.addEventListener('input', markManual);
+    tareInput.addEventListener('keydown', markManual);
+    tareInput.addEventListener('change', markManual);
+    tareInput.addEventListener('input', markManual);
   }
+  if (grossInput) grossInput.addEventListener('input', updateComputedNetWeight);
+  if (tareInput) tareInput.addEventListener('input', updateComputedNetWeight);
+  const formForDefaults = document.getElementById('addSpoolForm');
+  formForDefaults?.querySelector('[name="brand"]')?.addEventListener('input', applyDefaultTareIfNeeded);
+  formForDefaults?.querySelector('[name="material"]')?.addEventListener('input', applyDefaultTareIfNeeded);
+  applyDefaultTareIfNeeded();
+  updateComputedNetWeight();
   document.querySelector('.spool-modal-add')?.addEventListener('click', () => {
     modalClicks += 1;
   });
@@ -1603,8 +1666,9 @@ function setupAddSpoolForm() {
       fillFormFromK2(data);
       refreshDetectedStrip();
       loadedFromCfs = true;
-      remainingManuallyEdited = false;
       hasAutoDetectedData = true;
+      applyDefaultTareIfNeeded();
+      updateComputedNetWeight();
       if (cfsStatusEl) {
         cfsStatusEl.textContent = 'OK Daten geladen';
         cfsStatusEl.style.color = 'var(--accent)';
@@ -1619,6 +1683,7 @@ function setupAddSpoolForm() {
   });
 
   document.getElementById('btnCancelSpool').addEventListener('click', closeModal);
+  document.getElementById('btnResetSpool').addEventListener('click', resetAddSpoolFlow);
 
   document.getElementById('btnScanLabel').addEventListener('click', async () => {
     const video = document.getElementById('labelVideo');
@@ -1652,6 +1717,7 @@ function setupAddSpoolForm() {
           }
           try {
             const data = await uploadLabelImage(blob);
+            if (!formPanel?.isConnected) return;
             applyOCRResult(data);
           } catch (err) {
             stopScanStatusTicker();
@@ -1680,6 +1746,7 @@ function setupAddSpoolForm() {
     setScanBusy(true);
     try {
       const data = await uploadLabelImage(file);
+      if (!formPanel?.isConnected) return;
       applyOCRResult(data);
     } catch (err) {
       stopScanStatusTicker();
@@ -1698,13 +1765,21 @@ function setupAddSpoolForm() {
   formPanel.addEventListener('submit', async e => {
     e.preventDefault();
     const fd = new FormData(e.target);
+    const grossWeight = parseFloat(String(fd.get('gross_weight_g') || '').trim());
+    const tareRaw = String(fd.get('tare_weight_g') || '').trim();
+    const tareWeight = tareRaw ? parseFloat(tareRaw) : 0;
+    const netWeight = Number.isFinite(grossWeight) && Number.isFinite(tareWeight)
+      ? Math.max(0, grossWeight - tareWeight)
+      : Number.NaN;
     const payload = {
       material: String(fd.get('material') || '').trim(),
       color: fd.get('color'),
       brand: fd.get('brand') || '',
       name: fd.get('name') || '',
-      initial_weight: parseFloat(fd.get('initial_weight')),
-      remaining_weight: fd.get('remaining_weight') ? parseFloat(fd.get('remaining_weight')) : null,
+      initial_weight: netWeight,
+      remaining_weight: netWeight,
+      gross_weight_g: grossWeight,
+      tare_weight_g: tareWeight,
       nozzle_min: parseInt(fd.get('nozzle_min')),
       nozzle_max: parseInt(fd.get('nozzle_max')),
       bed_temp: parseInt(fd.get('bed_temp')),
@@ -1713,14 +1788,7 @@ function setupAddSpoolForm() {
       serial_num: fd.get('serial_num') || '',
       notes: fd.get('notes') || '',
     };
-    const grossInput = String(fd.get('gross_weight_g') || '').trim();
-    const tareInput = String(fd.get('tare_weight_g') || '').trim();
-    const grossWeight = grossInput ? parseFloat(grossInput) : null;
-    const tareWeight = tareInput ? parseFloat(tareInput) : null;
 
-    if (tareWeight !== null) {
-      payload.tare_weight_g = tareWeight;
-    }
 
     if (loadedFromCfs && Number.isInteger(selectedSlot)) {
       payload.status = 'aktiv';
@@ -1729,8 +1797,17 @@ function setupAddSpoolForm() {
 
     try {
       if (!payload.material) throw new Error('Material ist erforderlich');
+      if (!Number.isFinite(grossWeight) || grossWeight <= 0) {
+        throw new Error('Bruttogewicht muss > 0 sein');
+      }
+      if (!Number.isFinite(tareWeight) || tareWeight < 0) {
+        throw new Error('Tara muss >= 0 sein');
+      }
+      if (grossWeight < tareWeight) {
+        throw new Error('Bruttogewicht darf nicht kleiner als Tara sein');
+      }
       if (!Number.isFinite(payload.initial_weight) || payload.initial_weight <= 0) {
-        throw new Error('Anfangsgewicht muss > 0 sein');
+        throw new Error('Berechnetes Nettogewicht muss > 0 sein');
       }
       if (!Number.isFinite(payload.diameter) || payload.diameter <= 0) {
         throw new Error('Durchmesser muss > 0 sein');
@@ -1739,30 +1816,18 @@ function setupAddSpoolForm() {
       payload.nozzle_max = Number.isFinite(payload.nozzle_max) ? payload.nozzle_max : 230;
       payload.bed_temp = Number.isFinite(payload.bed_temp) ? payload.bed_temp : 60;
       payload.density = Number.isFinite(payload.density) ? payload.density : 1.24;
-      if (payload.remaining_weight !== null && !Number.isFinite(payload.remaining_weight)) {
-        throw new Error('Aktuell verbleibend ist ungueltig');
+      if (!Number.isFinite(payload.remaining_weight) || payload.remaining_weight < 0) {
+        throw new Error('Berechnetes Restgewicht ist ungültig');
       }
-      if (payload.remaining_weight === null) {
-        payload.remaining_weight = payload.initial_weight;
-      }
-      if (payload.remaining_weight !== null && payload.remaining_weight > payload.initial_weight) {
-        throw new Error('Aktuell verbleibend darf nicht groesser als Anfangsgewicht sein');
+      if (payload.remaining_weight > payload.initial_weight) {
+        throw new Error('Aktuell verbleibend darf nicht größer als Anfangsgewicht sein');
       }
       if (payload.nozzle_min > payload.nozzle_max) {
-        throw new Error('Duese min darf nicht groesser als Duese max sein');
-      }
-      if (grossWeight !== null && (!Number.isFinite(grossWeight) || grossWeight <= 0)) {
-        throw new Error('Bruttogewicht muss > 0 sein');
-      }
-      if (tareWeight !== null && (!Number.isFinite(tareWeight) || tareWeight < 0)) {
-        throw new Error('Tara muss >= 0 sein');
-      }
-      if (grossWeight !== null && tareWeight !== null && grossWeight < tareWeight) {
-        throw new Error('Bruttogewicht darf nicht kleiner als Tara sein');
+        throw new Error('Düse min darf nicht größer als Düse max sein');
       }
 
       const created = await apiFetch('/api/spools', { method: 'POST', body: JSON.stringify(payload) });
-      if (grossWeight !== null && Number.isInteger(created?.id)) {
+      if (Number.isInteger(created?.id)) {
         await apiFetch(`/api/spools/${created.id}/calibrate-weight`, {
           method: 'POST',
           body: JSON.stringify({
@@ -1771,7 +1836,7 @@ function setupAddSpoolForm() {
           }),
         });
       }
-      showToast('Spule hinzugefuegt', 'success');
+      showToast('Spule hinzugefügt', 'success');
       closeModal();
       await Promise.all([loadSpools(), loadCFS()]);
     } catch (err) {
@@ -1881,7 +1946,6 @@ function fillFormFromOCR(data) {
     return null;
   };
 
-  const weightValue = getAccepted('weight_g');
   const bedValue = getAccepted('bed_max') ?? getAccepted('bed_min');
   const nozzleMin = getAccepted('nozzle_min');
   const nozzleMax = getAccepted('nozzle_max');
@@ -1912,9 +1976,6 @@ function fillFormFromOCR(data) {
   }
   if (typeof diameter === 'number' && diameter > 0) {
     set('diameter', diameter);
-  }
-  if (typeof weightValue === 'number' && weightValue > 0) {
-    set('initial_weight', weightValue);
   }
 }
 
@@ -1987,7 +2048,7 @@ function openEditModal(id) {
         throw new Error('Aktuell verbleibend muss >= 0 sein');
       }
       if (payload.remaining_weight > payload.initial_weight) {
-        throw new Error('Aktuell verbleibend darf nicht groesser als Anfangsgewicht sein');
+        throw new Error('Aktuell verbleibend darf nicht größer als Anfangsgewicht sein');
       }
       if (
         !Number.isFinite(payload.nozzle_min)
@@ -1996,10 +2057,10 @@ function openEditModal(id) {
         || !Number.isFinite(payload.diameter)
         || !Number.isFinite(payload.density)
       ) {
-        throw new Error('Bitte alle numerischen Felder gueltig ausfuellen');
+        throw new Error('Bitte alle numerischen Felder gültig ausfüllen');
       }
       if (payload.nozzle_min > payload.nozzle_max) {
-        throw new Error('Duese min darf nicht groesser als Duese max sein');
+        throw new Error('Düse min darf nicht größer als Düse max sein');
       }
       await apiFetch(`/api/spools/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
       showToast('Gespeichert', 'success');

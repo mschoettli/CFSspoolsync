@@ -501,7 +501,7 @@ function renderSlotCard(slot) {
           <div class="color-swatch" style="background:${s.color}"></div>
           <div class="filament-meta">
             <div class="filament-material">${esc(s.material)}</div>
-            <div class="filament-brand">${esc(s.brand || '—')} ${renderCalibrationBadge(s)}</div>
+            <div class="filament-brand">${esc(s.brand || '—')}</div>
           </div>
         </div>
 
@@ -687,7 +687,7 @@ function renderSpoolRow(s) {
           </div>
         </div>
       </td>
-      <td class="spool-brand-label">${esc(s.brand || '—')} ${renderCalibrationBadge(s)}</td>
+      <td class="spool-brand-label">${esc(s.brand || '—')}</td>
       <td class="spool-weight-cell">
         ${s.remaining_weight.toFixed(0)} g
         <div class="weight-mini-bar">
@@ -730,7 +730,7 @@ function renderSpoolCard(s) {
           <div class="spool-color-dot" style="background:${s.color}"></div>
           <div>
             <div class="spool-material-label">${esc(s.material)}</div>
-            <div class="spool-brand-label">${esc(s.brand || '—')} ${renderCalibrationBadge(s)}</div>
+            <div class="spool-brand-label">${esc(s.brand || '—')}</div>
           </div>
         </div>
         <span class="spool-status-badge ${s.status}">
@@ -1190,6 +1190,14 @@ function buildAddSpoolForm() {
               <label class="form-label">Verbleibend (g)</label>
               <input class="form-input" type="number" name="remaining_weight" min="0" step="0.1" placeholder="Leer = Anfangsgewicht">
             </div>
+            <div class="form-group">
+              <label class="form-label">Bruttogewicht (g)</label>
+              <input class="form-input" type="number" name="gross_weight_g" min="1" step="0.1" placeholder="optional, z.B. 338">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tara Spule (g)</label>
+              <input class="form-input" type="number" name="tare_weight_g" min="0" step="0.1" placeholder="optional, z.B. 175">
+            </div>
           </div>
         </div>
 
@@ -1612,6 +1620,14 @@ function setupAddSpoolForm() {
       serial_num: fd.get('serial_num') || '',
       notes: fd.get('notes') || '',
     };
+    const grossInput = String(fd.get('gross_weight_g') || '').trim();
+    const tareInput = String(fd.get('tare_weight_g') || '').trim();
+    const grossWeight = grossInput ? parseFloat(grossInput) : null;
+    const tareWeight = tareInput ? parseFloat(tareInput) : null;
+
+    if (tareWeight !== null) {
+      payload.tare_weight_g = tareWeight;
+    }
 
     if (loadedFromCfs && Number.isInteger(selectedSlot)) {
       payload.status = 'aktiv';
@@ -1642,8 +1658,26 @@ function setupAddSpoolForm() {
       if (payload.nozzle_min > payload.nozzle_max) {
         throw new Error('Duese min darf nicht groesser als Duese max sein');
       }
+      if (grossWeight !== null && (!Number.isFinite(grossWeight) || grossWeight <= 0)) {
+        throw new Error('Bruttogewicht muss > 0 sein');
+      }
+      if (tareWeight !== null && (!Number.isFinite(tareWeight) || tareWeight < 0)) {
+        throw new Error('Tara muss >= 0 sein');
+      }
+      if (grossWeight !== null && tareWeight !== null && grossWeight < tareWeight) {
+        throw new Error('Bruttogewicht darf nicht kleiner als Tara sein');
+      }
 
-      await apiFetch('/api/spools', { method: 'POST', body: JSON.stringify(payload) });
+      const created = await apiFetch('/api/spools', { method: 'POST', body: JSON.stringify(payload) });
+      if (grossWeight !== null && Number.isInteger(created?.id)) {
+        await apiFetch(`/api/spools/${created.id}/calibrate-weight`, {
+          method: 'POST',
+          body: JSON.stringify({
+            gross_weight_g: grossWeight,
+            tare_weight_g: tareWeight,
+          }),
+        });
+      }
       showToast('Spule hinzugefuegt', 'success');
       closeModal();
       await Promise.all([loadSpools(), loadCFS()]);
@@ -2164,11 +2198,6 @@ function formatPrinterFilenameForStatus(filename) {
 function formatRemainingWeight(weight) {
   if (typeof weight !== 'number' || !isFinite(weight)) return '—';
   return `${weight.toFixed(0)} g`;
-}
-
-function renderCalibrationBadge(spool) {
-  if (!spool || !Number.isFinite(spool.calibration_factor)) return '';
-  return `<span class="spool-calibration-badge" title="Kalibriert">x${Number(spool.calibration_factor).toFixed(2)}</span>`;
 }
 
 

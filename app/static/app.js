@@ -1785,10 +1785,28 @@ function fillFormFromOCR(data) {
   };
 
   const fields = data.result || {};
+  const review = data.review || {};
   const getAccepted = (key) => {
     const value = fields[key];
     if (value === undefined || value === null || value === '') return null;
     return value;
+  };
+  const getReviewValue = (key) => {
+    const entry = review[key];
+    if (!entry || entry.status === 'missing' || entry.status === 'rejected') {
+      return null;
+    }
+    const accepted = entry.accepted_value;
+    if (accepted !== undefined && accepted !== null && accepted !== '') {
+      return accepted;
+    }
+    if (Array.isArray(entry.candidates) && entry.candidates.length > 0) {
+      const first = entry.candidates[0];
+      if (first !== undefined && first !== null && first !== '') {
+        return first;
+      }
+    }
+    return null;
   };
 
   const weightValue = getAccepted('weight_g');
@@ -1797,8 +1815,8 @@ function fillFormFromOCR(data) {
   const nozzleMax = getAccepted('nozzle_max');
   const diameter = getAccepted('diameter_mm');
   const material = getAccepted('material');
-  const colorHex = getAccepted('color_hex');
-  const colorName = getAccepted('color_name');
+  const colorHex = getAccepted('color_hex') || getReviewValue('color_hex');
+  const colorName = getAccepted('color_name') || getReviewValue('color_name');
   const color = colorHex || (colorName ? OCR_FALLBACK_COLOR_BY_NAME[String(colorName).toLowerCase()] : null);
   const brand = getAccepted('brand');
 

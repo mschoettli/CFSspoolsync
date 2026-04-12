@@ -938,21 +938,30 @@ function buildAddSpoolForm() {
   return `
     <div class="spool-modal-add">
       <section class="spool-source-panel" id="addSpoolStepSource">
-        <div class="k2-read-box k2-read-box-elevated">
-          <p class="spool-source-title">Daten automatisch einlesen</p>
-          <div class="k2-slot-selector">
-            ${[1, 2, 3, 4].map(n => `<button class="slot-btn" type="button" data-slot="${n}">Spule ${n}</button>`).join('')}
+        <div class="spool-source-layout">
+          <div class="k2-read-box k2-read-box-elevated spool-source-card">
+            <p class="spool-source-title">CFS laden</p>
+            <div class="k2-slot-selector">
+              ${[1, 2, 3, 4].map(n => `<button class="slot-btn" type="button" data-slot="${n}">Spule ${n}</button>`).join('')}
+            </div>
+            <div class="spool-source-actions">
+              <button class="btn btn-ghost btn-sm" id="btnReadFromK2" type="button" disabled>Von CFS lesen</button>
+            </div>
           </div>
-          <div class="spool-source-actions">
-            <button class="btn btn-ghost btn-sm" id="btnReadFromK2" type="button" disabled>Von CFS lesen</button>
-            <button class="btn btn-ghost btn-sm" id="btnScanLabel" type="button">Etikett scannen</button>
+
+          <div class="k2-read-box spool-source-card spool-source-card-scan">
+            <p class="spool-source-title">Etikett scannen</p>
+            <div class="spool-source-actions">
+              <button class="btn btn-ghost btn-sm" id="btnScanLabel" type="button">Etikett scannen</button>
+            </div>
+            <button class="btn btn-primary btn-sm" id="btnCapture" type="button" style="display:none">Foto aufnehmen</button>
+            <video id="labelVideo" class="spool-scan-video" style="display:none" autoplay playsinline></video>
           </div>
+
           <input type="file" id="labelImageInput" accept="image/*" style="display:none">
-          <video id="labelVideo" class="spool-scan-video" style="display:none" autoplay playsinline></video>
           <canvas id="labelCanvas" style="display:none"></canvas>
-          <button class="btn btn-primary btn-sm" id="btnCapture" type="button" style="display:none">Foto aufnehmen</button>
-          <span id="k2ReadStatus" class="spool-read-status"></span>
         </div>
+        <span id="k2ReadStatus" class="spool-read-status"></span>
       </section>
 
       <form id="addSpoolForm" class="spool-form-panel">
@@ -974,7 +983,7 @@ function buildAddSpoolForm() {
           <div class="ocr-review-title">OCR Review</div>
           <div class="ocr-review-empty-text">Noch kein Scan vorhanden.</div>
         </div>
-        <div id="ocrFallbackPanel" class="ocr-fallback-panel">
+        <div id="ocrFallbackPanel" class="ocr-fallback-panel is-visible">
           <div class="ocr-fallback-title">Manuelle Aenderung</div>
           <div class="ocr-fallback-grid">
             <div class="form-group">
@@ -1008,6 +1017,9 @@ function buildAddSpoolForm() {
         <div class="spool-form-card">
           <h4>Basis</h4>
           <div class="form-grid spool-form-grid spool-form-grid-essentials">
+            <input type="hidden" name="material" value="">
+            <input type="hidden" name="brand" value="">
+            <input type="hidden" name="color" value="">
             <div class="form-group">
               <label class="form-label">Material *</label>
               <select class="form-input" id="spoolMaterialSelect">
@@ -1031,7 +1043,6 @@ function buildAddSpoolForm() {
                 </select>
                 <span class="spool-color-swatch" id="spoolColorSwatch" aria-hidden="true"></span>
               </div>
-              <input type="hidden" name="color" value="">
             </div>
             <div class="form-group">
               <label class="form-label">Durchmesser (mm) *</label>
@@ -1069,40 +1080,6 @@ function buildAddSpoolForm() {
             <div class="form-group">
               <label class="form-label">Bett (C)</label>
               <input class="form-input" type="number" name="bed_temp" value="60" min="0" max="150">
-            </div>
-          </div>
-        </details>
-
-          <details class="spool-form-card spool-form-advanced" open>
-            <summary>Erweitert</summary>
-            <div class="form-grid">
-              <div class="form-group">
-                <label class="form-label">Eigener Materialwert</label>
-                <input class="form-input" name="material" required placeholder="Optionaler Override">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Eigener Herstellerwert</label>
-                <input class="form-input" name="brand" placeholder="Optionaler Override">
-              </div>
-              <div class="form-group span2">
-                <label class="form-label">Eigene Farbe / Hex</label>
-                <input class="form-input" id="spoolColorText" placeholder="z. B. Gray oder #888888">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Dichte (g/cm3)</label>
-                <input class="form-input" type="number" name="density" value="1.24" step="0.01" min="0.5">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Name / Bezeichnung</label>
-                <input class="form-input" name="name" placeholder="Basic PLA Black">
-              </div>
-              <div class="form-group span2">
-                <label class="form-label">Seriennummer</label>
-                <input class="form-input" name="serial_num" placeholder="NFC Tag ID...">
-              </div>
-            <div class="form-group span2">
-              <label class="form-label">Notizen</label>
-              <input class="form-input" name="notes" placeholder="">
             </div>
           </div>
         </details>
@@ -1245,12 +1222,15 @@ function setupAddSpoolForm() {
     const brandInput = form.querySelector('[name="brand"]');
     const brandSelect = form.querySelector('#spoolBrandSelect');
     const colorSelect = form.querySelector('#spoolColorPreset');
-    const colorText = form.querySelector('#spoolColorText');
     const colorInput = form.querySelector('[name="color"]');
     const colorSwatch = form.querySelector('#spoolColorSwatch');
-    if (!materialInput || !materialSelect || !brandInput || !brandSelect || !colorSelect || !colorText || !colorInput) return;
+    const fallbackBrandSelect = document.getElementById('ocrFallbackBrand');
+    const fallbackMaterialSelect = document.getElementById('ocrFallbackMaterial');
+    const fallbackColorSelect = document.getElementById('ocrFallbackColor');
+    if (!materialInput || !materialSelect || !brandInput || !brandSelect || !colorSelect || !colorInput) return;
 
     const syncSelectByText = (selectEl, value) => {
+      if (!selectEl) return;
       const normalized = String(value || '').trim().toLowerCase();
       const option = Array.from(selectEl.options).find(o => String(o.value || '').trim().toLowerCase() === normalized);
       selectEl.value = option ? option.value : '';
@@ -1260,9 +1240,6 @@ function setupAddSpoolForm() {
       const current = String(colorInput.value || '').toLowerCase();
       const matched = OCR_FALLBACK_COLORS.find(item => String(item.hex || '').toLowerCase() === current);
       colorSelect.value = matched ? matched.hex : '';
-      if (updateText) {
-        colorText.value = matched ? matched.name : current;
-      }
       if (colorSwatch) {
         colorSwatch.style.background = current || 'transparent';
         colorSwatch.classList.toggle('is-empty', !current);
@@ -1275,6 +1252,7 @@ function setupAddSpoolForm() {
       materialInput.dispatchEvent(new Event('input', { bubbles: true }));
     });
     materialInput.addEventListener('input', () => syncSelectByText(materialSelect, materialInput.value));
+    materialInput.addEventListener('input', () => syncSelectByText(fallbackMaterialSelect, materialInput.value));
 
     brandSelect.addEventListener('change', () => {
       if (!brandSelect.value) return;
@@ -1282,43 +1260,33 @@ function setupAddSpoolForm() {
       brandInput.dispatchEvent(new Event('input', { bubbles: true }));
     });
     brandInput.addEventListener('input', () => syncSelectByText(brandSelect, brandInput.value));
+    brandInput.addEventListener('input', () => syncSelectByText(fallbackBrandSelect, brandInput.value));
 
     colorSelect.addEventListener('change', () => {
       if (!colorSelect.value) return;
       colorInput.value = colorSelect.value;
-      const selected = OCR_FALLBACK_COLORS.find(item => item.hex === colorSelect.value);
-      colorText.value = selected ? selected.name : colorSelect.value;
-      colorInput.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-
-    colorText.addEventListener('input', () => {
-      const raw = String(colorText.value || '').trim();
-      if (!raw) return;
-      const asHex = /^#?[0-9a-fA-F]{6}$/.test(raw) ? (raw.startsWith('#') ? raw : `#${raw}`) : '';
-      if (asHex) {
-        colorInput.value = asHex;
-      } else {
-        const mapped = OCR_FALLBACK_COLOR_BY_NAME[raw.toLowerCase()];
-        if (mapped) colorInput.value = mapped;
-      }
       colorInput.dispatchEvent(new Event('input', { bubbles: true }));
     });
 
     colorInput.addEventListener('input', () => {
       syncColorControlsFromValue(true);
+      if (fallbackColorSelect) {
+        fallbackColorSelect.value = colorSelect.value || '';
+      }
       refreshDetectedStrip();
     });
 
     syncSelectByText(materialSelect, materialInput.value);
     syncSelectByText(brandSelect, brandInput.value);
     syncColorControlsFromValue(true);
+    syncSelectByText(fallbackMaterialSelect, materialInput.value);
+    syncSelectByText(fallbackBrandSelect, brandInput.value);
+    if (fallbackColorSelect) fallbackColorSelect.value = colorSelect.value || '';
   };
 
   const renderFallbackPanel = (data) => {
     if (!fallbackPanel) return;
-    const show = Boolean(data?.fallback_recommended);
-    fallbackPanel.classList.toggle('is-visible', show);
-    if (!show) return;
+    fallbackPanel.classList.add('is-visible');
 
     const suggestions = data?.suggestions || {};
     const brandSelect = document.getElementById('ocrFallbackBrand');

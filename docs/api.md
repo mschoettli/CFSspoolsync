@@ -47,7 +47,7 @@ If `tare_weight_g` is omitted, the API uses this order:
 3. `0.0`
 
 ### `POST /api/spools/defaults/apply-brand`
-Apply known brand default tare weights to all spools with missing `tare_weight_g`.
+Apply editable brand default tare weights to all spools with missing `tare_weight_g`.
 
 Example response:
 ```json
@@ -61,6 +61,28 @@ Example response:
 
 ### `DELETE /api/spools/{spool_id}`
 Delete spool (fails for active slot assignments).
+
+## Tare Defaults
+
+### `GET /api/tare-defaults`
+List all manufacturer tare defaults.
+
+### `POST /api/tare-defaults`
+Create one manufacturer tare default.
+
+Example request:
+```json
+{
+  "brand_label": "Polymaker",
+  "tare_weight_g": 210.0
+}
+```
+
+### `PUT /api/tare-defaults/{brand_key}`
+Update one existing tare default.
+
+### `DELETE /api/tare-defaults/{brand_key}`
+Delete one non-system tare default.
 
 ## CFS
 

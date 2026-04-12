@@ -13,6 +13,7 @@ let appConfig = {
   datetime_locale: 'en-US',
   camera_stream_url: '',
 };
+let tareDefaultsCache = null;
 let localizationObserver = null;
 
 const I18N = {
@@ -134,6 +135,7 @@ const I18N = {
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   await loadAppConfig();
+  await loadTareDefaults();
   applyStaticTranslations();
   startLocalizationObserver();
   setupNav();
@@ -1053,9 +1055,37 @@ const MATERIAL_TARE_ADJUST_G = {
   TPU: 15.0,
 };
 
+function normalizeBrandKey(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/gu, ' ');
+}
+
+function buildTareDefaultsMap(entries) {
+  const map = { ...BRAND_DEFAULT_TARE_G };
+  if (!Array.isArray(entries)) return map;
+  for (const entry of entries) {
+    const key = normalizeBrandKey(entry?.brand_key || entry?.brand_label);
+    const tare = Number(entry?.tare_weight_g);
+    if (!key || !Number.isFinite(tare) || tare < 0) continue;
+    map[key] = tare;
+  }
+  return map;
+}
+
+async function loadTareDefaults(force = false) {
+  if (tareDefaultsCache && !force) return tareDefaultsCache;
+  try {
+    const entries = await apiFetch('/api/tare-defaults');
+    tareDefaultsCache = Array.isArray(entries) ? entries : [];
+  } catch {
+    tareDefaultsCache = [];
+  }
+  return tareDefaultsCache;
+}
+
 function getDefaultTareWeight(brand, material) {
-  const brandKey = String(brand || '').trim().toLowerCase().replace(/\s+/gu, ' ');
-  const base = BRAND_DEFAULT_TARE_G[brandKey];
+  const brandKey = normalizeBrandKey(brand);
+  const tareMap = buildTareDefaultsMap(tareDefaultsCache);
+  const base = tareMap[brandKey];
   if (!Number.isFinite(base)) return null;
   const materialKey = String(material || '').trim().toUpperCase();
   const adjustment = MATERIAL_TARE_ADJUST_G[materialKey] || 0;
@@ -1277,7 +1307,7 @@ function buildAddSpoolForm() {
             <div class="form-group">
               <label class="form-label">Tara Spule (g)</label>
               <input class="form-input" type="number" name="tare_weight_g" min="0" step="0.1" placeholder="z.B. 175">
-              <span class="form-hint">Leergewicht der Spule, editierbar</span>
+              <button class="form-link-btn" type="button" id="btnManageTareDefaults">Default-Tara je Hersteller bearbeiten</button>
             </div>
           </div>
           <div class="spool-net-preview">
@@ -1311,6 +1341,28 @@ function buildAddSpoolForm() {
           <button type="submit" class="btn btn-primary">Spule speichern</button>
         </div>
       </form>
+
+      <div class="inner-modal-overlay hidden" id="tareDefaultsModalOverlay">
+        <div class="inner-modal">
+          <div class="inner-modal-head">
+            <h4>Default Tara verwalten</h4>
+            <button type="button" class="modal-close" id="btnCloseTareDefaults" aria-label="Schließen">×</button>
+          </div>
+          <div class="inner-modal-body">
+            <div class="tare-defaults-table-head">
+              <span>Hersteller</span>
+              <span>Default Tara (g)</span>
+              <span>Aktion</span>
+            </div>
+            <div id="tareDefaultsRows" class="tare-defaults-rows"></div>
+            <form id="tareDefaultsCreateForm" class="tare-defaults-create-row" autocomplete="off">
+              <input class="form-input" name="brand_label" placeholder="Neuer Hersteller" required>
+              <input class="form-input" name="tare_weight_g" type="number" step="0.1" min="0" placeholder="z.B. 180" required>
+              <button type="submit" class="btn btn-ghost btn-sm">Hinzufügen</button>
+            </form>
+          </div>
+        </div>
+      </div>
     </div>`;
 }
 
@@ -1334,6 +1386,11 @@ function setupAddSpoolForm() {
   const scanFileEl = document.getElementById('scanFileName');
   const grossInput = document.querySelector('#addSpoolForm [name="gross_weight_g"]');
   const tareInput = document.querySelector('#addSpoolForm [name="tare_weight_g"]');
+  const manageTareDefaultsBtn = document.getElementById('btnManageTareDefaults');
+  const tareDefaultsOverlay = document.getElementById('tareDefaultsModalOverlay');
+  const tareDefaultsRows = document.getElementById('tareDefaultsRows');
+  const tareDefaultsCreateForm = document.getElementById('tareDefaultsCreateForm');
+  const closeTareDefaultsBtn = document.getElementById('btnCloseTareDefaults');
   const netPreviewEl = document.getElementById('computedNetWeight');
   let scanStatusTimer = null;
 
@@ -1424,6 +1481,36 @@ function setupAddSpoolForm() {
     if (!Number.isFinite(defaultTare)) return;
     tareInput.value = String(defaultTare);
     tareInput.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  const closeTareDefaultsModal = () => {
+    if (!tareDefaultsOverlay) return;
+    tareDefaultsOverlay.classList.add('hidden');
+  };
+
+  const renderTareDefaultsRows = (entries) => {
+    if (!tareDefaultsRows) return;
+    if (!Array.isArray(entries) || entries.length === 0) {
+      tareDefaultsRows.innerHTML = '<div class="tare-defaults-empty">Keine Hersteller-Defaults vorhanden.</div>';
+      return;
+    }
+    tareDefaultsRows.innerHTML = entries.map((entry) => `
+      <div class="tare-defaults-row" data-brand-key="${esc(entry.brand_key)}">
+        <input class="form-input" name="brand_label" value="${esc(entry.brand_label)}" required>
+        <input class="form-input" name="tare_weight_g" type="number" step="0.1" min="0" value="${Number(entry.tare_weight_g).toFixed(1)}" required>
+        <div class="tare-defaults-actions">
+          <button type="button" class="btn btn-ghost btn-sm" data-action="save-tare-default">Speichern</button>
+          ${entry.is_system ? '' : '<button type="button" class="btn btn-danger btn-sm" data-action="delete-tare-default">Löschen</button>'}
+        </div>
+      </div>
+    `).join('');
+  };
+
+  const openTareDefaultsModal = async () => {
+    if (!tareDefaultsOverlay) return;
+    const entries = await loadTareDefaults(true);
+    renderTareDefaultsRows(entries);
+    tareDefaultsOverlay.classList.remove('hidden');
   };
 
   const maybeEmitReadyMetrics = (source) => {
@@ -1684,6 +1771,88 @@ function setupAddSpoolForm() {
 
   document.getElementById('btnCancelSpool').addEventListener('click', closeModal);
   document.getElementById('btnResetSpool').addEventListener('click', resetAddSpoolFlow);
+  manageTareDefaultsBtn?.addEventListener('click', openTareDefaultsModal);
+  closeTareDefaultsBtn?.addEventListener('click', closeTareDefaultsModal);
+  tareDefaultsOverlay?.addEventListener('click', (event) => {
+    if (event.target === tareDefaultsOverlay) {
+      closeTareDefaultsModal();
+    }
+  });
+
+  tareDefaultsRows?.addEventListener('click', async (event) => {
+    const row = event.target.closest('.tare-defaults-row');
+    if (!row) return;
+    const brandKey = row.dataset.brandKey;
+    if (!brandKey) return;
+
+    const brandInput = row.querySelector('[name="brand_label"]');
+    const tareField = row.querySelector('[name="tare_weight_g"]');
+    const tareWeight = Number.parseFloat(tareField?.value || '');
+    const brandLabel = String(brandInput?.value || '').trim();
+
+    if (event.target.closest('[data-action="save-tare-default"]')) {
+      try {
+        if (!brandLabel) throw new Error('Hersteller ist erforderlich');
+        if (!Number.isFinite(tareWeight) || tareWeight < 0) throw new Error('Tara muss >= 0 sein');
+        await apiFetch(`/api/tare-defaults/${encodeURIComponent(brandKey)}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            brand_label: brandLabel,
+            tare_weight_g: tareWeight,
+          }),
+        });
+        const refreshed = await loadTareDefaults(true);
+        renderTareDefaultsRows(refreshed);
+        tareManuallyEdited = false;
+        applyDefaultTareIfNeeded();
+        showToast('Default-Tara gespeichert', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+      return;
+    }
+
+    if (event.target.closest('[data-action="delete-tare-default"]')) {
+      try {
+        await apiFetch(`/api/tare-defaults/${encodeURIComponent(brandKey)}`, {
+          method: 'DELETE',
+        });
+        const refreshed = await loadTareDefaults(true);
+        renderTareDefaultsRows(refreshed);
+        tareManuallyEdited = false;
+        applyDefaultTareIfNeeded();
+        showToast('Default-Tara gelöscht', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+  });
+
+  tareDefaultsCreateForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const fd = new FormData(tareDefaultsCreateForm);
+    const brandLabel = String(fd.get('brand_label') || '').trim();
+    const tareWeight = Number.parseFloat(String(fd.get('tare_weight_g') || '').trim());
+    try {
+      if (!brandLabel) throw new Error('Hersteller ist erforderlich');
+      if (!Number.isFinite(tareWeight) || tareWeight < 0) throw new Error('Tara muss >= 0 sein');
+      await apiFetch('/api/tare-defaults', {
+        method: 'POST',
+        body: JSON.stringify({
+          brand_label: brandLabel,
+          tare_weight_g: tareWeight,
+        }),
+      });
+      tareDefaultsCreateForm.reset();
+      const refreshed = await loadTareDefaults(true);
+      renderTareDefaultsRows(refreshed);
+      tareManuallyEdited = false;
+      applyDefaultTareIfNeeded();
+      showToast('Hersteller-Default hinzugefügt', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
 
   document.getElementById('btnScanLabel').addEventListener('click', async () => {
     const video = document.getElementById('labelVideo');

@@ -51,6 +51,7 @@ def create_spool(payload: SpoolCreate, db: Session = Depends(get_db)):
         data["tare_weight_g"] = get_default_tare_weight_g(
             data.get("brand"),
             data.get("material"),
+            db,
         )
     tare_weight = data.get("tare_weight_g") or 0.0
 
@@ -163,7 +164,11 @@ async def calibrate_spool_weight(
             spool.tare_weight_g
             if spool.tare_weight_g is not None
             else (
-                get_default_tare_weight_g(spool.brand, spool.material)
+                get_default_tare_weight_g(
+                    spool.brand,
+                    spool.material,
+                    db,
+                )
                 or 0.0
             )
         )
@@ -237,7 +242,7 @@ def apply_brand_defaults(db: Session = Depends(get_db)):
     for spool in spools:
         if spool.tare_weight_g is not None:
             continue
-        default_tare = get_default_tare_weight_g(spool.brand, spool.material)
+        default_tare = get_default_tare_weight_g(spool.brand, spool.material, db)
         if default_tare is None:
             continue
         spool.tare_weight_g = default_tare

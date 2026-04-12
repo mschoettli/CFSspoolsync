@@ -1,5 +1,6 @@
 """Database setup and session helpers."""
 
+from datetime import datetime, timezone
 import os
 from typing import Generator
 
@@ -34,26 +35,60 @@ def ensure_runtime_schema() -> None:
     """Apply lightweight runtime schema migrations for SQLite deployments."""
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
-    if "spools" not in table_names:
-        return
-
-    existing = {col["name"] for col in inspector.get_columns("spools")}
-    required = {
-        "tare_weight_g": "FLOAT",
-        "last_gross_weight_g": "FLOAT",
-        "calibration_factor": "FLOAT",
-        "calibrated_at": "DATETIME",
-    }
-
     with engine.begin() as conn:
-        for column_name, column_type in required.items():
-            if column_name in existing:
-                continue
-            conn.execute(
-                text(
-                    f"ALTER TABLE spools ADD COLUMN {column_name} {column_type}"
+        if "spools" in table_names:
+            existing = {col["name"] for col in inspector.get_columns("spools")}
+            required = {
+                "tare_weight_g": "FLOAT",
+                "last_gross_weight_g": "FLOAT",
+                "calibration_factor": "FLOAT",
+                "calibrated_at": "DATETIME",
+            }
+            for column_name, column_type in required.items():
+                if column_name in existing:
+                    continue
+                conn.execute(
+                    text(
+                        f"ALTER TABLE spools ADD COLUMN {column_name} {column_type}"
+                    )
                 )
-            )
+
+        if "tare_defaults" in table_names:
+            defaults_columns = {
+                col["name"] for col in inspector.get_columns("tare_defaults")
+            }
+            if "is_system" not in defaults_columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE tare_defaults ADD COLUMN is_system BOOLEAN NOT NULL DEFAULT 1"
+                    )
+                )
+
+            count = conn.execute(
+                text("SELECT COUNT(*) FROM tare_defaults")
+            ).scalar_one()
+            if count == 0:
+                from app.services.spool_defaults import STATIC_BRAND_TARE_DEFAULTS
+
+                now = datetime.now(timezone.utc).replace(tzinfo=None)
+                for item in STATIC_BRAND_TARE_DEFAULTS:
+                    conn.execute(
+                        text(
+                            """
+                            INSERT INTO tare_defaults
+                                (brand_key, brand_label, tare_weight_g, is_system, updated_at)
+                            VALUES
+                                (:brand_key, :brand_label, :tare_weight_g, :is_system, :updated_at)
+                            """
+                        ),
+                        {
+                            "brand_key": item["brand_key"],
+                            "brand_label": item["brand_label"],
+                            "tare_weight_g": item["tare_weight_g"],
+                            "is_system": 1,
+                            "updated_at": now,
+                        },
+                    )
 
 
 def get_db() -> Generator[Session, None, None]:

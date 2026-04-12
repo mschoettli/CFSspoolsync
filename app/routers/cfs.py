@@ -1,4 +1,4 @@
-"""HTTP routes for CFS slot data and slot assignment."""
+﻿"""HTTP routes for CFS slot data and slot assignment."""
 
 import asyncio
 from datetime import datetime, timezone
@@ -85,7 +85,7 @@ async def sync_from_k2(db: Session = Depends(get_db)):
             continue
 
         if spool.tare_weight_g is None:
-            default_tare = get_default_tare_weight_g(spool.brand, spool.material)
+            default_tare = get_default_tare_weight_g(spool.brand, spool.material, db)
             if default_tare is not None:
                 spool.tare_weight_g = default_tare
 
@@ -129,7 +129,7 @@ async def sync_from_k2(db: Session = Depends(get_db)):
 async def read_slot_live(slot_num: int):
     """Read one CFS slot directly from the printer via SSH."""
     if slot_num not in (1, 2, 3, 4):
-        raise HTTPException(400, "Slot muss 1–4 sein")
+        raise HTTPException(400, "Slot muss 1-4 sein")
 
     data = await asyncio.to_thread(ssh_client.get_slot, slot_num)
     if data is None:
@@ -141,7 +141,7 @@ async def read_slot_live(slot_num: int):
 def assign_spool(slot_num: int, spool_id: int, db: Session = Depends(get_db)):
     """Assign a storage spool to one CFS slot."""
     if slot_num not in (1, 2, 3, 4):
-        raise HTTPException(400, "Slot muss 1–4 sein")
+        raise HTTPException(400, "Slot muss 1-4 sein")
 
     occupied = (
         db.query(Spool)

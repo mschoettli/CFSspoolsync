@@ -899,6 +899,22 @@ body {
 .form-input[type="color"] { padding: 4px; }
 .form-hint { color: var(--text-muted); font-size: 0.72rem; }
 
+.form-link-btn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin-top: 2px;
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.form-link-btn:hover {
+  color: #d6ffe5;
+}
+
 .spool-net-preview {
   margin-top: 10px;
   padding: 10px;
@@ -922,6 +938,94 @@ body {
 .spool-net-preview-note {
   font-size: 0.7rem;
   color: var(--text-muted);
+}
+
+.inner-modal-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: rgba(8, 14, 22, 0.72);
+  backdrop-filter: blur(3px);
+  padding: 14px;
+}
+
+.inner-modal-overlay.hidden {
+  display: none;
+}
+
+.inner-modal {
+  width: min(640px, 100%);
+  max-height: 78vh;
+  overflow: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(24, 34, 48, 0.98), rgba(18, 27, 39, 0.98));
+  box-shadow: var(--shadow-md);
+}
+
+.inner-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.inner-modal-head h4 {
+  margin: 0;
+  font-size: 0.86rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.inner-modal-body {
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.tare-defaults-table-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px 150px;
+  gap: 8px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.tare-defaults-rows {
+  display: grid;
+  gap: 7px;
+}
+
+.tare-defaults-row,
+.tare-defaults-create-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px 150px;
+  gap: 8px;
+  align-items: center;
+}
+
+.tare-defaults-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.tare-defaults-actions .btn {
+  flex: 1;
+}
+
+.tare-defaults-empty {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.78rem;
 }
 
 .spool-modal-add .spool-form-grid {
@@ -1033,6 +1137,7 @@ body {
 .spool-modal-add {
   display: grid;
   gap: 12px;
+  position: relative;
 }
 
 .spool-stepper {
@@ -1852,6 +1957,29 @@ body {
 
   .spool-source-footer {
     justify-content: flex-end;
+  }
+
+  .inner-modal-overlay {
+    padding: 8px;
+  }
+
+  .inner-modal {
+    max-height: 84vh;
+  }
+
+  .tare-defaults-table-head,
+  .tare-defaults-row,
+  .tare-defaults-create-row {
+    grid-template-columns: 1fr;
+  }
+
+  .tare-defaults-table-head {
+    display: none;
+  }
+
+  .tare-defaults-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .form-actions-sticky {

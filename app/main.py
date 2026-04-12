@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.database import Base, engine, ensure_runtime_schema
-from app.routers import app_config, cfs, jobs, ocr, printer, spools
+from app.routers import app_config, cfs, jobs, ocr, printer, spools, tare_defaults
 from app.services.app_locale import resolve_app_locale
 from app.services.label_ocr import warmup_ocr_background
 from app.services import moonraker
@@ -64,6 +64,7 @@ def create_app() -> FastAPI:
     application.include_router(jobs.router)
     application.include_router(ocr.router)
     application.include_router(app_config.router)
+    application.include_router(tare_defaults.router)
 
     # Must be mounted last so API routes are not shadowed by static files.
     application.mount("/", StaticFiles(directory="app/static", html=True), name="static")

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String
 
 from app.database import Base
 
@@ -69,3 +69,16 @@ class PrintJob(Base):
     snap_b_after = Column(Float, nullable=True)
     snap_c_after = Column(Float, nullable=True)
     snap_d_after = Column(Float, nullable=True)
+
+
+class TareDefault(Base):
+    """Default tare value mapped to a normalized filament brand."""
+
+    __tablename__ = "tare_defaults"
+
+    id = Column(Integer, primary_key=True, index=True)
+    brand_key = Column(String, nullable=False, unique=True, index=True)
+    brand_label = Column(String, nullable=False)
+    tare_weight_g = Column(Float, nullable=False)
+    is_system = Column(Boolean, nullable=False, default=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

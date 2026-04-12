@@ -1502,7 +1502,7 @@ body {
   position: fixed;
   left: 12px;
   right: 12px;
-  bottom: 10px;
+  bottom: calc(10px + env(safe-area-inset-bottom));
   z-index: 220;
   display: none;
   grid-template-columns: repeat(3, 1fr);
@@ -1574,7 +1574,7 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: 0.66rem;
+    font-size: 0.68rem;
   }
   .status-sep { display: none; }
   .status-temp {
@@ -1595,8 +1595,8 @@ body {
   .view-header {
     flex-direction: column;
     align-items: stretch;
-    gap: 10px;
-    margin-bottom: 12px;
+    gap: 8px;
+    margin-bottom: 10px;
   }
 
   .view-actions,
@@ -1612,6 +1612,13 @@ body {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: center;
+  }
+
+  #view-lager .view-actions .select-filter,
+  #view-lager .view-actions .btn,
+  #view-jobs .view-actions .select-filter,
+  #view-jobs .view-actions .btn {
+    width: 100%;
   }
 
   #view-cfs .header-actions {
@@ -1632,7 +1639,7 @@ body {
 
   .btn,
   .select-filter {
-    height: 40px;
+    height: 38px;
     font-size: 0.8rem;
   }
 
@@ -1755,8 +1762,8 @@ body {
 
   .modal-header,
   .modal-body {
-    padding-left: 14px;
-    padding-right: 14px;
+    padding-left: 12px;
+    padding-right: 12px;
   }
 
   .form-grid { grid-template-columns: 1fr; }
@@ -1806,13 +1813,25 @@ body {
     gap: 6px;
   }
 
+  .slot-btn {
+    height: 30px;
+    padding: 0 10px;
+    font-size: 0.72rem;
+  }
+
+  .spool-form-card {
+    padding: 10px;
+    margin-bottom: 8px;
+  }
+
   .spool-source-footer {
     justify-content: flex-end;
   }
 
   .form-actions-sticky {
-    bottom: 0;
-    padding-bottom: calc(6px + env(safe-area-inset-bottom));
+    bottom: -10px;
+    padding: 8px 0 calc(6px + env(safe-area-inset-bottom));
+    backdrop-filter: blur(4px);
   }
 
   #toastContainer {

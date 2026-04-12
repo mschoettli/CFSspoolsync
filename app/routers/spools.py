@@ -199,7 +199,7 @@ async def calibrate_spool_weight(
     }
 
 
-@router.post("/apply-brand-defaults")
+@router.post("/defaults/apply-brand")
 def apply_brand_defaults(db: Session = Depends(get_db)):
     """Apply known brand default tare weights to unconfigured spools.
 

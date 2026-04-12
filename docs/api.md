@@ -46,7 +46,7 @@ If `tare_weight_g` is omitted, the API uses this order:
 2. known brand default tare
 3. `0.0`
 
-### `POST /api/spools/apply-brand-defaults`
+### `POST /api/spools/defaults/apply-brand`
 Apply known brand default tare weights to all spools with missing `tare_weight_g`.
 
 Example response:

@@ -1156,7 +1156,7 @@ function buildAddSpoolForm() {
         </div>
       </section>
 
-      <form id="addSpoolForm" class="spool-form-panel">
+      <form id="addSpoolForm" class="spool-form-panel" autocomplete="off">
         <div class="spool-detected-strip" id="detectedStrip">
           <div class="spool-detected-item">
             <span>Material</span>
@@ -1253,7 +1253,7 @@ function buildAddSpoolForm() {
             </div>
             <div class="form-group">
               <label class="form-label">Verbleibend (g)</label>
-              <input class="form-input" type="number" name="remaining_weight" min="0" step="0.1" placeholder="Leer = Anfangsgewicht">
+              <input class="form-input" type="number" name="remaining_weight" min="0" step="0.1" placeholder="Leer = Anfangsgewicht" autocomplete="off">
             </div>
           </div>
         </div>
@@ -1301,6 +1301,7 @@ function buildAddSpoolForm() {
 function setupAddSpoolForm() {
   let selectedSlot = null;
   let loadedFromCfs = false;
+  let remainingFromCfs = false;
   let scanInProgress = false;
   let hasAutoDetectedData = false;
   let fallbackUsed = false;
@@ -1546,7 +1547,7 @@ function setupAddSpoolForm() {
   const applyOCRResult = (data) => {
     stopScanStatusTicker();
     fillFormFromOCR(data);
-    if (!loadedFromCfs && !remainingManuallyEdited && remainingInput) {
+    if (!remainingFromCfs && !remainingManuallyEdited && remainingInput) {
       remainingInput.value = '';
       remainingInput.dispatchEvent(new Event('input', { bubbles: true }));
     }
@@ -1568,9 +1569,14 @@ function setupAddSpoolForm() {
   applyFallbackDropdowns();
   bindEssentialsControls();
   if (remainingInput) {
-    remainingInput.addEventListener('input', () => {
-      remainingManuallyEdited = true;
-    });
+    const markManual = (event) => {
+      if (event?.isTrusted) {
+        remainingManuallyEdited = true;
+      }
+    };
+    remainingInput.addEventListener('keydown', markManual);
+    remainingInput.addEventListener('change', markManual);
+    remainingInput.addEventListener('input', markManual);
   }
   document.querySelector('.spool-modal-add')?.addEventListener('click', () => {
     modalClicks += 1;
@@ -1582,6 +1588,7 @@ function setupAddSpoolForm() {
       btn.classList.add('selected');
       selectedSlot = parseInt(btn.dataset.slot);
       loadedFromCfs = false;
+      remainingFromCfs = false;
       readFromCfsBtn.disabled = scanInProgress ? true : false;
     });
   });
@@ -1597,6 +1604,7 @@ function setupAddSpoolForm() {
       fillFormFromK2(data);
       refreshDetectedStrip();
       loadedFromCfs = true;
+      remainingFromCfs = true;
       remainingManuallyEdited = false;
       hasAutoDetectedData = true;
       if (cfsStatusEl) {

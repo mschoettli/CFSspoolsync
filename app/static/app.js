@@ -1008,30 +1008,30 @@ function buildAddSpoolForm() {
         <div class="spool-form-card">
           <h4>Basis</h4>
           <div class="form-grid spool-form-grid spool-form-grid-essentials">
-            <div class="form-group form-group-stack">
+            <div class="form-group">
               <label class="form-label">Material *</label>
               <select class="form-input" id="spoolMaterialSelect">
                 <option value="">Bitte waehlen</option>
                 ${OCR_FALLBACK_MATERIALS.map(v => `<option value="${v}">${v}</option>`).join('')}
               </select>
-              <input class="form-input" name="material" required placeholder="Eigener Materialwert (optional)">
             </div>
-            <div class="form-group form-group-stack">
+            <div class="form-group">
               <label class="form-label">Hersteller</label>
               <select class="form-input" id="spoolBrandSelect">
                 <option value="">Bitte waehlen</option>
                 ${OCR_FALLBACK_BRANDS.map(v => `<option value="${v}">${v}</option>`).join('')}
               </select>
-              <input class="form-input" name="brand" placeholder="Eigener Herstellerwert (optional)">
             </div>
-            <div class="form-group spool-color-field form-group-stack">
+            <div class="form-group spool-color-field">
               <label class="form-label">Farbe</label>
-              <select class="form-input" id="spoolColorPreset">
-                <option value="">Bitte waehlen</option>
-                ${OCR_FALLBACK_COLORS.map(v => `<option value="${v.hex}">${v.name}</option>`).join('')}
-              </select>
-              <input class="form-input" id="spoolColorText" placeholder="Eigene Farbe oder Hex (#888888)">
-              <input class="form-input spool-color-picker" type="color" name="color" value="#888888" aria-label="Farbpicker">
+              <div class="spool-color-inline">
+                <select class="form-input" id="spoolColorPreset">
+                  <option value="">Bitte waehlen</option>
+                  ${OCR_FALLBACK_COLORS.map(v => `<option value="${v.hex}">${v.name}</option>`).join('')}
+                </select>
+                <span class="spool-color-swatch" id="spoolColorSwatch" aria-hidden="true"></span>
+              </div>
+              <input type="hidden" name="color" value="">
             </div>
             <div class="form-group">
               <label class="form-label">Durchmesser (mm) *</label>
@@ -1073,9 +1073,21 @@ function buildAddSpoolForm() {
           </div>
         </details>
 
-          <details class="spool-form-card">
+          <details class="spool-form-card spool-form-advanced" open>
             <summary>Erweitert</summary>
             <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Eigener Materialwert</label>
+                <input class="form-input" name="material" required placeholder="Optionaler Override">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Eigener Herstellerwert</label>
+                <input class="form-input" name="brand" placeholder="Optionaler Override">
+              </div>
+              <div class="form-group span2">
+                <label class="form-label">Eigene Farbe / Hex</label>
+                <input class="form-input" id="spoolColorText" placeholder="z. B. Gray oder #888888">
+              </div>
               <div class="form-group">
                 <label class="form-label">Dichte (g/cm3)</label>
                 <input class="form-input" type="number" name="density" value="1.24" step="0.01" min="0.5">
@@ -1235,6 +1247,7 @@ function setupAddSpoolForm() {
     const colorSelect = form.querySelector('#spoolColorPreset');
     const colorText = form.querySelector('#spoolColorText');
     const colorInput = form.querySelector('[name="color"]');
+    const colorSwatch = form.querySelector('#spoolColorSwatch');
     if (!materialInput || !materialSelect || !brandInput || !brandSelect || !colorSelect || !colorText || !colorInput) return;
 
     const syncSelectByText = (selectEl, value) => {
@@ -1243,12 +1256,16 @@ function setupAddSpoolForm() {
       selectEl.value = option ? option.value : '';
     };
 
-    const syncColorControlsFromPicker = (updateText = false) => {
+    const syncColorControlsFromValue = (updateText = false) => {
       const current = String(colorInput.value || '').toLowerCase();
       const matched = OCR_FALLBACK_COLORS.find(item => String(item.hex || '').toLowerCase() === current);
       colorSelect.value = matched ? matched.hex : '';
       if (updateText) {
         colorText.value = matched ? matched.name : current;
+      }
+      if (colorSwatch) {
+        colorSwatch.style.background = current || 'transparent';
+        colorSwatch.classList.toggle('is-empty', !current);
       }
     };
 
@@ -1288,13 +1305,13 @@ function setupAddSpoolForm() {
     });
 
     colorInput.addEventListener('input', () => {
-      syncColorControlsFromPicker(true);
+      syncColorControlsFromValue(true);
       refreshDetectedStrip();
     });
 
     syncSelectByText(materialSelect, materialInput.value);
     syncSelectByText(brandSelect, brandInput.value);
-    syncColorControlsFromPicker(true);
+    syncColorControlsFromValue(true);
   };
 
   const renderFallbackPanel = (data) => {

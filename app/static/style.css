@@ -734,8 +734,8 @@ body {
 
 .spool-modal-add .spool-form-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 12px;
-  row-gap: 12px;
+  column-gap: 10px;
+  row-gap: 10px;
 }
 
 .spool-modal-add .spool-form-grid .form-group {
@@ -746,10 +746,37 @@ body {
   gap: 8px;
 }
 
-.spool-color-picker {
-  height: 42px;
-  padding: 4px;
+.spool-form-grid-essentials .form-group {
+  gap: 5px;
+}
+
+.spool-form-grid-essentials .form-input {
+  height: 40px;
+}
+
+.spool-color-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 8px;
+}
+
+.spool-color-swatch {
+  width: 36px;
+  height: 36px;
   border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.spool-color-swatch.is-empty {
+  background-image: linear-gradient(135deg, rgba(97, 116, 146, 0.2) 25%, transparent 25%, transparent 50%, rgba(97, 116, 146, 0.2) 50%, rgba(97, 116, 146, 0.2) 75%, transparent 75%, transparent);
+  background-size: 8px 8px;
+}
+
+.spool-form-advanced {
+  margin-top: -2px;
 }
 
 .form-actions {
@@ -1102,7 +1129,7 @@ body {
 }
 
 .spool-form-card h4 {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;

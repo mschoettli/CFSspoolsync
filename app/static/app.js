@@ -95,6 +95,7 @@ const I18N = {
     'Kein Kamerastream konfiguriert': 'No camera stream configured',
     'Kamerastream': 'Camera stream',
     'Kamerastream nicht erreichbar': 'Camera stream unreachable',
+    'Stream öffnen': 'Open stream',
     'Aktiver Job': 'Active job',
     'Kein aktiver Druckjob': 'No active print job',
     'Datei': 'File',
@@ -812,15 +813,29 @@ function initJobsCameraFrames() {
       const current = Number.parseInt(img.dataset.sourceIndex || '0', 10);
       const next = current + 1;
       if (next >= sources.length) {
-        frame?.classList.add('is-error');
+        frame?.classList.add('use-iframe');
         return;
       }
       img.dataset.sourceIndex = String(next);
       img.src = `${sources[next]}${sources[next].includes('?') ? '&' : '?'}_ts=${Date.now()}`;
     };
     img.onload = () => {
-      img.closest('.jobs-camera-frame')?.classList.remove('is-error');
+      const frame = img.closest('.jobs-camera-frame');
+      frame?.classList.remove('is-error');
+      frame?.classList.remove('use-iframe');
     };
+  });
+
+  const iframes = document.querySelectorAll('.jobs-camera-frame .jobs-camera-iframe');
+  iframes.forEach((iframe) => {
+    iframe.addEventListener('load', () => {
+      const frame = iframe.closest('.jobs-camera-frame');
+      if (!frame?.classList.contains('use-iframe')) return;
+      frame.classList.remove('is-error');
+    });
+    iframe.addEventListener('error', () => {
+      iframe.closest('.jobs-camera-frame')?.classList.add('is-error');
+    });
   });
 }
 
@@ -840,7 +855,10 @@ function renderJobsCameraPanel() {
     <article class="jobs-panel jobs-camera-panel">
       <header class="jobs-panel-head">
         <h3>${tr('Kamera')}</h3>
-        <span class="jobs-camera-url">${esc(rawUrl)}</span>
+        <span class="jobs-camera-head-actions">
+          <span class="jobs-camera-url">${esc(rawUrl)}</span>
+          <a class="jobs-camera-open-link" href="${esc(streamUrl)}" target="_blank" rel="noopener noreferrer">${tr('Stream öffnen')}</a>
+        </span>
       </header>
       <div class="jobs-camera-frame">
         <img
@@ -850,6 +868,13 @@ function renderJobsCameraPanel() {
           loading="lazy"
           referrerpolicy="no-referrer"
         />
+        <iframe
+          class="jobs-camera-iframe"
+          src="${esc(streamUrl)}"
+          loading="lazy"
+          referrerpolicy="no-referrer"
+          allowfullscreen
+        ></iframe>
         <div class="jobs-camera-fallback">${tr('Kamerastream nicht erreichbar')}</div>
       </div>
     </article>

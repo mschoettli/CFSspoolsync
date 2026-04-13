@@ -660,6 +660,12 @@ body {
   margin-bottom: 10px;
 }
 
+.jobs-camera-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .jobs-panel-head h3 {
   margin: 0;
   font-size: 0.9rem;
@@ -671,6 +677,19 @@ body {
   font-size: 0.72rem;
   color: var(--text-muted);
   font-family: var(--font-data);
+}
+
+.jobs-camera-open-link {
+  font-size: 0.7rem;
+  color: var(--accent-strong);
+  text-decoration: none;
+  border: 1px solid rgba(79, 209, 166, 0.35);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.jobs-camera-open-link:hover {
+  background: rgba(79, 209, 166, 0.16);
 }
 
 .jobs-camera-frame {
@@ -689,6 +708,16 @@ body {
   object-fit: cover;
 }
 
+.jobs-camera-iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: none;
+  background: rgba(12, 18, 28, 0.75);
+}
+
 .jobs-camera-fallback {
   position: absolute;
   inset: 0;
@@ -704,6 +733,14 @@ body {
 
 .jobs-camera-frame.is-error .jobs-camera-fallback {
   display: flex;
+}
+
+.jobs-camera-frame.use-iframe img {
+  display: none;
+}
+
+.jobs-camera-frame.use-iframe .jobs-camera-iframe {
+  display: block;
 }
 
 .jobs-camera-empty,
@@ -1860,6 +1897,11 @@ body {
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
+  }
+
+  .jobs-camera-head-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .jobs-kv-grid {

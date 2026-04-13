@@ -643,6 +643,11 @@ body {
   height: 100%;
 }
 
+.jobs-top-grid > * > .jobs-panel {
+  width: 100%;
+  flex: 1 1 auto;
+}
+
 .jobs-panel,
 .jobs-completed-panel {
   border: 1px solid var(--line);

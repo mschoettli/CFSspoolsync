@@ -758,6 +758,9 @@ function renderSpoolCard(s) {
 function renderJobs() {
   const el = document.getElementById('jobsList');
   if (!el) return;
+  const rawCameraUrl = (state.cameraStreamUrl || '').trim();
+  const existingCameraPanel = el.querySelector('.jobs-camera-panel');
+  const existingCameraUrl = existingCameraPanel?.dataset.streamUrl || '';
 
   const runningJob = getRunningJob();
   let completed = state.jobs.filter(job => job.status === 'finished');
@@ -782,7 +785,12 @@ function renderJobs() {
   `;
   if (markup === lastJobsMarkup) return;
   el.innerHTML = markup;
-  initJobsCameraFrames();
+  const nextCameraPanel = el.querySelector('.jobs-camera-panel');
+  if (existingCameraPanel && nextCameraPanel && existingCameraUrl === rawCameraUrl) {
+    nextCameraPanel.replaceWith(existingCameraPanel);
+  } else {
+    initJobsCameraFrames();
+  }
   lastJobsMarkup = markup;
 }
 
@@ -852,7 +860,7 @@ function renderJobsCameraPanel() {
   const sources = buildCameraCandidates(rawUrl);
   const streamUrl = sources[0];
   return `
-    <article class="jobs-panel jobs-camera-panel">
+    <article class="jobs-panel jobs-camera-panel" data-stream-url="${esc(rawUrl)}">
       <header class="jobs-panel-head">
         <h3>${tr('Kamera')}</h3>
         <span class="jobs-camera-head-actions">

@@ -63,6 +63,9 @@ def resolve_app_config() -> dict[str, str]:
             Locale and camera stream configuration for the frontend.
     """
     config = resolve_app_locale()
-    camera_stream_url = (os.getenv("CAMERA_STREAM_URL") or "").strip()
+    camera_stream_url = (
+        os.getenv("CAMERA_STREAM_URL")
+        or "http://192.168.178.192:8000"
+    ).strip()
     config["camera_stream_url"] = camera_stream_url
     return config

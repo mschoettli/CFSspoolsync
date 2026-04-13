@@ -781,7 +781,47 @@ function renderJobs() {
   `;
   if (markup === lastJobsMarkup) return;
   el.innerHTML = markup;
+  initJobsCameraFrames();
   lastJobsMarkup = markup;
+}
+
+function buildCameraCandidates(rawUrl) {
+  const normalized = /^https?:\/\//i.test(rawUrl) ? rawUrl : `http://${rawUrl}`;
+  const base = normalized.replace(/\/+$/u, '');
+  const candidates = [
+    normalized,
+    `${base}/?action=stream`,
+    `${base}/stream`,
+    `${base}/video`,
+  ];
+  return [...new Set(candidates)];
+}
+
+function initJobsCameraFrames() {
+  const frames = document.querySelectorAll('.jobs-camera-frame img[data-sources]');
+  frames.forEach((img) => {
+    const sources = String(img.dataset.sources || '')
+      .split('|')
+      .map(value => value.trim())
+      .filter(Boolean);
+    if (!sources.length) return;
+
+    img.dataset.sourceIndex = img.dataset.sourceIndex || '0';
+    img.onerror = () => {
+      const frame = img.closest('.jobs-camera-frame');
+      const current = Number.parseInt(img.dataset.sourceIndex || '0', 10);
+      const next = current + 1;
+      if (next >= sources.length) {
+        frame?.classList.add('is-error');
+        return;
+      }
+      img.dataset.sourceIndex = String(next);
+      img.src = `${sources[next]}${sources[next].includes('?') ? '&' : '?'}_ts=${Date.now()}`;
+    };
+    img.onload = () => {
+      img.closest('.jobs-camera-frame')?.classList.remove('is-error');
+    };
+  });
 }
 
 function renderJobsCameraPanel() {
@@ -794,7 +834,8 @@ function renderJobsCameraPanel() {
       </article>
     `;
   }
-  const streamUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `http://${rawUrl}`;
+  const sources = buildCameraCandidates(rawUrl);
+  const streamUrl = sources[0];
   return `
     <article class="jobs-panel jobs-camera-panel">
       <header class="jobs-panel-head">
@@ -804,10 +845,10 @@ function renderJobsCameraPanel() {
       <div class="jobs-camera-frame">
         <img
           src="${esc(streamUrl)}"
+          data-sources="${esc(sources.join('|'))}"
           alt="${tr('Kamerastream')}"
           loading="lazy"
           referrerpolicy="no-referrer"
-          onerror="this.closest('.jobs-camera-frame')?.classList.add('is-error')"
         />
         <div class="jobs-camera-fallback">${tr('Kamerastream nicht erreichbar')}</div>
       </div>

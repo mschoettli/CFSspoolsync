@@ -22,7 +22,7 @@ Filament management for Creality K2 Plus / K2 Combo with CFS.
 cp .env.example .env
 ```
 
-2. Edit `.env` values for your printer (`K2_HOST`, `K2_SSH_KEY_HOST`, `K2_SSH_KEY`, `MOONRAKER_URL`).
+2. Edit `.env` values for your printer (`K2_HOST`, `K2_SSH_KEY_HOST`, `K2_SSH_KEY`, `MOONRAKER_URL`, `CAMERA_STREAM_URL`).
    - `K2_SSH_KEY_HOST`: absolute or project-relative key path on your Docker host.
    - `K2_SSH_KEY`: target path inside the container (default: `/root/.ssh/id_k2`).
    - OCR default profile:

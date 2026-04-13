@@ -717,6 +717,7 @@ body {
   border: 0;
   display: none;
   background: rgba(12, 18, 28, 0.75);
+  overflow: hidden;
 }
 
 .jobs-camera-fallback {
@@ -742,6 +743,10 @@ body {
 
 .jobs-camera-frame.use-iframe .jobs-camera-iframe {
   display: block;
+  width: 126%;
+  height: 126%;
+  transform: scale(0.79);
+  transform-origin: top left;
 }
 
 .jobs-camera-empty,

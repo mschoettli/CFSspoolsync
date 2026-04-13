@@ -758,10 +758,6 @@ function renderSpoolCard(s) {
 function renderJobs() {
   const el = document.getElementById('jobsList');
   if (!el) return;
-  const rawCameraUrl = (state.cameraStreamUrl || '').trim();
-  const existingCameraPanel = el.querySelector('.jobs-camera-panel');
-  const existingCameraUrl = existingCameraPanel?.dataset.streamUrl || '';
-
   const runningJob = getRunningJob();
   let completed = state.jobs.filter(job => job.status === 'finished');
   if (state.jobsStatusFilter) {
@@ -774,24 +770,44 @@ function renderJobs() {
     completed.sort((a, b) => new Date(b.started_at || 0) - new Date(a.started_at || 0));
   }
 
-  const markup = `
-    <div class="jobs-layout">
-      <section class="jobs-top-grid">
-        ${renderJobsCameraPanel()}
-        ${renderActiveJobPanel(runningJob)}
-      </section>
-      ${renderCompletedJobsList(completed)}
-    </div>
-  `;
-  if (markup === lastJobsMarkup) return;
-  el.innerHTML = markup;
-  const nextCameraPanel = el.querySelector('.jobs-camera-panel');
-  if (existingCameraPanel && nextCameraPanel && existingCameraUrl === rawCameraUrl) {
-    nextCameraPanel.replaceWith(existingCameraPanel);
-  } else {
+  if (!el.querySelector('.jobs-layout')) {
+    el.innerHTML = `
+      <div class="jobs-layout">
+        <section class="jobs-top-grid">
+          <div id="jobsCameraMount"></div>
+          <div id="jobsActiveMount"></div>
+        </section>
+        <div id="jobsCompletedMount"></div>
+      </div>
+    `;
+  }
+
+  const rawCameraUrl = (state.cameraStreamUrl || '').trim();
+  const cameraMount = el.querySelector('#jobsCameraMount');
+  const activeMount = el.querySelector('#jobsActiveMount');
+  const completedMount = el.querySelector('#jobsCompletedMount');
+
+  const renderedCameraUrl = cameraMount?.dataset.streamUrl || '';
+  if (cameraMount && (renderedCameraUrl !== rawCameraUrl || !cameraMount.innerHTML.trim())) {
+    cameraMount.innerHTML = renderJobsCameraPanel();
+    cameraMount.dataset.streamUrl = rawCameraUrl;
     initJobsCameraFrames();
   }
-  lastJobsMarkup = markup;
+
+  const activeMarkup = renderActiveJobPanel(runningJob);
+  if (activeMount && activeMount.innerHTML !== activeMarkup) {
+    activeMount.innerHTML = activeMarkup;
+  }
+
+  const completedMarkup = renderCompletedJobsList(completed);
+  if (completedMount && completedMount.innerHTML !== completedMarkup) {
+    completedMount.innerHTML = completedMarkup;
+  }
+
+  const layoutMarkup = el.innerHTML;
+  if (layoutMarkup !== lastJobsMarkup) {
+    lastJobsMarkup = layoutMarkup;
+  }
 }
 
 function buildCameraCandidates(rawUrl) {
@@ -882,6 +898,7 @@ function renderJobsCameraPanel() {
           loading="lazy"
           referrerpolicy="no-referrer"
           allowfullscreen
+          scrolling="no"
         ></iframe>
         <div class="jobs-camera-fallback">${tr('Kamerastream nicht erreichbar')}</div>
       </div>

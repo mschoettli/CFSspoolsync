@@ -770,7 +770,11 @@ function renderJobs() {
     completed.sort((a, b) => new Date(b.started_at || 0) - new Date(a.started_at || 0));
   }
 
-  if (!el.querySelector('.jobs-layout')) {
+  if (
+    !el.querySelector('#jobsCameraMount')
+    || !el.querySelector('#jobsActiveMount')
+    || !el.querySelector('#jobsCompletedMount')
+  ) {
     el.innerHTML = `
       <div class="jobs-layout">
         <section class="jobs-top-grid">

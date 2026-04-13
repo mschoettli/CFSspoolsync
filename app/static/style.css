@@ -631,7 +631,7 @@ body {
 
 .jobs-top-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.28fr) minmax(0, 0.72fr);
   gap: 12px;
 }
 
@@ -646,6 +646,10 @@ body {
 .jobs-panel {
   min-height: 280px;
   padding: 14px;
+}
+
+.jobs-camera-panel {
+  min-height: 360px;
 }
 
 .jobs-completed-panel {
@@ -698,7 +702,8 @@ body {
   overflow: hidden;
   border: 1px solid rgba(104, 125, 155, 0.32);
   background: rgba(16, 24, 36, 0.85);
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 16 / 10;
+  min-height: 320px;
 }
 
 .jobs-camera-frame img {
@@ -757,13 +762,18 @@ body {
 }
 
 .jobs-active-panel .jobs-panel-head {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+}
+
+.jobs-active-panel {
+  min-height: 240px;
+  padding: 12px;
 }
 
 .jobs-kv-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
+  gap: 6px 10px;
 }
 
 .jobs-kv {
@@ -773,7 +783,7 @@ body {
 }
 
 .jobs-kv span {
-  font-size: 0.7rem;
+  font-size: 0.66rem;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.02em;
@@ -781,15 +791,15 @@ body {
 
 .jobs-kv strong {
   font-family: var(--font-data);
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   color: var(--text);
   font-weight: 600;
 }
 
 .jobs-progress-track {
-  margin-top: 12px;
+  margin-top: 9px;
   position: relative;
-  height: 12px;
+  height: 10px;
   border-radius: 999px;
   background: rgba(95, 116, 147, 0.35);
   overflow: hidden;

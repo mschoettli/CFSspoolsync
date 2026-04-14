@@ -13,6 +13,7 @@ from app.services import ssh_client
 from app.services.spool_defaults import get_default_tare_weight_g
 
 router = APIRouter(prefix="/api/cfs", tags=["cfs"])
+SYNC_CHANGE_THRESHOLD_G = 0.1
 
 
 @router.get("")
@@ -103,6 +104,9 @@ async def sync_from_k2(db: Session = Depends(get_db)):
         old_weight = spool.remaining_weight
         spool.remaining_weight = new_weight
         spool.updated_at = now
+        delta_g = round(new_weight - old_weight, 1)
+        consumed_g = round(max(0.0, old_weight - new_weight), 1)
+        changed = abs(delta_g) >= SYNC_CHANGE_THRESHOLD_G
         updated.append(
             {
                 "slot": slot_num,
@@ -110,6 +114,9 @@ async def sync_from_k2(db: Session = Depends(get_db)):
                 "spool_id": spool.id,
                 "old_g": old_weight,
                 "new_g": new_weight,
+                "delta_g": delta_g,
+                "consumed_g": consumed_g,
+                "changed": changed,
                 "raw_k2_g": raw_k2_g,
                 "applied_factor": applied_factor,
                 "source": "k2_calibrated" if applied_factor is not None else "k2_raw",
@@ -117,9 +124,12 @@ async def sync_from_k2(db: Session = Depends(get_db)):
         )
 
     db.commit()
+    changed_updates = [entry for entry in updated if entry["changed"]]
     return {
-        "synced": len(updated),
+        "synced": len(changed_updates),
+        "unchanged": len(updated) - len(changed_updates),
         "updates": updated,
+        "changed_updates": changed_updates,
         "removed_count": len(removed),
         "removed": removed,
     }

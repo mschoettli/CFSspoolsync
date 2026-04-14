@@ -253,63 +253,10 @@ async def _on_print_ended(final_state: str) -> None:
             _current_job_id = job.id
 
         slots = await asyncio.to_thread(get_all_slots)
+        _apply_consumption_delta(job, slots, db, meters_to_grams, final_log=True)
 
         job.finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
         job.status = "finished" if final_state == "complete" else final_state
-
-        letters = {1: "a", 2: "b", 3: "c", 4: "d"}
-        for slot_num, slot_data in slots.items():
-            letter = letters[slot_num]
-            if not slot_data:
-                continue
-
-            after_len = slot_data["remain_len"]
-            setattr(job, f"snap_{letter}_after", after_len)
-
-            spool_id = getattr(job, f"slot_{letter}_spool_id")
-            before_len = getattr(job, f"snap_{letter}_before")
-            if not spool_id:
-                continue
-
-            spool = db.query(Spool).filter(Spool.id == spool_id).first()
-            if not spool:
-                continue
-
-            measured_weight = round(
-                max(
-                    0.0,
-                    meters_to_grams(after_len, spool.diameter, spool.density),
-                ),
-                1,
-            )
-            previous_weight = spool.remaining_weight
-            setattr(job, f"slot_{letter}_after", measured_weight)
-            spool.remaining_weight = measured_weight
-            spool.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
-
-            if before_len is not None:
-                consumed_m = before_len - after_len
-                if consumed_m > 0:
-                    consumed_g = meters_to_grams(consumed_m, spool.diameter, spool.density)
-                    logger.info(
-                        "[Moonraker] Slot %s: -%.1fg -> %.1fg left",
-                        letter.upper(),
-                        consumed_g,
-                        measured_weight,
-                    )
-                else:
-                    logger.info(
-                        "[Moonraker] Slot %s: measured %.1fg (prev %.1fg)",
-                        letter.upper(),
-                        measured_weight,
-                        previous_weight,
-                    )
-            else:
-                logger.info(
-                    "[Moonraker] Slot %s: measured %.1fg (no start snapshot)",
-                    letter.upper(),
-                    measured_weight,
-                )
 
         db.commit()
         logger.info("[Moonraker] Job #%s completed (%s)", job.id, job.status)
@@ -338,6 +285,8 @@ async def polling_loop() -> None:
 
             if _printer_state != "printing" and current == "printing":
                 await _on_print_started()
+            elif _printer_state == "printing" and current == "printing":
+                await _update_running_job_progress()
             elif _printer_state == "printing" and current in (
                 "complete",
                 "standby",
@@ -353,3 +302,78 @@ async def polling_loop() -> None:
             break
         except Exception as exc:
             logger.error("[Moonraker] Polling error: %s", exc)
+
+
+def _apply_consumption_delta(job, slots, db, meters_to_grams, final_log: bool) -> None:
+    """Update spool/job after-weights from remainLen deltas since print start."""
+    from app.models import Spool
+
+    letters = {1: "a", 2: "b", 3: "c", 4: "d"}
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for slot_num, slot_data in slots.items():
+        letter = letters[slot_num]
+        if not slot_data:
+            continue
+
+        current_len = slot_data["remain_len"]
+        setattr(job, f"snap_{letter}_after", current_len)
+
+        spool_id = getattr(job, f"slot_{letter}_spool_id")
+        before_len = getattr(job, f"snap_{letter}_before")
+        before_weight = getattr(job, f"slot_{letter}_before")
+        if not spool_id or before_len is None or before_weight is None:
+            continue
+
+        spool = db.query(Spool).filter(Spool.id == spool_id).first()
+        if not spool:
+            continue
+
+        consumed_m = max(0.0, before_len - current_len)
+        consumed_g = round(
+            meters_to_grams(consumed_m, spool.diameter, spool.density),
+            1,
+        )
+        new_weight = round(
+            max(0.0, min(spool.initial_weight, before_weight - consumed_g)),
+            1,
+        )
+        previous_weight = spool.remaining_weight
+        spool.remaining_weight = new_weight
+        spool.updated_at = now
+        setattr(job, f"slot_{letter}_after", new_weight)
+
+        if final_log:
+            logger.info(
+                "[Moonraker] Slot %s: -%.1fg -> %.1fg left (prev %.1fg)",
+                letter.upper(),
+                consumed_g,
+                new_weight,
+                previous_weight,
+            )
+
+
+async def _update_running_job_progress() -> None:
+    """Apply in-print remainLen deltas so UI reflects live spool consumption."""
+    global _current_job_id
+
+    if _current_job_id is None:
+        return
+
+    from app.database import SessionLocal
+    from app.models import PrintJob
+    from app.services.ssh_client import get_all_slots, meters_to_grams
+
+    db = SessionLocal()
+    try:
+        job = db.query(PrintJob).filter(PrintJob.id == _current_job_id).first()
+        if not job or job.status != "running":
+            return
+
+        slots = await asyncio.to_thread(get_all_slots)
+        _apply_consumption_delta(job, slots, db, meters_to_grams, final_log=False)
+        db.commit()
+    except Exception as exc:
+        logger.error("update_running_job_progress error: %s", exc)
+        db.rollback()
+    finally:
+        db.close()

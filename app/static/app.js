@@ -64,6 +64,7 @@ const I18N = {
     'Unbekannte Datei': 'Unknown file',
     'g Verbrauch': 'g consumed',
     'Keine aktiven Slots zum Syncen': 'No active slots to sync',
+    'Sync abgeschlossen (keine Gewichtsänderung)': 'Sync finished (no weight change)',
     'Sync fehlgeschlagen': 'Sync failed',
     'Spule ins Lager zurückgelegt': 'Spool moved back to storage',
     'Spule gelöscht': 'Spool deleted',
@@ -1017,15 +1018,19 @@ async function syncFromK2() {
   try {
     const res = await apiFetch('/api/cfs/sync', { method: 'POST' });
     const syncedCount = Number(res.synced || 0);
+    const unchangedCount = Number(res.unchanged || 0);
     const removedCount = Number(res.removed_count || 0);
-    if (syncedCount === 0 && removedCount === 0) {
+    if (syncedCount === 0 && removedCount === 0 && unchangedCount === 0) {
       showToast(tr('Keine aktiven Slots zum Syncen'), 'info');
+    } else if (syncedCount === 0 && removedCount === 0 && unchangedCount > 0) {
+      showToast('Sync abgeschlossen (keine Gewichtsänderung)', 'info');
     } else {
       const lines = res.updates.map(u =>
         `${u.key}: ${u.old_g.toFixed(0)}g → ${u.new_g.toFixed(0)}g`
       ).join('\n');
       const parts = [];
       if (syncedCount > 0) parts.push(`${syncedCount} Spule(n) aktualisiert`);
+      if (unchangedCount > 0) parts.push(`${unchangedCount} ohne Änderung`);
       if (removedCount > 0) parts.push(`${removedCount} leere Slot-Zuordnung(en) bereinigt`);
       showToast(parts.join(' · '), 'success');
       if (lines) {
@@ -1828,23 +1833,24 @@ function setupAddSpoolForm() {
   });
 
   document.querySelectorAll('.slot-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
       selectedSlot = parseInt(btn.dataset.slot);
       loadedFromCfs = false;
       readFromCfsBtn.disabled = scanInProgress ? true : false;
+      await readSlotData(selectedSlot);
     });
   });
 
-  document.getElementById('btnReadFromK2').addEventListener('click', async () => {
-    if (!selectedSlot) return;
+  async function readSlotData(slotNum) {
+    if (!slotNum) return;
     if (cfsStatusEl) {
       cfsStatusEl.textContent = 'Lese...';
       cfsStatusEl.style.color = 'var(--text-muted)';
     }
     try {
-      const data = await apiFetch(`/api/cfs/slot/${selectedSlot}/read`);
+      const data = await apiFetch(`/api/cfs/slot/${slotNum}/read`);
       fillFormFromK2(data);
       refreshDetectedStrip();
       loadedFromCfs = true;
@@ -1862,6 +1868,11 @@ function setupAddSpoolForm() {
         cfsStatusEl.style.color = 'var(--warn)';
       }
     }
+  }
+
+  document.getElementById('btnReadFromK2').addEventListener('click', async () => {
+    if (!selectedSlot) return;
+    await readSlotData(selectedSlot);
   });
 
   document.getElementById('btnCancelSpool').addEventListener('click', closeModal);
@@ -2123,6 +2134,8 @@ function fillFormFromK2(data) {
   set('name',       data.name);
   set('nozzle_min', data.nozzle_min);
   set('nozzle_max', data.nozzle_max);
+  set('diameter',   data.diameter);
+  set('density',    data.density);
   set('serial_num', data.serial_num);
 }
 

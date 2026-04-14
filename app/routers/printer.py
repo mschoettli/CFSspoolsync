@@ -83,11 +83,12 @@ async def printer_status():
     display = status.get("display_status", {})
     progress_raw = float(display.get("progress", 0) or 0)
     progress_pct = round(progress_raw * 100, 1)
+    current_state = print_stats.get("state", "unknown")
 
     remaining_seconds = None
     elapsed_seconds = float(print_stats.get("print_duration", 0) or 0)
     if (
-        print_stats.get("state") == "printing"
+        current_state == "printing"
         and progress_raw > 0
         and elapsed_seconds > 0
     ):
@@ -115,10 +116,11 @@ async def printer_status():
 
     current_layer_val = _to_float(current_layer)
     total_layer_val = _to_float(total_layer)
+    await moonraker.ensure_live_consumption_tick(current_state)
 
     return {
         "reachable": bool(status),
-        "state": print_stats.get("state", "unknown"),
+        "state": current_state,
         "filename": print_stats.get("filename", ""),
         "progress": progress_pct,
         "extruder_temp": round(extruder.get("temperature", 0), 1),

@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import quote
@@ -17,6 +18,9 @@ POLL_INTERVAL = int(os.getenv("MOONRAKER_POLL_INTERVAL", "5"))
 _printer_state: str = "standby"
 _current_job_id: Optional[int] = None
 _http_client: Optional[httpx.AsyncClient] = None
+_live_tick_lock: Optional[asyncio.Lock] = None
+_last_live_tick_ts: float = 0.0
+LIVE_TICK_MIN_INTERVAL_S = float(os.getenv("MOONRAKER_LIVE_TICK_MIN_INTERVAL_S", "4"))
 
 
 async def init_http_client() -> None:
@@ -32,6 +36,14 @@ async def close_http_client() -> None:
     if _http_client is not None:
         await _http_client.aclose()
         _http_client = None
+
+
+def _get_live_tick_lock() -> asyncio.Lock:
+    """Return one shared lock for on-demand live consumption ticks."""
+    global _live_tick_lock
+    if _live_tick_lock is None:
+        _live_tick_lock = asyncio.Lock()
+    return _live_tick_lock
 
 
 async def _client() -> httpx.AsyncClient:
@@ -411,3 +423,26 @@ async def _update_running_job_progress() -> None:
         db.rollback()
     finally:
         db.close()
+
+
+async def ensure_live_consumption_tick(current_state: str) -> None:
+    """Apply one throttled live consumption update when printer is printing.
+
+    This endpoint-triggered safety net keeps CFS weights moving even when the
+    background polling loop is not running as expected.
+    """
+    global _last_live_tick_ts
+
+    if current_state != "printing":
+        return
+
+    lock = _get_live_tick_lock()
+    async with lock:
+        now = time.monotonic()
+        if now - _last_live_tick_ts < LIVE_TICK_MIN_INTERVAL_S:
+            return
+        _last_live_tick_ts = now
+
+        if _current_job_id is None:
+            await _on_print_started()
+        await _update_running_job_progress()

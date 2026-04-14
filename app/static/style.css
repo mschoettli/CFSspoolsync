@@ -735,10 +735,10 @@ body {
   border: 0;
   background: rgba(16, 24, 36, 0.85);
   width: 100%;
-  aspect-ratio: auto;
-  height: 100%;
-  min-height: 260px;
-  flex: 1 1 auto;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  min-height: 0;
+  flex: 0 0 auto;
   isolation: isolate;
 }
 
@@ -749,17 +749,6 @@ body {
   object-fit: contain;
   object-position: center;
   background: #000;
-}
-
-.jobs-camera-iframe {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  display: none;
-  background: rgba(12, 18, 28, 0.75);
-  overflow: hidden;
 }
 
 .jobs-camera-fallback {
@@ -777,19 +766,6 @@ body {
 
 .jobs-camera-frame.is-error .jobs-camera-fallback {
   display: flex;
-}
-
-.jobs-camera-frame.use-iframe img {
-  display: none;
-}
-
-.jobs-camera-frame.use-iframe .jobs-camera-iframe {
-  display: block;
-  width: 100%;
-  height: 100%;
-  margin-left: 0;
-  margin-top: 0;
-  transform: translateZ(0);
 }
 
 .jobs-camera-empty,

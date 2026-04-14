@@ -819,8 +819,8 @@ function buildCameraCandidates(rawUrl) {
   const normalized = /^https?:\/\//i.test(rawUrl) ? rawUrl : `http://${rawUrl}`;
   const base = normalized.replace(/\/+$/u, '');
   const candidates = [
-    normalized,
     `${base}/?action=stream`,
+    normalized,
     `${base}/stream`,
     `${base}/video`,
   ];
@@ -842,7 +842,7 @@ function initJobsCameraFrames() {
       const current = Number.parseInt(img.dataset.sourceIndex || '0', 10);
       const next = current + 1;
       if (next >= sources.length) {
-        frame?.classList.add('use-iframe');
+        frame?.classList.add('is-error');
         return;
       }
       img.dataset.sourceIndex = String(next);
@@ -851,20 +851,7 @@ function initJobsCameraFrames() {
     img.onload = () => {
       const frame = img.closest('.jobs-camera-frame');
       frame?.classList.remove('is-error');
-      frame?.classList.remove('use-iframe');
     };
-  });
-
-  const iframes = document.querySelectorAll('.jobs-camera-frame .jobs-camera-iframe');
-  iframes.forEach((iframe) => {
-    iframe.addEventListener('load', () => {
-      const frame = iframe.closest('.jobs-camera-frame');
-      if (!frame?.classList.contains('use-iframe')) return;
-      frame.classList.remove('is-error');
-    });
-    iframe.addEventListener('error', () => {
-      iframe.closest('.jobs-camera-frame')?.classList.add('is-error');
-    });
   });
 }
 
@@ -897,14 +884,6 @@ function renderJobsCameraPanel() {
           loading="lazy"
           referrerpolicy="no-referrer"
         />
-        <iframe
-          class="jobs-camera-iframe"
-          src="${esc(streamUrl)}"
-          loading="lazy"
-          referrerpolicy="no-referrer"
-          allowfullscreen
-          scrolling="no"
-        ></iframe>
         <div class="jobs-camera-fallback">${tr('Kamerastream nicht erreichbar')}</div>
       </div>
     </article>

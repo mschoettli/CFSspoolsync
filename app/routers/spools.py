@@ -107,7 +107,7 @@ def get_spool(spool_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{spool_id}", response_model=SpoolOut)
-def update_spool(spool_id: int, payload: SpoolUpdate, db: Session = Depends(get_db)):
+async def update_spool(spool_id: int, payload: SpoolUpdate, db: Session = Depends(get_db)):
     """Update mutable fields of a spool."""
     spool = db.query(Spool).filter(Spool.id == spool_id).first()
     if not spool:
@@ -126,7 +126,29 @@ def update_spool(spool_id: int, payload: SpoolUpdate, db: Session = Depends(get_
 
     for field, value in updates.items():
         setattr(spool, field, value)
-    spool.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    spool.updated_at = now
+
+    # If the user manually adjusts remaining weight on an active slot, derive a new
+    # calibration factor from the current K2 remainLen so subsequent syncs keep that value.
+    if (
+        "remaining_weight" in updates
+        and spool.status == "aktiv"
+        and spool.cfs_slot in (1, 2, 3, 4)
+    ):
+        slot_data = await asyncio.to_thread(ssh_client.get_slot, spool.cfs_slot)
+        if slot_data and slot_data.get("loaded"):
+            raw_k2_g = round(
+                ssh_client.meters_to_grams(
+                    slot_data.get("remain_len", 0),
+                    spool.diameter,
+                    spool.density,
+                ),
+                1,
+            )
+            if raw_k2_g > 0:
+                spool.calibration_factor = round(spool.remaining_weight / raw_k2_g, 4)
+                spool.calibrated_at = now
 
     db.commit()
     db.refresh(spool)

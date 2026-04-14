@@ -2264,14 +2264,158 @@ function openEditModal(id) {
   if (!s) return;
   openModal(`Spule bearbeiten · #${id}`, buildEditForm(s));
   const manageTareBtn = document.getElementById('btnManageTareDefaultsFromEdit');
+  const tareDefaultsOverlay = document.getElementById('tareDefaultsModalOverlayEdit');
+  const tareDefaultsRows = document.getElementById('tareDefaultsRowsEdit');
+  const tareDefaultsCreateForm = document.getElementById('tareDefaultsCreateFormEdit');
+  const closeTareDefaultsBtn = document.getElementById('btnCloseTareDefaultsEdit');
   if (manageTareBtn) {
     manageTareBtn.addEventListener('click', async () => {
-      closeModal();
-      openAddSpoolModal();
-      await new Promise(resolve => setTimeout(resolve, 0));
-      document.getElementById('btnManageTareDefaults')?.click();
+      const entries = await loadTareDefaults(true);
+      if (!tareDefaultsRows || !tareDefaultsOverlay) return;
+      if (!Array.isArray(entries) || entries.length === 0) {
+        tareDefaultsRows.innerHTML = '<div class="tare-defaults-empty">Keine Hersteller-Defaults vorhanden.</div>';
+      } else {
+        tareDefaultsRows.innerHTML = entries.map((entry) => `
+          <div class="tare-defaults-row" data-brand-key="${esc(entry.brand_key)}">
+            <input class="form-input" name="brand_label" value="${esc(entry.brand_label)}" required>
+            <input class="form-input" name="tare_weight_g" type="number" step="0.1" min="0" value="${Number(entry.tare_weight_g).toFixed(1)}" required>
+            <div class="tare-defaults-actions">
+              <button type="button" class="btn btn-ghost btn-sm" data-action="save-tare-default">Speichern</button>
+              ${entry.is_system ? '' : '<button type="button" class="btn btn-danger btn-sm" data-action="delete-tare-default">Löschen</button>'}
+            </div>
+          </div>
+        `).join('');
+      }
+      tareDefaultsOverlay.classList.remove('hidden');
     });
   }
+  closeTareDefaultsBtn?.addEventListener('click', () => tareDefaultsOverlay?.classList.add('hidden'));
+  tareDefaultsOverlay?.addEventListener('click', (event) => {
+    if (event.target === tareDefaultsOverlay) {
+      tareDefaultsOverlay.classList.add('hidden');
+    }
+  });
+
+  const applyDefaultTareToEditForm = () => {
+    const form = document.getElementById('editSpoolForm');
+    if (!form) return;
+    const brand = String(form.querySelector('[name="brand"]')?.value || '').trim();
+    const material = String(form.querySelector('[name="material"]')?.value || '').trim();
+    const tareInput = form.querySelector('[name="tare_weight_g"]');
+    if (!tareInput) return;
+    const defaultTare = getDefaultTareWeight(brand, material);
+    if (!Number.isFinite(defaultTare)) return;
+    tareInput.value = Number(defaultTare).toFixed(1);
+  };
+
+  tareDefaultsRows?.addEventListener('click', async (event) => {
+    const row = event.target.closest('.tare-defaults-row');
+    if (!row) return;
+    const brandKey = row.dataset.brandKey;
+    if (!brandKey) return;
+
+    const brandInput = row.querySelector('[name="brand_label"]');
+    const tareField = row.querySelector('[name="tare_weight_g"]');
+    const tareWeight = Number.parseFloat(tareField?.value || '');
+    const brandLabel = String(brandInput?.value || '').trim();
+
+    if (event.target.closest('[data-action="save-tare-default"]')) {
+      try {
+        if (!brandLabel) throw new Error('Hersteller ist erforderlich');
+        if (!Number.isFinite(tareWeight) || tareWeight < 0) throw new Error('Tara muss >= 0 sein');
+        await apiFetch(`/api/tare-defaults/${encodeURIComponent(brandKey)}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            brand_label: brandLabel,
+            tare_weight_g: tareWeight,
+          }),
+        });
+        const refreshed = await loadTareDefaults(true);
+        if (Array.isArray(refreshed)) {
+          tareDefaultsRows.innerHTML = refreshed.map((entry) => `
+            <div class="tare-defaults-row" data-brand-key="${esc(entry.brand_key)}">
+              <input class="form-input" name="brand_label" value="${esc(entry.brand_label)}" required>
+              <input class="form-input" name="tare_weight_g" type="number" step="0.1" min="0" value="${Number(entry.tare_weight_g).toFixed(1)}" required>
+              <div class="tare-defaults-actions">
+                <button type="button" class="btn btn-ghost btn-sm" data-action="save-tare-default">Speichern</button>
+                ${entry.is_system ? '' : '<button type="button" class="btn btn-danger btn-sm" data-action="delete-tare-default">Löschen</button>'}
+              </div>
+            </div>
+          `).join('');
+        }
+        applyDefaultTareToEditForm();
+        showToast('Default-Tara gespeichert', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+      return;
+    }
+
+    if (event.target.closest('[data-action="delete-tare-default"]')) {
+      try {
+        await apiFetch(`/api/tare-defaults/${encodeURIComponent(brandKey)}`, {
+          method: 'DELETE',
+        });
+        const refreshed = await loadTareDefaults(true);
+        if (!Array.isArray(refreshed) || refreshed.length === 0) {
+          tareDefaultsRows.innerHTML = '<div class="tare-defaults-empty">Keine Hersteller-Defaults vorhanden.</div>';
+        } else {
+          tareDefaultsRows.innerHTML = refreshed.map((entry) => `
+            <div class="tare-defaults-row" data-brand-key="${esc(entry.brand_key)}">
+              <input class="form-input" name="brand_label" value="${esc(entry.brand_label)}" required>
+              <input class="form-input" name="tare_weight_g" type="number" step="0.1" min="0" value="${Number(entry.tare_weight_g).toFixed(1)}" required>
+              <div class="tare-defaults-actions">
+                <button type="button" class="btn btn-ghost btn-sm" data-action="save-tare-default">Speichern</button>
+                ${entry.is_system ? '' : '<button type="button" class="btn btn-danger btn-sm" data-action="delete-tare-default">Löschen</button>'}
+              </div>
+            </div>
+          `).join('');
+        }
+        applyDefaultTareToEditForm();
+        showToast('Default-Tara gelöscht', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+  });
+
+  tareDefaultsCreateForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const fd = new FormData(tareDefaultsCreateForm);
+    const brandLabel = String(fd.get('brand_label') || '').trim();
+    const tareWeight = Number.parseFloat(String(fd.get('tare_weight_g') || '').trim());
+    try {
+      if (!brandLabel) throw new Error('Hersteller ist erforderlich');
+      if (!Number.isFinite(tareWeight) || tareWeight < 0) throw new Error('Tara muss >= 0 sein');
+      await apiFetch('/api/tare-defaults', {
+        method: 'POST',
+        body: JSON.stringify({
+          brand_label: brandLabel,
+          tare_weight_g: tareWeight,
+        }),
+      });
+      tareDefaultsCreateForm.reset();
+      const refreshed = await loadTareDefaults(true);
+      if (!Array.isArray(refreshed) || refreshed.length === 0) {
+        tareDefaultsRows.innerHTML = '<div class="tare-defaults-empty">Keine Hersteller-Defaults vorhanden.</div>';
+      } else {
+        tareDefaultsRows.innerHTML = refreshed.map((entry) => `
+          <div class="tare-defaults-row" data-brand-key="${esc(entry.brand_key)}">
+            <input class="form-input" name="brand_label" value="${esc(entry.brand_label)}" required>
+            <input class="form-input" name="tare_weight_g" type="number" step="0.1" min="0" value="${Number(entry.tare_weight_g).toFixed(1)}" required>
+            <div class="tare-defaults-actions">
+              <button type="button" class="btn btn-ghost btn-sm" data-action="save-tare-default">Speichern</button>
+              ${entry.is_system ? '' : '<button type="button" class="btn btn-danger btn-sm" data-action="delete-tare-default">Löschen</button>'}
+            </div>
+          </div>
+        `).join('');
+      }
+      applyDefaultTareToEditForm();
+      showToast('Hersteller-Default hinzugefügt', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
 
   document.getElementById('editSpoolForm').addEventListener('submit', async e => {
     e.preventDefault();
@@ -2328,6 +2472,7 @@ function buildEditForm(s) {
   const tareDefault = Number.isFinite(s.tare_weight_g) ? s.tare_weight_g : '';
 
   return `
+    <div class="spool-modal-add">
     <form id="editSpoolForm">
       <div class="form-grid">
         <div class="form-group">
@@ -2401,7 +2546,30 @@ function buildEditForm(s) {
         <button type="button" class="btn btn-ghost" id="btnCancelEdit">Abbrechen</button>
         <button type="submit" class="btn btn-primary">Speichern</button>
       </div>
-    </form>`;
+    </form>
+
+      <div class="inner-modal-overlay hidden" id="tareDefaultsModalOverlayEdit">
+        <div class="inner-modal">
+          <div class="inner-modal-head">
+            <h4>Default Tara verwalten</h4>
+            <button type="button" class="modal-close" id="btnCloseTareDefaultsEdit" aria-label="Schließen">×</button>
+          </div>
+          <div class="inner-modal-body">
+            <div class="tare-defaults-table-head">
+              <span>Hersteller</span>
+              <span>Default Tara (g)</span>
+              <span>Aktion</span>
+            </div>
+            <div id="tareDefaultsRowsEdit" class="tare-defaults-rows"></div>
+            <form id="tareDefaultsCreateFormEdit" class="tare-defaults-create-row" autocomplete="off">
+              <input class="form-input" name="brand_label" placeholder="Neuer Hersteller" required>
+              <input class="form-input" name="tare_weight_g" type="number" step="0.1" min="0" placeholder="z.B. 180" required>
+              <button type="submit" class="btn btn-ghost btn-sm">Hinzufügen</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>`;
 }
 
 // ── Modal: Assign spool to slot (from CFS view) ────────────────────────────

@@ -913,24 +913,25 @@ function renderJobsCameraPanel() {
 
 function renderActiveJobPanel(runningJob) {
   const p = state.printer || {};
-  if (!runningJob && p.state !== 'printing') {
-    return `
-      <article class="jobs-panel jobs-active-panel">
-        <header class="jobs-panel-head"><h3>${tr('Aktiver Job')}</h3></header>
-        <div class="jobs-active-empty">${tr('Kein aktiver Druckjob')}</div>
-      </article>
-    `;
-  }
+  const hasActiveJob = Boolean(runningJob) || p.state === 'printing';
 
-  const filename = esc(p.filename || runningJob?.filename || tr('Unbekannte Datei'));
-  const progress = typeof p.progress === 'number' ? Math.max(0, Math.min(100, p.progress)) : 0;
-  const currentLayer = Number.isFinite(p.current_layer) ? Number(p.current_layer) : null;
-  const totalLayer = Number.isFinite(p.total_layer) ? Number(p.total_layer) : null;
-  const printingTime = fmtSeconds(p.print_duration_seconds);
-  const remainingTime = fmtRemainingSeconds(p.remaining_seconds);
-  const finishTime = p.estimated_finish_at ? fmtDate(p.estimated_finish_at) : '—';
-  const nozzle = formatTempPair(p.extruder_temp, p.extruder_target);
-  const bed = formatTempPair(p.bed_temp, p.bed_target);
+  const filename = hasActiveJob
+    ? esc(p.filename || runningJob?.filename || tr('Unbekannte Datei'))
+    : '—';
+  const progress = hasActiveJob && typeof p.progress === 'number'
+    ? Math.max(0, Math.min(100, p.progress))
+    : 0;
+  const currentLayer = hasActiveJob && Number.isFinite(p.current_layer)
+    ? Number(p.current_layer)
+    : null;
+  const totalLayer = hasActiveJob && Number.isFinite(p.total_layer)
+    ? Number(p.total_layer)
+    : null;
+  const printingTime = hasActiveJob ? fmtSeconds(p.print_duration_seconds) : '—';
+  const remainingTime = hasActiveJob ? fmtRemainingSeconds(p.remaining_seconds) : '—';
+  const finishTime = hasActiveJob && p.estimated_finish_at ? fmtDate(p.estimated_finish_at) : '—';
+  const nozzle = hasActiveJob ? formatTempPair(p.extruder_temp, p.extruder_target) : '—';
+  const bed = hasActiveJob ? formatTempPair(p.bed_temp, p.bed_target) : '—';
 
   return `
     <article class="jobs-panel jobs-active-panel">
@@ -945,6 +946,7 @@ function renderActiveJobPanel(runningJob) {
         <div class="jobs-kv"><span>${tr('Nozzle')}</span><strong>${nozzle}</strong></div>
         <div class="jobs-kv"><span>${tr('Bett')}</span><strong>${bed}</strong></div>
       </div>
+      ${hasActiveJob ? '' : `<div class="jobs-active-empty">${tr('Kein aktiver Druckjob')}</div>`}
       <div class="jobs-progress-track" role="progressbar" aria-valuenow="${progress.toFixed(1)}" aria-valuemin="0" aria-valuemax="100">
         <div class="jobs-progress-fill" style="width:${progress.toFixed(1)}%"></div>
         <span class="jobs-progress-label">${progress.toFixed(1)}%</span>
@@ -2261,41 +2263,13 @@ function openEditModal(id) {
   const s = state.spools.find(x => x.id === id);
   if (!s) return;
   openModal(`Spule bearbeiten · #${id}`, buildEditForm(s));
-  const calibrateBtn = document.getElementById('btnCalibrateWeight');
-  if (calibrateBtn) {
-    calibrateBtn.addEventListener('click', async () => {
-      const form = document.getElementById('editSpoolForm');
-      if (!form) return;
-      const fd = new FormData(form);
-      const gross = parseFloat(fd.get('gross_weight_g'));
-      const tareInput = String(fd.get('tare_weight_g') || '').trim();
-      const tare = tareInput ? parseFloat(tareInput) : null;
-      try {
-        if (!Number.isFinite(gross) || gross <= 0) {
-          throw new Error('Bruttogewicht muss > 0 sein');
-        }
-        if (tare !== null && (!Number.isFinite(tare) || tare < 0)) {
-          throw new Error('Tara muss >= 0 sein');
-        }
-
-        calibrateBtn.disabled = true;
-        calibrateBtn.textContent = 'Kalibriere...';
-        await apiFetch(`/api/spools/${id}/calibrate-weight`, {
-          method: 'POST',
-          body: JSON.stringify({
-            gross_weight_g: gross,
-            tare_weight_g: tare,
-          }),
-        });
-        showToast('Kalibrierung gespeichert', 'success');
-        closeModal();
-        await Promise.all([loadSpools(), loadCFS()]);
-      } catch (err) {
-        showToast(err.message, 'error');
-      } finally {
-        calibrateBtn.disabled = false;
-        calibrateBtn.textContent = 'Kalibrieren';
-      }
+  const manageTareBtn = document.getElementById('btnManageTareDefaultsFromEdit');
+  if (manageTareBtn) {
+    manageTareBtn.addEventListener('click', async () => {
+      closeModal();
+      openAddSpoolModal();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      document.getElementById('btnManageTareDefaults')?.click();
     });
   }
 
@@ -2352,9 +2326,6 @@ function openEditModal(id) {
 
 function buildEditForm(s) {
   const tareDefault = Number.isFinite(s.tare_weight_g) ? s.tare_weight_g : '';
-  const factorText = Number.isFinite(s.calibration_factor)
-    ? `x${Number(s.calibration_factor).toFixed(3)}`
-    : 'nicht kalibriert';
 
   return `
     <form id="editSpoolForm">
@@ -2393,10 +2364,7 @@ function buildEditForm(s) {
         <div class="form-group">
           <label class="form-label">Tara Spule (g)</label>
           <input class="form-input" type="number" name="tare_weight_g" min="0" step="0.1" value="${tareDefault}">
-        </div>
-        <div class="form-group span2">
-          <div class="form-hint">Kalibrierfaktor: <strong>${factorText}</strong></div>
-          <button type="button" class="btn btn-ghost btn-sm" id="btnCalibrateWeight">Kalibrieren</button>
+          <button class="form-link-btn" type="button" id="btnManageTareDefaultsFromEdit">Default-Tara je Hersteller bearbeiten</button>
         </div>
 
         <div class="form-section-title">Temperatur</div>

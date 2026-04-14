@@ -16,6 +16,54 @@ router = APIRouter(prefix="/api/cfs", tags=["cfs"])
 SYNC_CHANGE_THRESHOLD_G = 0.1
 
 
+def _is_replacement_detected(slot_data: dict, spool: Spool) -> bool:
+    """Return True when live slot data clearly indicates a different spool."""
+    live_serial = str(slot_data.get("serial_num") or "").strip()
+    known_serial = str(spool.serial_num or "").strip()
+    if live_serial and known_serial and live_serial != known_serial:
+        return True
+    return False
+
+
+def _create_spool_from_slot(slot_num: int, slot_data: dict, db: Session, now: datetime) -> Spool:
+    """Create one active spool entry from live CFS slot metadata."""
+    material = str(slot_data.get("material") or "").strip() or "Unbekannt"
+    brand = str(slot_data.get("brand") or "").strip()
+    name = str(slot_data.get("name") or "").strip()
+    color = str(slot_data.get("color") or "").strip() or "#888888"
+    nozzle_min = int(slot_data.get("nozzle_min") or 190)
+    nozzle_max = int(slot_data.get("nozzle_max") or 230)
+    diameter = float(slot_data.get("diameter") or 1.75)
+    density = float(slot_data.get("density") or 1.24)
+    serial_num = str(slot_data.get("serial_num") or "").strip()
+
+    remaining_weight = round(max(0.0, float(slot_data.get("remaining_grams") or 0.0)), 1)
+    initial_weight = round(max(remaining_weight, 1.0), 1)
+
+    tare_weight = get_default_tare_weight_g(brand, material, db)
+    spool = Spool(
+        material=material,
+        color=color,
+        brand=brand,
+        name=name,
+        nozzle_min=nozzle_min,
+        nozzle_max=nozzle_max,
+        bed_temp=60,
+        initial_weight=initial_weight,
+        remaining_weight=remaining_weight,
+        status="aktiv",
+        cfs_slot=slot_num,
+        serial_num=serial_num,
+        diameter=diameter,
+        density=density,
+        tare_weight_g=tare_weight,
+        updated_at=now,
+    )
+    db.add(spool)
+    db.flush()
+    return spool
+
+
 @router.get("")
 def get_cfs_state(db: Session = Depends(get_db)):
     """Return the current CFS slot state from active DB assignments."""
@@ -60,6 +108,7 @@ async def sync_from_k2(db: Session = Depends(get_db)):
 
     updated = []
     removed = []
+    created = []
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     for slot_num, slot_data in slots.items():
@@ -83,6 +132,42 @@ async def sync_from_k2(db: Session = Depends(get_db)):
             continue
 
         if not spool:
+            created_spool = _create_spool_from_slot(slot_num, slot_data, db, now)
+            active_spools[slot_num] = created_spool
+            created.append(
+                {
+                    "slot": slot_num,
+                    "spool_id": created_spool.id,
+                    "source": "auto_created_from_cfs",
+                }
+            )
+            continue
+
+        if _is_replacement_detected(slot_data, spool):
+            previous_spool_id = spool.id
+            spool.cfs_slot = None
+            spool.status = "lager"
+            spool.updated_at = now
+            removed.append(
+                {
+                    "slot": slot_num,
+                    "spool_id": previous_spool_id,
+                    "old_status": "aktiv",
+                    "new_status": "lager",
+                    "reason": "replaced_by_new_cfs_spool",
+                }
+            )
+
+            created_spool = _create_spool_from_slot(slot_num, slot_data, db, now)
+            active_spools[slot_num] = created_spool
+            created.append(
+                {
+                    "slot": slot_num,
+                    "spool_id": created_spool.id,
+                    "source": "auto_created_from_cfs",
+                    "replaced_spool_id": previous_spool_id,
+                }
+            )
             continue
 
         if spool.tare_weight_g is None:
@@ -130,6 +215,8 @@ async def sync_from_k2(db: Session = Depends(get_db)):
         "unchanged": len(updated) - len(changed_updates),
         "updates": updated,
         "changed_updates": changed_updates,
+        "created_count": len(created),
+        "created": created,
         "removed_count": len(removed),
         "removed": removed,
     }

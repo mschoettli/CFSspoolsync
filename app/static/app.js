@@ -1021,10 +1021,11 @@ async function syncFromK2() {
     const res = await apiFetch('/api/cfs/sync', { method: 'POST' });
     const syncedCount = Number(res.synced || 0);
     const unchangedCount = Number(res.unchanged || 0);
+    const createdCount = Number(res.created_count || 0);
     const removedCount = Number(res.removed_count || 0);
-    if (syncedCount === 0 && removedCount === 0 && unchangedCount === 0) {
+    if (syncedCount === 0 && removedCount === 0 && unchangedCount === 0 && createdCount === 0) {
       showToast(tr('Keine aktiven Slots zum Syncen'), 'info');
-    } else if (syncedCount === 0 && removedCount === 0 && unchangedCount > 0) {
+    } else if (syncedCount === 0 && removedCount === 0 && unchangedCount > 0 && createdCount === 0) {
       showToast('Sync abgeschlossen (keine Gewichtsänderung)', 'info');
     } else {
       const lines = res.updates.map(u =>
@@ -1033,6 +1034,7 @@ async function syncFromK2() {
       const parts = [];
       if (syncedCount > 0) parts.push(`${syncedCount} Spule(n) aktualisiert`);
       if (unchangedCount > 0) parts.push(`${unchangedCount} ohne Änderung`);
+      if (createdCount > 0) parts.push(`${createdCount} neue Spule(n) erkannt`);
       if (removedCount > 0) parts.push(`${removedCount} leere Slot-Zuordnung(en) bereinigt`);
       showToast(parts.join(' · '), 'success');
       if (lines) {

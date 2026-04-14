@@ -12,7 +12,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 MOONRAKER_URL = os.getenv("MOONRAKER_URL", "http://192.168.178.192:7125")
-POLL_INTERVAL = int(os.getenv("MOONRAKER_POLL_INTERVAL", "10"))
+POLL_INTERVAL = int(os.getenv("MOONRAKER_POLL_INTERVAL", "5"))
 
 _printer_state: str = "standby"
 _current_job_id: Optional[int] = None
@@ -155,6 +155,7 @@ async def _on_print_started() -> None:
             .order_by(PrintJob.started_at.desc(), PrintJob.id.desc())
             .all()
         )
+        job: PrintJob | None = None
         if running_jobs:
             same_file = next(
                 (
@@ -167,23 +168,27 @@ async def _on_print_started() -> None:
                 None,
             )
             if same_file is not None:
-                _current_job_id = same_file.id
                 logger.info(
-                    "[Moonraker] Reusing existing running job #%s for %s",
+                    "[Moonraker] Reusing running job #%s for %s (refreshing snapshots)",
                     same_file.id,
                     same_file.filename,
                 )
-                return
+                job = same_file
 
-            for stale_job in running_jobs:
-                stale_job.status = "cancelled"
-                stale_job.finished_at = stale_job.finished_at or now
+            if job is None:
+                for stale_job in running_jobs:
+                    stale_job.status = "cancelled"
+                    stale_job.finished_at = stale_job.finished_at or now
 
-        job = PrintJob(
-            started_at=now,
-            status="running",
-            filename=filename,
-        )
+        if job is None:
+            job = PrintJob(
+                started_at=now,
+                status="running",
+                filename=filename,
+            )
+            db.add(job)
+        elif filename:
+            job.filename = filename
 
         letters = {1: "a", 2: "b", 3: "c", 4: "d"}
         active_spools = {
@@ -192,18 +197,31 @@ async def _on_print_started() -> None:
             if spool.cfs_slot
         }
 
+        for letter in letters.values():
+            setattr(job, f"snap_{letter}_before", None)
+            setattr(job, f"snap_{letter}_after", None)
+            setattr(job, f"slot_{letter}_spool_id", None)
+            setattr(job, f"slot_{letter}_before", None)
+            setattr(job, f"slot_{letter}_after", None)
+
         for slot_num, slot_data in slots.items():
             letter = letters[slot_num]
             if not slot_data or not slot_data.get("loaded"):
                 continue
 
             setattr(job, f"snap_{letter}_before", slot_data["remain_len"])
+            setattr(job, f"snap_{letter}_after", slot_data["remain_len"])
             spool = active_spools.get(slot_num)
             if spool:
                 setattr(job, f"slot_{letter}_spool_id", spool.id)
                 setattr(job, f"slot_{letter}_before", spool.remaining_weight)
+                setattr(job, f"slot_{letter}_after", spool.remaining_weight)
+            else:
+                logger.debug(
+                    "[Moonraker] Slot %s loaded but no active spool assignment found",
+                    letter.upper(),
+                )
 
-        db.add(job)
         db.commit()
         db.refresh(job)
 
@@ -313,19 +331,35 @@ def _apply_consumption_delta(job, slots, db, meters_to_grams, final_log: bool) -
     for slot_num, slot_data in slots.items():
         letter = letters[slot_num]
         if not slot_data:
+            logger.debug("[Moonraker] Skip slot %s: no live slot data", letter.upper())
             continue
 
-        current_len = slot_data["remain_len"]
+        current_len = slot_data.get("remain_len")
+        if current_len is None:
+            logger.debug("[Moonraker] Skip slot %s: remain_len missing", letter.upper())
+            continue
         setattr(job, f"snap_{letter}_after", current_len)
 
         spool_id = getattr(job, f"slot_{letter}_spool_id")
         before_len = getattr(job, f"snap_{letter}_before")
         before_weight = getattr(job, f"slot_{letter}_before")
         if not spool_id or before_len is None or before_weight is None:
+            logger.debug(
+                "[Moonraker] Skip slot %s: missing snapshot fields (spool_id=%s, before_len=%s, before_weight=%s)",
+                letter.upper(),
+                spool_id,
+                before_len,
+                before_weight,
+            )
             continue
 
         spool = db.query(Spool).filter(Spool.id == spool_id).first()
         if not spool:
+            logger.debug(
+                "[Moonraker] Skip slot %s: spool #%s not found",
+                letter.upper(),
+                spool_id,
+            )
             continue
 
         consumed_m = max(0.0, before_len - current_len)

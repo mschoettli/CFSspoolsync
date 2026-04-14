@@ -2761,7 +2761,9 @@ function fmtDuration(start, end) {
 }
 
 function fmtRemainingSeconds(seconds) {
-  if (typeof seconds !== 'number' || !isFinite(seconds) || seconds <= 0) return '—';
+  if (typeof seconds !== 'number' || !isFinite(seconds)) return '—';
+  if (seconds === 0) return '0h 00min';
+  if (seconds < 0) return '—';
   const total = Math.round(seconds);
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);

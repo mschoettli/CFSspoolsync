@@ -5,7 +5,7 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import quote
 
 import httpx
@@ -289,6 +289,7 @@ async def _on_print_ended(final_state: str) -> None:
 
         slots = await asyncio.to_thread(get_all_slots)
         current_filament_m = await _get_current_filament_used_m()
+        active_slot_num = await _get_active_cfs_slot()
         _apply_consumption_delta(
             job,
             slots,
@@ -296,6 +297,7 @@ async def _on_print_ended(final_state: str) -> None:
             meters_to_grams,
             final_log=True,
             current_filament_used_m=current_filament_m,
+            active_slot_num=active_slot_num,
         )
 
         job.finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -360,6 +362,62 @@ async def _get_current_filament_used_m() -> Optional[float]:
         return None
 
 
+def _parse_active_slot_value(value: Any) -> Optional[int]:
+    """Parse active slot values from Moonraker payloads."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        slot = int(value)
+        return slot if slot in (1, 2, 3, 4) else None
+
+    text = str(value).strip().upper()
+    if text in {"A", "B", "C", "D"}:
+        return {"A": 1, "B": 2, "C": 3, "D": 4}[text]
+    try:
+        slot = int(text)
+        return slot if slot in (1, 2, 3, 4) else None
+    except ValueError:
+        return None
+
+
+def _extract_active_cfs_slot(status: dict[str, Any]) -> Optional[int]:
+    """Extract active CFS slot from known Moonraker object fields."""
+    key_candidates = (
+        "active_cfs_slot",
+        "cfs_active_slot",
+        "active_slot",
+        "current_slot",
+        "slot",
+    )
+    object_candidates = ("print_stats", "display_status", "toolhead")
+
+    for object_name in object_candidates:
+        payload = status.get(object_name, {})
+        if not isinstance(payload, dict):
+            continue
+        for key in key_candidates:
+            parsed = _parse_active_slot_value(payload.get(key))
+            if parsed is not None:
+                return parsed
+        info = payload.get("info")
+        if isinstance(info, dict):
+            for key in key_candidates:
+                parsed = _parse_active_slot_value(info.get(key))
+                if parsed is not None:
+                    return parsed
+    return None
+
+
+async def _get_active_cfs_slot() -> Optional[int]:
+    """Read active CFS slot from Moonraker status if available."""
+    try:
+        status = await _query_objects(["print_stats", "display_status", "toolhead"])
+        return _extract_active_cfs_slot(status if isinstance(status, dict) else {})
+    except Exception as exc:
+        logger.debug("Could not read active CFS slot: %s", exc)
+        return None
+
+
 def _apply_consumption_delta(
     job,
     slots,
@@ -367,15 +425,17 @@ def _apply_consumption_delta(
     meters_to_grams,
     final_log: bool,
     current_filament_used_m: Optional[float] = None,
+    active_slot_num: Optional[int] = None,
 ) -> None:
-    """Update spool/job after-weights from remainLen deltas since print start."""
+    """Update spool/job after-weights, preferring filament_used over remainLen."""
     from app.models import Spool
     global _current_job_filament_start_m
 
     letters = {1: "a", 2: "b", 3: "c", 4: "d"}
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+    slot_entries: dict[str, dict[str, Any]] = {}
+    remainlen_weights: dict[str, float] = {}
     any_positive_remainlen_delta = False
-    fallback_candidates: list[tuple[str, Spool, float]] = []
 
     for slot_num, slot_data in slots.items():
         letter = letters[slot_num]
@@ -411,7 +471,11 @@ def _apply_consumption_delta(
             )
             continue
 
-        fallback_candidates.append((letter, spool, float(before_weight)))
+        slot_entries[letter] = {
+            "slot_num": slot_num,
+            "spool": spool,
+            "before_weight": float(before_weight),
+        }
 
         consumed_m = max(0.0, before_len - current_len)
         if consumed_m > 0.001:
@@ -420,33 +484,53 @@ def _apply_consumption_delta(
             meters_to_grams(consumed_m, spool.diameter, spool.density),
             1,
         )
-        new_weight = round(
+        remainlen_weights[letter] = round(
             max(0.0, min(spool.initial_weight, before_weight - consumed_g)),
             1,
         )
-        previous_weight = spool.remaining_weight
-        spool.remaining_weight = new_weight
-        spool.updated_at = now
-        setattr(job, f"slot_{letter}_after", new_weight)
 
         if final_log:
             logger.info(
-                "[Moonraker] Slot %s: -%.1fg -> %.1fg left (prev %.1fg)",
+                "[Moonraker] remainLen slot %s consumed=%.1fg projected=%.1fg",
                 letter.upper(),
                 consumed_g,
-                new_weight,
-                previous_weight,
+                remainlen_weights[letter],
             )
 
-    # Fallback path: when remainLen is static, use print_stats.filament_used delta.
+    # Primary path: filament_used deltas, mapped to one reliable active slot.
+    used_source = "fallback_none"
+    applied = False
+    target_letter: Optional[str] = None
+    if active_slot_num in letters:
+        candidate = letters[active_slot_num]
+        if candidate in slot_entries:
+            target_letter = candidate
+            used_source = "filament_used"
+        else:
+            logger.debug(
+                "[Moonraker] Active slot %s has no tracked spool mapping",
+                active_slot_num,
+            )
+    elif len(slot_entries) == 1:
+        target_letter = next(iter(slot_entries))
+        used_source = "filament_used_single_slot"
+    else:
+        logger.debug(
+            "[Moonraker] No reliable active slot for filament_used (active_slot=%s, tracked_slots=%s)",
+            active_slot_num,
+            sorted(slot_entries.keys()),
+        )
+
     if (
-        not any_positive_remainlen_delta
+        target_letter
         and current_filament_used_m is not None
         and _current_job_filament_start_m is not None
     ):
         consumed_m_total = max(0.0, current_filament_used_m - _current_job_filament_start_m)
-        if consumed_m_total > 0.001 and fallback_candidates:
-            letter, spool, before_weight = fallback_candidates[0]
+        if consumed_m_total > 0.001:
+            entry = slot_entries[target_letter]
+            spool = entry["spool"]
+            before_weight = entry["before_weight"]
             consumed_g = round(
                 meters_to_grams(consumed_m_total, spool.diameter, spool.density),
                 1,
@@ -458,22 +542,52 @@ def _apply_consumption_delta(
             previous_weight = spool.remaining_weight
             spool.remaining_weight = new_weight
             spool.updated_at = now
-            setattr(job, f"slot_{letter}_after", new_weight)
+            setattr(job, f"slot_{target_letter}_after", new_weight)
+            applied = True
             if final_log:
                 logger.info(
-                    "[Moonraker] Fallback filament_used slot %s: -%.1fg -> %.1fg left (prev %.1fg)",
-                    letter.upper(),
+                    "[Moonraker] %s slot %s: -%.1fg -> %.1fg left (prev %.1fg)",
+                    used_source,
+                    target_letter.upper(),
                     consumed_g,
                     new_weight,
                     previous_weight,
                 )
             else:
                 logger.debug(
-                    "[Moonraker] Fallback filament_used slot %s: -%.1fg -> %.1fg left",
-                    letter.upper(),
+                    "[Moonraker] %s slot %s: -%.1fg -> %.1fg left",
+                    used_source,
+                    target_letter.upper(),
                     consumed_g,
                     new_weight,
                 )
+
+    # Secondary path: only use remainLen when filament_used path was not applied.
+    if not applied and any_positive_remainlen_delta:
+        for letter, entry in slot_entries.items():
+            if letter not in remainlen_weights:
+                continue
+            spool = entry["spool"]
+            new_weight = remainlen_weights[letter]
+            previous_weight = spool.remaining_weight
+            spool.remaining_weight = new_weight
+            spool.updated_at = now
+            setattr(job, f"slot_{letter}_after", new_weight)
+            if final_log:
+                logger.info(
+                    "[Moonraker] remain_len slot %s: -> %.1fg left (prev %.1fg)",
+                    letter.upper(),
+                    new_weight,
+                    previous_weight,
+                )
+        used_source = "remain_len"
+
+    logger.debug(
+        "[Moonraker] Consumption update source=%s active_slot=%s filament_used_m=%s",
+        used_source,
+        active_slot_num,
+        current_filament_used_m,
+    )
 
 
 async def _update_running_job_progress() -> None:
@@ -495,6 +609,7 @@ async def _update_running_job_progress() -> None:
 
         slots = await asyncio.to_thread(get_all_slots)
         current_filament_m = await _get_current_filament_used_m()
+        active_slot_num = await _get_active_cfs_slot()
         _apply_consumption_delta(
             job,
             slots,
@@ -502,6 +617,7 @@ async def _update_running_job_progress() -> None:
             meters_to_grams,
             final_log=False,
             current_filament_used_m=current_filament_m,
+            active_slot_num=active_slot_num,
         )
         db.commit()
     except Exception as exc:

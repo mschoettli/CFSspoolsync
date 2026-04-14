@@ -73,6 +73,35 @@ def _pick_env_metric(status: dict, metric: str):
     return round(candidates[0][1], 1)
 
 
+def _pick_native_remaining_seconds(print_stats: dict, display: dict, elapsed_seconds: float):
+    """Prefer native Moonraker ETA/total duration fields over extrapolation."""
+    direct_remaining_fields = (
+        print_stats.get("remaining_time"),
+        print_stats.get("remaining_duration"),
+        display.get("remaining_time"),
+    )
+    for value in direct_remaining_fields:
+        parsed = _to_float(value)
+        if parsed is not None and parsed >= 0:
+            return round(parsed, 1)
+
+    total_duration_fields = (
+        print_stats.get("total_duration"),
+        print_stats.get("estimated_total_duration"),
+        print_stats.get("estimated_print_time"),
+        display.get("total_duration"),
+        display.get("estimated_time"),
+    )
+    for value in total_duration_fields:
+        total = _to_float(value)
+        if total is None or total <= 0:
+            continue
+        remaining = max(0.0, total - elapsed_seconds)
+        return round(remaining, 1)
+
+    return None
+
+
 @router.get("/status", response_model=PrinterStatusOut)
 async def printer_status():
     """Return summarized printer status from Moonraker."""
@@ -87,13 +116,16 @@ async def printer_status():
 
     remaining_seconds = None
     elapsed_seconds = float(print_stats.get("print_duration", 0) or 0)
-    if (
-        current_state == "printing"
-        and progress_raw > 0
-        and elapsed_seconds > 0
-    ):
-        total_seconds = elapsed_seconds / progress_raw
-        remaining_seconds = round(max(0.0, total_seconds - elapsed_seconds), 1)
+    if current_state == "printing":
+        if progress_pct >= 99.5:
+            remaining_seconds = 0.0
+        else:
+            remaining_seconds = _pick_native_remaining_seconds(print_stats, display, elapsed_seconds)
+            if remaining_seconds is None and progress_raw > 0 and elapsed_seconds > 0:
+                total_seconds = elapsed_seconds / progress_raw
+                remaining_seconds = round(max(0.0, total_seconds - elapsed_seconds), 1)
+    else:
+        remaining_seconds = None
 
     cfs_temp = _pick_env_metric(status, "temperature")
     cfs_humidity = _pick_env_metric(status, "humidity")
@@ -101,7 +133,7 @@ async def printer_status():
     current_layer = layer_info.get("current_layer")
     total_layer = layer_info.get("total_layer")
     estimated_finish_at = None
-    if remaining_seconds is not None:
+    if remaining_seconds is not None and remaining_seconds > 0:
         finish_ts = datetime.now(timezone.utc) + timedelta(seconds=remaining_seconds)
         estimated_finish_at = finish_ts.isoformat()
 

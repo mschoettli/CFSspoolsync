@@ -1027,20 +1027,28 @@ async function syncFromK2() {
       showToast(tr('Keine aktiven Slots zum Syncen'), 'info');
     } else if (syncedCount === 0 && removedCount === 0 && unchangedCount > 0 && createdCount === 0) {
       showToast('Sync abgeschlossen (keine Gewichtsänderung)', 'info');
-    } else {
-      const lines = res.updates.map(u =>
-        `${u.key}: ${u.old_g.toFixed(0)}g → ${u.new_g.toFixed(0)}g`
-      ).join('\n');
-      const parts = [];
-      if (syncedCount > 0) parts.push(`${syncedCount} Spule(n) aktualisiert`);
-      if (unchangedCount > 0) parts.push(`${unchangedCount} ohne Änderung`);
-      if (createdCount > 0) parts.push(`${createdCount} neue Spule(n) erkannt`);
-      if (removedCount > 0) parts.push(`${removedCount} leere Slot-Zuordnung(en) bereinigt`);
-      showToast(parts.join(' · '), 'success');
-      if (lines) {
-        console.info('[Sync]\n' + lines);
+      } else {
+        const lines = res.updates.map(u =>
+          `${u.key}: ${u.old_g.toFixed(0)}g → ${u.new_g.toFixed(0)}g`
+        ).join('\n');
+        const replacementLines = []
+          .concat(Array.isArray(res.created) ? res.created : [])
+          .concat(Array.isArray(res.removed) ? res.removed : [])
+          .filter(entry => entry && entry.replacement_reason)
+          .map(entry => `Slot ${entry.slot}: replacement=${entry.replacement_reason}`);
+        const parts = [];
+        if (syncedCount > 0) parts.push(`${syncedCount} Spule(n) aktualisiert`);
+        if (unchangedCount > 0) parts.push(`${unchangedCount} ohne Änderung`);
+        if (createdCount > 0) parts.push(`${createdCount} neue Spule(n) erkannt`);
+        if (removedCount > 0) parts.push(`${removedCount} leere Slot-Zuordnung(en) bereinigt`);
+        showToast(parts.join(' · '), 'success');
+        if (lines) {
+          console.info('[Sync]\n' + lines);
+        }
+        if (replacementLines.length) {
+          console.info('[Sync replacement reasons]\n' + replacementLines.join('\n'));
+        }
       }
-    }
     state.lastSyncAt = new Date().toISOString();
     state.lastSyncStatus = 'ok';
     renderK2SyncMeta();

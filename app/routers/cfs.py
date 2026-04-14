@@ -1,6 +1,7 @@
 ﻿"""HTTP routes for CFS slot data and slot assignment."""
 
 import asyncio
+import os
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,15 +15,65 @@ from app.services.spool_defaults import get_default_tare_weight_g
 
 router = APIRouter(prefix="/api/cfs", tags=["cfs"])
 SYNC_CHANGE_THRESHOLD_G = 0.1
+CFS_REPLACE_REMAINLEN_JUMP_M = float(os.getenv("CFS_REPLACE_REMAINLEN_JUMP_M", "30"))
 
 
-def _is_replacement_detected(slot_data: dict, spool: Spool) -> bool:
-    """Return True when live slot data clearly indicates a different spool."""
+def _normalize_text(value: object) -> str:
+    """Normalize free-text metadata for stable comparisons."""
+    return str(value or "").strip().lower()
+
+
+def _grams_to_meters(grams: float, diameter_mm: float, density: float) -> float:
+    """Inverse conversion of meters_to_grams used for remain-length heuristics."""
+    if grams <= 0 or diameter_mm <= 0 or density <= 0:
+        return 0.0
+
+    grams_per_meter = ssh_client.meters_to_grams(1.0, diameter_mm, density)
+    if grams_per_meter <= 0:
+        return 0.0
+    return grams / grams_per_meter
+
+
+def _fingerprint_changed(slot_data: dict, spool: Spool) -> bool:
+    """Return True if core spool fingerprint changed in a meaningful way."""
+    core_fields = ("material", "brand", "name")
+    changed = 0
+
+    for field in core_fields:
+        live_value = _normalize_text(slot_data.get(field))
+        known_value = _normalize_text(getattr(spool, field, ""))
+        if not live_value or not known_value:
+            continue
+        if live_value != known_value:
+            changed += 1
+
+    if changed > 0:
+        return True
+
+    # Color is supplemental only and should not trigger replacement on its own.
+    return False
+
+
+def _detect_replacement(slot_data: dict, spool: Spool) -> str | None:
+    """Detect spool replacement and return a normalized reason code."""
     live_serial = str(slot_data.get("serial_num") or "").strip()
     known_serial = str(spool.serial_num or "").strip()
     if live_serial and known_serial and live_serial != known_serial:
-        return True
-    return False
+        return "serial_change"
+
+    live_remain_len = float(slot_data.get("remain_len") or 0.0)
+    estimated_old_len = _grams_to_meters(
+        float(spool.remaining_weight or 0.0),
+        float(spool.diameter or 0.0),
+        float(spool.density or 0.0),
+    )
+    remain_len_jump = live_remain_len - estimated_old_len
+    if remain_len_jump >= CFS_REPLACE_REMAINLEN_JUMP_M:
+        return "remainlen_jump"
+
+    if _fingerprint_changed(slot_data, spool):
+        return "fingerprint_change"
+    return None
 
 
 def _create_spool_from_slot(slot_num: int, slot_data: dict, db: Session, now: datetime) -> Spool:
@@ -109,6 +160,7 @@ async def sync_from_k2(db: Session = Depends(get_db)):
     updated = []
     removed = []
     created = []
+    replaced_slots: set[int] = set()
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     for slot_num, slot_data in slots.items():
@@ -143,7 +195,8 @@ async def sync_from_k2(db: Session = Depends(get_db)):
             )
             continue
 
-        if _is_replacement_detected(slot_data, spool):
+        replacement_reason = _detect_replacement(slot_data, spool)
+        if replacement_reason and slot_num not in replaced_slots:
             previous_spool_id = spool.id
             spool.cfs_slot = None
             spool.status = "lager"
@@ -155,17 +208,20 @@ async def sync_from_k2(db: Session = Depends(get_db)):
                     "old_status": "aktiv",
                     "new_status": "lager",
                     "reason": "replaced_by_new_cfs_spool",
+                    "replacement_reason": replacement_reason,
                 }
             )
 
             created_spool = _create_spool_from_slot(slot_num, slot_data, db, now)
             active_spools[slot_num] = created_spool
+            replaced_slots.add(slot_num)
             created.append(
                 {
                     "slot": slot_num,
                     "spool_id": created_spool.id,
                     "source": "auto_created_from_cfs",
                     "replaced_spool_id": previous_spool_id,
+                    "replacement_reason": replacement_reason,
                 }
             )
             continue

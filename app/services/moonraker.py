@@ -21,6 +21,7 @@ _http_client: Optional[httpx.AsyncClient] = None
 _live_tick_lock: Optional[asyncio.Lock] = None
 _last_live_tick_ts: float = 0.0
 LIVE_TICK_MIN_INTERVAL_S = float(os.getenv("MOONRAKER_LIVE_TICK_MIN_INTERVAL_S", "4"))
+_current_job_filament_start_m: Optional[float] = None
 
 
 async def init_http_client() -> None:
@@ -139,7 +140,7 @@ async def get_printer_status() -> dict:
 
 async def _on_print_started() -> None:
     """Create a print job snapshot on printing start transition."""
-    global _current_job_id
+    global _current_job_id, _current_job_filament_start_m
 
     from app.database import SessionLocal
     from app.models import PrintJob, Spool
@@ -151,6 +152,7 @@ async def _on_print_started() -> None:
         now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         filename = ""
+        filament_used_m = 0.0
         try:
             client = await _client()
             response = await client.get(
@@ -158,6 +160,8 @@ async def _on_print_started() -> None:
             )
             stats = response.json().get("result", {}).get("status", {}).get("print_stats", {})
             filename = stats.get("filename", "")
+            filament_used_raw = float(stats.get("filament_used", 0.0) or 0.0)
+            filament_used_m = max(0.0, filament_used_raw / 1000.0)
         except Exception:
             logger.debug("Could not read filename for print start event")
 
@@ -238,6 +242,7 @@ async def _on_print_started() -> None:
         db.refresh(job)
 
         _current_job_id = job.id
+        _current_job_filament_start_m = filament_used_m
         logger.info("[Moonraker] Print job #%s started - %s", job.id, filename)
     except Exception as exc:
         logger.error("on_print_started error: %s", exc)
@@ -248,7 +253,7 @@ async def _on_print_started() -> None:
 
 async def _on_print_ended(final_state: str) -> None:
     """Finalize the current print job and apply measured filament consumption."""
-    global _current_job_id
+    global _current_job_id, _current_job_filament_start_m
 
     from app.database import SessionLocal
     from app.models import PrintJob, Spool
@@ -283,7 +288,15 @@ async def _on_print_ended(final_state: str) -> None:
             _current_job_id = job.id
 
         slots = await asyncio.to_thread(get_all_slots)
-        _apply_consumption_delta(job, slots, db, meters_to_grams, final_log=True)
+        current_filament_m = await _get_current_filament_used_m()
+        _apply_consumption_delta(
+            job,
+            slots,
+            db,
+            meters_to_grams,
+            final_log=True,
+            current_filament_used_m=current_filament_m,
+        )
 
         job.finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
         job.status = "finished" if final_state == "complete" else final_state
@@ -291,6 +304,7 @@ async def _on_print_ended(final_state: str) -> None:
         db.commit()
         logger.info("[Moonraker] Job #%s completed (%s)", job.id, job.status)
         _current_job_id = None
+        _current_job_filament_start_m = None
     except Exception as exc:
         logger.error("on_print_ended error: %s", exc)
         db.rollback()
@@ -334,12 +348,35 @@ async def polling_loop() -> None:
             logger.error("[Moonraker] Polling error: %s", exc)
 
 
-def _apply_consumption_delta(job, slots, db, meters_to_grams, final_log: bool) -> None:
+async def _get_current_filament_used_m() -> Optional[float]:
+    """Read current print_stats.filament_used and convert mm->m."""
+    try:
+        status = await _query_objects(["print_stats"])
+        print_stats = status.get("print_stats", {}) if isinstance(status, dict) else {}
+        filament_used_raw = float(print_stats.get("filament_used", 0.0) or 0.0)
+        return max(0.0, filament_used_raw / 1000.0)
+    except Exception as exc:
+        logger.debug("Could not read print_stats.filament_used: %s", exc)
+        return None
+
+
+def _apply_consumption_delta(
+    job,
+    slots,
+    db,
+    meters_to_grams,
+    final_log: bool,
+    current_filament_used_m: Optional[float] = None,
+) -> None:
     """Update spool/job after-weights from remainLen deltas since print start."""
     from app.models import Spool
+    global _current_job_filament_start_m
 
     letters = {1: "a", 2: "b", 3: "c", 4: "d"}
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+    any_positive_remainlen_delta = False
+    fallback_candidates: list[tuple[str, Spool, float]] = []
+
     for slot_num, slot_data in slots.items():
         letter = letters[slot_num]
         if not slot_data:
@@ -374,7 +411,11 @@ def _apply_consumption_delta(job, slots, db, meters_to_grams, final_log: bool) -
             )
             continue
 
+        fallback_candidates.append((letter, spool, float(before_weight)))
+
         consumed_m = max(0.0, before_len - current_len)
+        if consumed_m > 0.001:
+            any_positive_remainlen_delta = True
         consumed_g = round(
             meters_to_grams(consumed_m, spool.diameter, spool.density),
             1,
@@ -397,6 +438,43 @@ def _apply_consumption_delta(job, slots, db, meters_to_grams, final_log: bool) -
                 previous_weight,
             )
 
+    # Fallback path: when remainLen is static, use print_stats.filament_used delta.
+    if (
+        not any_positive_remainlen_delta
+        and current_filament_used_m is not None
+        and _current_job_filament_start_m is not None
+    ):
+        consumed_m_total = max(0.0, current_filament_used_m - _current_job_filament_start_m)
+        if consumed_m_total > 0.001 and fallback_candidates:
+            letter, spool, before_weight = fallback_candidates[0]
+            consumed_g = round(
+                meters_to_grams(consumed_m_total, spool.diameter, spool.density),
+                1,
+            )
+            new_weight = round(
+                max(0.0, min(spool.initial_weight, before_weight - consumed_g)),
+                1,
+            )
+            previous_weight = spool.remaining_weight
+            spool.remaining_weight = new_weight
+            spool.updated_at = now
+            setattr(job, f"slot_{letter}_after", new_weight)
+            if final_log:
+                logger.info(
+                    "[Moonraker] Fallback filament_used slot %s: -%.1fg -> %.1fg left (prev %.1fg)",
+                    letter.upper(),
+                    consumed_g,
+                    new_weight,
+                    previous_weight,
+                )
+            else:
+                logger.debug(
+                    "[Moonraker] Fallback filament_used slot %s: -%.1fg -> %.1fg left",
+                    letter.upper(),
+                    consumed_g,
+                    new_weight,
+                )
+
 
 async def _update_running_job_progress() -> None:
     """Apply in-print remainLen deltas so UI reflects live spool consumption."""
@@ -416,7 +494,15 @@ async def _update_running_job_progress() -> None:
             return
 
         slots = await asyncio.to_thread(get_all_slots)
-        _apply_consumption_delta(job, slots, db, meters_to_grams, final_log=False)
+        current_filament_m = await _get_current_filament_used_m()
+        _apply_consumption_delta(
+            job,
+            slots,
+            db,
+            meters_to_grams,
+            final_log=False,
+            current_filament_used_m=current_filament_m,
+        )
         db.commit()
     except Exception as exc:
         logger.error("update_running_job_progress error: %s", exc)

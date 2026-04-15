@@ -877,8 +877,6 @@ function renderJobsCameraPanel() {
       </article>
     `;
   }
-  const sources = buildCameraCandidates(rawUrl);
-  const streamUrl = sources[0];
   return `
     <article class="jobs-panel jobs-camera-panel" data-stream-url="${esc(rawUrl)}">
       <header class="jobs-panel-head">
@@ -889,13 +887,6 @@ function renderJobsCameraPanel() {
         </span>
       </header>
       <div class="jobs-camera-frame">
-        <img
-          src="${esc(streamUrl)}"
-          data-sources="${esc(sources.join('|'))}"
-          alt="${tr('Kamerastream')}"
-          loading="lazy"
-          referrerpolicy="no-referrer"
-        />
         <iframe
           class="jobs-camera-iframe"
           src="${esc(rawUrl)}"
@@ -903,7 +894,6 @@ function renderJobsCameraPanel() {
           referrerpolicy="no-referrer"
           scrolling="no"
         ></iframe>
-        <div class="jobs-camera-fallback">${tr('Kamerastream nicht erreichbar')}</div>
       </div>
     </article>
   `;

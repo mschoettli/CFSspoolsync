@@ -819,8 +819,8 @@ function buildCameraCandidates(rawUrl) {
   const normalized = /^https?:\/\//i.test(rawUrl) ? rawUrl : `http://${rawUrl}`;
   const base = normalized.replace(/\/+$/u, '');
   const candidates = [
-    `${base}/?action=stream`,
     normalized,
+    `${base}/?action=stream`,
     `${base}/stream`,
     `${base}/video`,
   ];
@@ -842,7 +842,8 @@ function initJobsCameraFrames() {
       const current = Number.parseInt(img.dataset.sourceIndex || '0', 10);
       const next = current + 1;
       if (next >= sources.length) {
-        frame?.classList.add('is-error');
+        frame?.classList.remove('is-error');
+        frame?.classList.add('use-iframe');
         return;
       }
       img.dataset.sourceIndex = String(next);
@@ -850,8 +851,19 @@ function initJobsCameraFrames() {
     };
     img.onload = () => {
       const frame = img.closest('.jobs-camera-frame');
+      frame?.classList.remove('use-iframe');
       frame?.classList.remove('is-error');
     };
+  });
+
+  const iframes = document.querySelectorAll('.jobs-camera-frame .jobs-camera-iframe');
+  iframes.forEach((iframe) => {
+    iframe.addEventListener('load', () => {
+      iframe.closest('.jobs-camera-frame')?.classList.remove('is-error');
+    });
+    iframe.addEventListener('error', () => {
+      iframe.closest('.jobs-camera-frame')?.classList.add('is-error');
+    });
   });
 }
 
@@ -873,7 +885,7 @@ function renderJobsCameraPanel() {
         <h3>${tr('Kamera')}</h3>
         <span class="jobs-camera-head-actions">
           <span class="jobs-camera-url">${esc(rawUrl)}</span>
-          <a class="jobs-camera-open-link" href="${esc(streamUrl)}" target="_blank" rel="noopener noreferrer">${tr('Stream öffnen')}</a>
+          <a class="jobs-camera-open-link" href="${esc(rawUrl)}" target="_blank" rel="noopener noreferrer">${tr('Stream öffnen')}</a>
         </span>
       </header>
       <div class="jobs-camera-frame">
@@ -884,6 +896,13 @@ function renderJobsCameraPanel() {
           loading="lazy"
           referrerpolicy="no-referrer"
         />
+        <iframe
+          class="jobs-camera-iframe"
+          src="${esc(rawUrl)}"
+          loading="lazy"
+          referrerpolicy="no-referrer"
+          scrolling="no"
+        ></iframe>
         <div class="jobs-camera-fallback">${tr('Kamerastream nicht erreichbar')}</div>
       </div>
     </article>

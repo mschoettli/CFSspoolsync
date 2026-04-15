@@ -56,7 +56,7 @@ def test_app_config_route_returns_locale_shape() -> None:
     response = client.get("/api/app-config")
     assert response.status_code == 200
     payload = response.json()
-    assert set(payload.keys()) == {"timezone", "language", "datetime_locale"}
+    assert set(payload.keys()) == {"timezone", "language", "datetime_locale", "camera_stream_url"}
     assert payload["language"] in {"de", "en", "fr", "it"}
 
 

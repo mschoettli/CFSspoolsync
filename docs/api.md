@@ -109,7 +109,9 @@ Updates active spool weights from live remain-length values.
 Response includes:
 - `synced` and `updates` for weight updates
 - `removed_count` and `removed` for active slots automatically moved back to storage when K2 reports `loaded=false`
-- `updates[*].raw_k2_g`, `updates[*].applied_factor`, `updates[*].source` (`k2_raw|k2_calibrated`)
+- `updates[*].raw_remain_len`, `updates[*].normalized_remain_len`
+- `updates[*].raw_k2_g`, `updates[*].effective_g`, `updates[*].applied_factor`
+- `updates[*].source` (`k2_live_sync`, `print_end_snapshot`, `manual_calibration`)
 
 ### `GET /api/cfs/slot/{slot_num}/read`
 Reads one live slot from K2 (`slot_num` in `1..4`).

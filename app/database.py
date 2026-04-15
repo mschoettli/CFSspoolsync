@@ -43,6 +43,11 @@ def ensure_runtime_schema() -> None:
                 "last_gross_weight_g": "FLOAT",
                 "calibration_factor": "FLOAT",
                 "calibrated_at": "DATETIME",
+                "last_raw_k2_g": "FLOAT",
+                "last_raw_remain_len": "FLOAT",
+                "last_normalized_remain_len": "FLOAT",
+                "last_weight_source": "TEXT",
+                "last_weight_updated_at": "DATETIME",
             }
             for column_name, column_type in required.items():
                 if column_name in existing:

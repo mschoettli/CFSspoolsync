@@ -10,11 +10,10 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Spool
 from app.schemas.spool import SpoolOut
-from app.services import ssh_client
+from app.services import remaining_weight_service, ssh_client
 from app.services.spool_defaults import get_default_tare_weight_g
 
 router = APIRouter(prefix="/api/cfs", tags=["cfs"])
-SYNC_CHANGE_THRESHOLD_G = 0.1
 CFS_REPLACE_REMAINLEN_JUMP_M = float(os.getenv("CFS_REPLACE_REMAINLEN_JUMP_M", "30"))
 
 
@@ -31,7 +30,7 @@ def _grams_to_meters(grams: float, diameter_mm: float, density: float) -> float:
     grams_per_meter = ssh_client.meters_to_grams(1.0, diameter_mm, density)
     if grams_per_meter <= 0:
         return 0.0
-    return grams / grams_per_meter
+    return (grams / grams_per_meter) / max(remaining_weight_service.CFS_REMAINLEN_MULTIPLIER, 1e-9)
 
 
 def _fingerprint_changed(slot_data: dict, spool: Spool) -> bool:
@@ -88,7 +87,15 @@ def _create_spool_from_slot(slot_num: int, slot_data: dict, db: Session, now: da
     density = float(slot_data.get("density") or 1.24)
     serial_num = str(slot_data.get("serial_num") or "").strip()
 
-    remaining_weight = round(max(0.0, float(slot_data.get("remaining_grams") or 0.0)), 1)
+    remain_len = float(slot_data.get("remain_len") or 0.0)
+    normalized_remain_len = remain_len * remaining_weight_service.CFS_REMAINLEN_MULTIPLIER
+    remaining_weight = round(
+        max(
+            0.0,
+            ssh_client.meters_to_grams(normalized_remain_len, diameter, density),
+        ),
+        1,
+    )
     initial_weight = round(max(remaining_weight, 1.0), 1)
 
     tare_weight = get_default_tare_weight_g(brand, material, db)
@@ -108,6 +115,11 @@ def _create_spool_from_slot(slot_num: int, slot_data: dict, db: Session, now: da
         diameter=diameter,
         density=density,
         tare_weight_g=tare_weight,
+        last_raw_k2_g=remaining_weight,
+        last_raw_remain_len=round(remain_len, 3),
+        last_normalized_remain_len=round(normalized_remain_len, 3),
+        last_weight_source=remaining_weight_service.SOURCE_K2_LIVE_SYNC,
+        last_weight_updated_at=now,
         updated_at=now,
     )
     db.add(spool)
@@ -231,36 +243,30 @@ async def sync_from_k2(db: Session = Depends(get_db)):
             if default_tare is not None:
                 spool.tare_weight_g = default_tare
 
-        new_weight = round(
-            ssh_client.meters_to_grams(
-                slot_data["remain_len"], spool.diameter, spool.density
-            ),
-            1,
+        result = remaining_weight_service.apply_from_k2_remain_len(
+            spool=spool,
+            remain_len=float(slot_data.get("remain_len") or 0.0),
+            source=remaining_weight_service.SOURCE_K2_LIVE_SYNC,
+            now=now,
         )
-        raw_k2_g = new_weight
-        applied_factor = spool.calibration_factor if spool.calibration_factor else None
-        if applied_factor is not None:
-            new_weight = round(raw_k2_g * applied_factor, 1)
-        new_weight = max(0.0, min(new_weight, spool.initial_weight))
-        old_weight = spool.remaining_weight
-        spool.remaining_weight = new_weight
-        spool.updated_at = now
-        delta_g = round(new_weight - old_weight, 1)
-        consumed_g = round(max(0.0, old_weight - new_weight), 1)
-        changed = abs(delta_g) >= SYNC_CHANGE_THRESHOLD_G
+        delta_g = round(result.new_weight - result.old_weight, 1)
+        consumed_g = round(max(0.0, result.old_weight - result.new_weight), 1)
         updated.append(
             {
                 "slot": slot_num,
                 "key": slot_data["key"],
                 "spool_id": spool.id,
-                "old_g": old_weight,
-                "new_g": new_weight,
+                "old_g": result.old_weight,
+                "new_g": result.new_weight,
                 "delta_g": delta_g,
                 "consumed_g": consumed_g,
-                "changed": changed,
-                "raw_k2_g": raw_k2_g,
-                "applied_factor": applied_factor,
-                "source": "k2_calibrated" if applied_factor is not None else "k2_raw",
+                "changed": result.changed,
+                "raw_remain_len": result.raw_remain_len,
+                "normalized_remain_len": result.normalized_remain_len,
+                "raw_k2_g": result.raw_k2_g,
+                "effective_g": result.effective_g,
+                "applied_factor": result.applied_factor,
+                "source": result.source,
             }
         )
 

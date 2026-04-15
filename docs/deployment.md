@@ -68,6 +68,8 @@ Required credentials for cloud fallback:
 | `ANTHROPIC_MODEL` | `claude-3-5-sonnet-latest` | Anthropic model used for provider 2. | Stronger model can improve fallback quality but cost/time may rise. | Smaller model can be faster/cheaper but less accurate. |
 | `CALIBRATION_FACTOR_MIN` | `0.1` | Lower bound for accepted weight calibration factor. | Accepts more aggressive down-scaling of K2 estimate. | Rejects low factors earlier. |
 | `CALIBRATION_FACTOR_MAX` | `12.0` | Upper bound for accepted weight calibration factor. | Accepts stronger correction when K2 estimate is very low. | Rejects high factors earlier. |
+| `REMAINING_WEIGHT_CHANGE_THRESHOLD_G` | `0.1` | Minimum delta before `remaining_weight` is written. | Reduces micro-flapping caused by noisy live values. | Applies even tiny changes, more jitter. |
+| `CFS_REMAINLEN_MULTIPLIER` | `1.0` | Multiplier applied to raw `remainLen` before grams conversion. | Increases computed raw K2 grams if your firmware reports scaled length. | Decreases computed raw K2 grams. |
 
 ## Option A: Prebuilt image
 

@@ -111,6 +111,11 @@ class SpoolOut(BaseModel):
     last_gross_weight_g: Optional[float] = None
     calibration_factor: Optional[float] = None
     calibrated_at: Optional[datetime] = None
+    last_raw_k2_g: Optional[float] = None
+    last_raw_remain_len: Optional[float] = None
+    last_normalized_remain_len: Optional[float] = None
+    last_weight_source: Optional[str] = None
+    last_weight_updated_at: Optional[datetime] = None
     notes: str
     created_at: datetime
     updated_at: datetime

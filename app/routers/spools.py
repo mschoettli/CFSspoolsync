@@ -17,7 +17,7 @@ from app.schemas.spool import (
     SpoolOut,
     SpoolUpdate,
 )
-from app.services import ssh_client
+from app.services import remaining_weight_service, ssh_client
 from app.services.spool_defaults import get_default_tare_weight_g
 
 router = APIRouter(prefix="/api/spools", tags=["spools"])
@@ -228,18 +228,23 @@ async def calibrate_spool_weight(
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     spool.tare_weight_g = round(tare_weight, 1)
     spool.last_gross_weight_g = round(gross_weight, 1)
-    spool.remaining_weight = min(net_measured, spool.initial_weight)
-    spool.calibration_factor = factor
+    result = remaining_weight_service.apply_manual_measurement(
+        spool=spool,
+        measured_weight_g=net_measured,
+        source=remaining_weight_service.SOURCE_MANUAL_CALIBRATION,
+        now=now,
+        calibration_factor=factor,
+        raw_k2_g=raw_k2_g,
+    )
     spool.calibrated_at = now
-    spool.updated_at = now
 
     db.commit()
     db.refresh(spool)
     return {
         "spool_id": spool.id,
-        "remaining_weight": spool.remaining_weight,
-        "raw_k2_g": raw_k2_g,
-        "calibration_factor": spool.calibration_factor,
+        "remaining_weight": result.new_weight,
+        "raw_k2_g": result.raw_k2_g,
+        "calibration_factor": result.applied_factor,
         "calibrated_at": spool.calibrated_at,
     }
 

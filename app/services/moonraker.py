@@ -10,6 +10,8 @@ from urllib.parse import quote
 
 import httpx
 
+from app.services import remaining_weight_service
+
 logger = logging.getLogger(__name__)
 
 MOONRAKER_URL = os.getenv("MOONRAKER_URL", "http://192.168.178.192:7125")
@@ -539,10 +541,13 @@ def _apply_consumption_delta(
                 max(0.0, min(spool.initial_weight, before_weight - consumed_g)),
                 1,
             )
-            previous_weight = spool.remaining_weight
-            spool.remaining_weight = new_weight
-            spool.updated_at = now
-            setattr(job, f"slot_{target_letter}_after", new_weight)
+            update = remaining_weight_service.apply_manual_measurement(
+                spool=spool,
+                measured_weight_g=new_weight,
+                source=remaining_weight_service.SOURCE_PRINT_END,
+                now=now,
+            )
+            setattr(job, f"slot_{target_letter}_after", update.new_weight)
             applied = True
             if final_log:
                 logger.info(
@@ -550,8 +555,8 @@ def _apply_consumption_delta(
                     used_source,
                     target_letter.upper(),
                     consumed_g,
-                    new_weight,
-                    previous_weight,
+                    update.new_weight,
+                    update.old_weight,
                 )
             else:
                 logger.debug(
@@ -559,7 +564,7 @@ def _apply_consumption_delta(
                     used_source,
                     target_letter.upper(),
                     consumed_g,
-                    new_weight,
+                    update.new_weight,
                 )
 
     # Secondary path: only use remainLen when filament_used path was not applied.
@@ -568,17 +573,21 @@ def _apply_consumption_delta(
             if letter not in remainlen_weights:
                 continue
             spool = entry["spool"]
-            new_weight = remainlen_weights[letter]
-            previous_weight = spool.remaining_weight
-            spool.remaining_weight = new_weight
-            spool.updated_at = now
-            setattr(job, f"slot_{letter}_after", new_weight)
+            slot_num = entry["slot_num"]
+            slot_data = slots.get(slot_num) or {}
+            update = remaining_weight_service.apply_from_k2_remain_len(
+                spool=spool,
+                remain_len=float(slot_data.get("remain_len") or 0.0),
+                source=remaining_weight_service.SOURCE_PRINT_END,
+                now=now,
+            )
+            setattr(job, f"slot_{letter}_after", update.new_weight)
             if final_log:
                 logger.info(
                     "[Moonraker] remain_len slot %s: -> %.1fg left (prev %.1fg)",
                     letter.upper(),
-                    new_weight,
-                    previous_weight,
+                    update.new_weight,
+                    update.old_weight,
                 )
         used_source = "remain_len"
 

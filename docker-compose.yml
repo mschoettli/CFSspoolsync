@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: cfssppolsync
+    container_name: cfsspoolsync
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-cfsspoolsync}
@@ -18,7 +18,7 @@ services:
   backend:
     build:
       context: ./backend
-    container_name: cfssppolsync-backend
+    container_name: cfsspoolsync-backend
     restart: unless-stopped
     env_file:
       - .env
@@ -31,7 +31,7 @@ services:
   frontend:
     build:
       context: ./frontend
-    container_name: cfssppolsync-frontend
+    container_name: cfsspoolsync-frontend
     restart: unless-stopped
     env_file:
       - .env

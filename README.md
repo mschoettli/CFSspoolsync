@@ -5,7 +5,7 @@ Greenfield restart for CFS spool sync and live print telemetry.
 ## Current scope completed
 - Monorepo scaffold (`backend` + `frontend`)
 - FastAPI + Postgres + Docker Compose wiring
-- React + Vite frontend
+- React + Vite build pipeline with Nginx static serving (production mode)
 - Core APIs: `/health`, `/api/app-config`
 - Live telemetry backbone: `/api/events/stream` + `/api/printer/status`
 - CFS/Spools/Jobs/Tare/OCR/Camera API foundations

@@ -35,7 +35,16 @@ def _to_float(value: Any) -> float | None:
 
 def _extract_active_slot(status: dict[str, Any]) -> int | None:
     # Common key variants seen in CFS/AMS-like telemetry payloads.
-    for key in ("active_slot", "active_cfs_slot", "cfs_active_slot", "current_slot"):
+    for key in (
+        "active_slot",
+        "active_cfs_slot",
+        "cfs_active_slot",
+        "current_slot",
+        "active_tray",
+        "tray_now",
+        "current_tray",
+        "active_box_slot",
+    ):
         slot = _parse_slot_number(status.get(key))
         if slot:
             return slot
@@ -73,7 +82,46 @@ def _extract_slots(status: dict[str, Any]) -> dict[int, dict[str, Any]]:
         if slot_no:
             slots.setdefault(slot_no, value)
 
+    # Pattern 3: tray lists/maps used by some Moonraker profiles.
+    for tray_key in ("trays", "tray", "filaments", "filament_slots"):
+        raw_trays = status.get(tray_key)
+        if isinstance(raw_trays, list):
+            for idx, item in enumerate(raw_trays, start=1):
+                slot_no = _parse_slot_number(item.get("slot")) if isinstance(item, dict) else None
+                if not slot_no:
+                    slot_no = idx if idx in (1, 2, 3, 4) else None
+                if slot_no and isinstance(item, dict):
+                    slots.setdefault(slot_no, item)
+        elif isinstance(raw_trays, dict):
+            for k, item in raw_trays.items():
+                slot_no = _parse_slot_number(k)
+                if slot_no and isinstance(item, dict):
+                    slots.setdefault(slot_no, item)
+
+    # Pattern 4: nested dict payloads (e.g. `filament_rack`, `box`).
+    for value in status.values():
+        if not isinstance(value, dict):
+            continue
+        nested = _extract_slots(value)
+        for slot_no, payload in nested.items():
+            slots.setdefault(slot_no, payload)
+
     return slots
+
+
+def _is_cfs_candidate(name: str) -> bool:
+    lowered = name.lower()
+    return any(
+        token in lowered
+        for token in (
+            "cfs",
+            "ams",
+            "filament_rack",
+            "filamentrack",
+            "filament_box",
+            "box",
+        )
+    )
 
 
 def _extract_climate(status: dict[str, Any]) -> dict[str, float | None]:
@@ -128,7 +176,7 @@ async def _fetch_from_moonraker() -> dict[str, Any]:
             if not isinstance(objects, list):
                 objects = []
 
-            candidates = [name for name in objects if isinstance(name, str) and ("cfs" in name.lower() or "ams" in name.lower())]
+            candidates = [name for name in objects if isinstance(name, str) and _is_cfs_candidate(name)]
             if not candidates:
                 return {
                     "reachable": False,

@@ -1,10 +1,11 @@
 import React from 'react'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+const DIRECT_API_BASE = `${window.location.protocol}//${window.location.hostname}:8080`
 
-function buildApiUrl(path) {
-  if (!API_BASE_URL) return path
-  return `${API_BASE_URL}${path}`
+function buildApiCandidates(path) {
+  if (API_BASE_URL) return [`${API_BASE_URL}${path}`]
+  return [path, `${DIRECT_API_BASE}${path}`]
 }
 
 const I18N = {
@@ -144,14 +145,22 @@ const defaultSpoolForm = {
 }
 
 async function api(path, init) {
-  const res = await fetch(buildApiUrl(path), init)
-  if (!res.ok) {
-    const txt = await res.text()
-    throw new Error(`${res.status} ${txt}`)
+  let lastError = null
+  for (const url of buildApiCandidates(path)) {
+    try {
+      const res = await fetch(url, init)
+      if (!res.ok) {
+        const txt = await res.text()
+        throw new Error(`${res.status} ${txt}`)
+      }
+      const ct = res.headers.get('content-type') || ''
+      if (ct.includes('application/json')) return res.json()
+      return null
+    } catch (err) {
+      lastError = err
+    }
   }
-  const ct = res.headers.get('content-type') || ''
-  if (ct.includes('application/json')) return res.json()
-  return null
+  throw lastError || new Error('API request failed')
 }
 
 function formatState(value) {
@@ -177,7 +186,8 @@ function useTelemetry(onTelemetry) {
       }
     }
 
-    const source = new EventSource(buildApiUrl('/api/events/stream'))
+    const eventSourceUrl = buildApiCandidates('/api/events/stream')[0]
+    const source = new EventSource(eventSourceUrl)
     source.addEventListener('telemetry', (evt) => {
       try {
         const parsed = JSON.parse(evt.data)
@@ -370,7 +380,7 @@ export function App() {
     try {
       const fd = new FormData()
       fd.append('file', ocrFile)
-      const res = await fetch(buildApiUrl('/api/ocr/scan'), { method: 'POST', body: fd })
+      const res = await fetch(buildApiCandidates('/api/ocr/scan')[0], { method: 'POST', body: fd })
       const body = await res.json()
       if (!res.ok) throw new Error(JSON.stringify(body))
       setOcrResult(body)
@@ -605,7 +615,7 @@ export function App() {
                 </button>
               </div>
               <div className="camera-frame">
-                <img src={`${buildApiUrl('/api/camera/stream')}?_ts=${cameraNonce}`} alt="camera" />
+                <img src={`${buildApiCandidates('/api/camera/stream')[0]}?_ts=${cameraNonce}`} alt="camera" />
               </div>
             </section>
 

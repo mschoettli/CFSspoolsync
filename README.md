@@ -18,6 +18,9 @@ Greenfield restart for CFS spool sync and live print telemetry.
 3. Frontend: `http://localhost:5173`
 4. Backend: `http://localhost:8080`
 
+The frontend container proxies `/api/*` internally to the backend service.
+This means the UI works even when the browser cannot directly reach `:8080`.
+
 `.env.default` is provided as a ready-to-use baseline for Dockge setups.
 
 ## Update in Dockge
@@ -31,6 +34,7 @@ Greenfield restart for CFS spool sync and live print telemetry.
 ### Dockge checklist (required)
 1. Use this exact `docker-compose.yml` (no `build:` blocks for app services).
 2. Set `IMAGE_TAG=main` in stack env.
+   - Keep `VITE_API_BASE_URL` empty to use internal `/api` proxy mode.
 3. Ensure both GHCR packages are `Public`:
    - `cfsspoolsync-backend`
    - `cfsspoolsync-frontend`

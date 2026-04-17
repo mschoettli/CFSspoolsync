@@ -1,8 +1,11 @@
 import React from 'react'
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ||
-  `${window.location.protocol}//${window.location.hostname}:8080`
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+
+function buildApiUrl(path) {
+  if (!API_BASE_URL) return path
+  return `${API_BASE_URL}${path}`
+}
 
 const I18N = {
   de: {
@@ -141,7 +144,7 @@ const defaultSpoolForm = {
 }
 
 async function api(path, init) {
-  const res = await fetch(`${API_BASE_URL}${path}`, init)
+  const res = await fetch(buildApiUrl(path), init)
   if (!res.ok) {
     const txt = await res.text()
     throw new Error(`${res.status} ${txt}`)
@@ -174,7 +177,7 @@ function useTelemetry(onTelemetry) {
       }
     }
 
-    const source = new EventSource(`${API_BASE_URL}/api/events/stream`)
+    const source = new EventSource(buildApiUrl('/api/events/stream'))
     source.addEventListener('telemetry', (evt) => {
       try {
         const parsed = JSON.parse(evt.data)
@@ -352,7 +355,7 @@ export function App() {
     try {
       const fd = new FormData()
       fd.append('file', ocrFile)
-      const res = await fetch(`${API_BASE_URL}/api/ocr/scan`, { method: 'POST', body: fd })
+      const res = await fetch(buildApiUrl('/api/ocr/scan'), { method: 'POST', body: fd })
       const body = await res.json()
       if (!res.ok) throw new Error(JSON.stringify(body))
       setOcrResult(body)
@@ -587,7 +590,7 @@ export function App() {
                 </button>
               </div>
               <div className="camera-frame">
-                <img src={`${API_BASE_URL}/api/camera/stream?_ts=${cameraNonce}`} alt="camera" />
+                <img src={`${buildApiUrl('/api/camera/stream')}?_ts=${cameraNonce}`} alt="camera" />
               </div>
             </section>
 

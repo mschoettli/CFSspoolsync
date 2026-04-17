@@ -16,7 +16,7 @@ services:
       retries: 5
 
   backend:
-    image: ${BACKEND_IMAGE:-ghcr.io/mschoettli/cfsspoolsync-backend:main}
+    image: ghcr.io/mschoettli/cfsspoolsync-backend:${IMAGE_TAG:-main}
     pull_policy: always
     container_name: cfsspoolsync-backend
     restart: unless-stopped
@@ -32,7 +32,7 @@ services:
         condition: service_healthy
 
   frontend:
-    image: ${FRONTEND_IMAGE:-ghcr.io/mschoettli/cfsspoolsync-frontend:main}
+    image: ghcr.io/mschoettli/cfsspoolsync-frontend:${IMAGE_TAG:-main}
     pull_policy: always
     container_name: cfsspoolsync-frontend
     restart: unless-stopped

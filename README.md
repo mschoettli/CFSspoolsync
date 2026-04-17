@@ -21,9 +21,18 @@ Greenfield restart for CFS spool sync and live print telemetry.
 `.env.default` is provided as a ready-to-use baseline for Dockge setups.
 
 ## Update in Dockge
-- `backend` and `frontend` are pull-based images from GHCR.
-- Default tags:
-- `ghcr.io/mschoettli/cfsspoolsync-backend:main`
-- `ghcr.io/mschoettli/cfsspoolsync-frontend:main`
-- In Dockge, clicking update/pull fetches new app images directly.
-- If GHCR returns `unauthorized`, run `docker logout ghcr.io` once on the host and retry.
+- `backend` and `frontend` use pull-only images from GHCR.
+- Image tag is controlled by one env key: `IMAGE_TAG` (default: `main`).
+- Every push to `main` triggers `.github/workflows/publish-images.yml` and refreshes:
+  - `ghcr.io/mschoettli/cfsspoolsync-backend:main`
+  - `ghcr.io/mschoettli/cfsspoolsync-frontend:main`
+- In Dockge, click `Update` to pull the refreshed `main` images.
+
+### Dockge checklist (required)
+1. Use this exact `docker-compose.yml` (no `build:` blocks for app services).
+2. Set `IMAGE_TAG=main` in stack env.
+3. Ensure both GHCR packages are `Public`:
+   - `cfsspoolsync-backend`
+   - `cfsspoolsync-frontend`
+4. Verify the GitHub Action `Publish Docker Images` succeeded for the latest commit.
+5. If host auth is stale, run once on the host: `docker logout ghcr.io`.

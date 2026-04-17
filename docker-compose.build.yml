@@ -1,0 +1,12 @@
+services:
+  backend:
+    pull_policy: never
+    build:
+      context: ./backend
+    image: cfsspoolsync-backend:local
+
+  frontend:
+    pull_policy: never
+    build:
+      context: ./frontend
+    image: cfsspoolsync-frontend:local

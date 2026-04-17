@@ -250,31 +250,46 @@ export function App() {
   })
 
   const loadStaticData = React.useCallback(async () => {
-    try {
-      const [cfg, cfsData, spoolData, jobData, tareData, currentSettings] = await Promise.all([
-        api('/api/app-config'),
-        api('/api/cfs'),
-        api('/api/spools'),
-        api('/api/jobs?limit=20'),
-        api('/api/tare-defaults'),
-        api('/api/settings'),
-      ])
-      setConfig(cfg)
-      setCfs(cfsData)
-      setSpools(spoolData)
-      setJobs(jobData)
-      setTare(tareData)
+    const results = await Promise.allSettled([
+      api('/api/app-config'),
+      api('/api/cfs'),
+      api('/api/spools'),
+      api('/api/jobs?limit=20'),
+      api('/api/tare-defaults'),
+      api('/api/settings'),
+    ])
+
+    const [cfg, cfsData, spoolData, jobData, tareData, currentSettings] = results
+    const errors = []
+
+    if (cfg.status === 'fulfilled') setConfig(cfg.value)
+    else errors.push(`app-config: ${String(cfg.reason)}`)
+
+    if (cfsData.status === 'fulfilled') setCfs(cfsData.value)
+    else errors.push(`cfs: ${String(cfsData.reason)}`)
+
+    if (spoolData.status === 'fulfilled') setSpools(spoolData.value)
+    else errors.push(`spools: ${String(spoolData.reason)}`)
+
+    if (jobData.status === 'fulfilled') setJobs(jobData.value)
+    else errors.push(`jobs: ${String(jobData.reason)}`)
+
+    if (tareData.status === 'fulfilled') setTare(tareData.value)
+    else errors.push(`tare-defaults: ${String(tareData.reason)}`)
+
+    if (currentSettings.status === 'fulfilled') {
       setSettingsState((prev) => ({
         ...prev,
-        language: currentSettings.language || prev.language,
-        theme: currentSettings.theme || prev.theme,
-        openai_api_key_masked: currentSettings.openai_api_key_masked || '',
-        anthropic_api_key_masked: currentSettings.anthropic_api_key_masked || '',
+        language: currentSettings.value.language || prev.language,
+        theme: currentSettings.value.theme || prev.theme,
+        openai_api_key_masked: currentSettings.value.openai_api_key_masked || '',
+        anthropic_api_key_masked: currentSettings.value.anthropic_api_key_masked || '',
       }))
-      setError('')
-    } catch (err) {
-      setError(String(err))
+    } else {
+      errors.push(`settings: ${String(currentSettings.reason)}`)
     }
+
+    setError(errors.length ? errors.join(' | ') : '')
   }, [])
 
   React.useEffect(() => {

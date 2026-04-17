@@ -18,6 +18,8 @@ Greenfield restart for CFS spool sync and live print telemetry.
 3. Frontend: `http://localhost:5173`
 4. Backend: `http://localhost:8080`
 
+`.env.default` is provided as a ready-to-use baseline for Dockge setups.
+
 ## Update in Dockge
 - `backend` and `frontend` are pull-based images from GHCR.
 - Default tags:

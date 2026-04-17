@@ -76,6 +76,38 @@ def _extract_slots(status: dict[str, Any]) -> dict[int, dict[str, Any]]:
     return slots
 
 
+def _extract_climate(status: dict[str, Any]) -> dict[str, float | None]:
+    temp_keys = ("temperature", "temp", "cfs_temp", "chamber_temp")
+    humidity_keys = ("humidity", "humid", "rh", "cfs_humidity")
+
+    def _pick_float(payload: dict[str, Any], keys: tuple[str, ...]) -> float | None:
+        for key in keys:
+            if key in payload:
+                parsed = _to_float(payload.get(key))
+                if parsed is not None:
+                    return parsed
+        return None
+
+    temperature_c = _pick_float(status, temp_keys)
+    humidity_percent = _pick_float(status, humidity_keys)
+
+    if temperature_c is None or humidity_percent is None:
+        for value in status.values():
+            if not isinstance(value, dict):
+                continue
+            if temperature_c is None:
+                temperature_c = _pick_float(value, temp_keys)
+            if humidity_percent is None:
+                humidity_percent = _pick_float(value, humidity_keys)
+            if temperature_c is not None and humidity_percent is not None:
+                break
+
+    return {
+        "temperature_c": temperature_c,
+        "humidity_percent": humidity_percent,
+    }
+
+
 async def _fetch_from_moonraker() -> dict[str, Any]:
     base = settings.moonraker_url.rstrip("/")
     if not base:
@@ -116,6 +148,7 @@ async def _fetch_from_moonraker() -> dict[str, Any]:
 
             active_slot = _extract_active_slot(status)
             slots = _extract_slots(status)
+            climate = _extract_climate(status)
 
             # If active slot not directly exposed, infer from strongest signal.
             if not active_slot:
@@ -149,6 +182,7 @@ async def _fetch_from_moonraker() -> dict[str, Any]:
                 "source": "moonraker",
                 "active_slot": active_slot,
                 "slots": normalized,
+                "climate": climate,
                 "degraded_reason": "",
             }
     except Exception as exc:
@@ -158,6 +192,7 @@ async def _fetch_from_moonraker() -> dict[str, Any]:
             "source": "moonraker",
             "active_slot": None,
             "slots": {},
+            "climate": {"temperature_c": None, "humidity_percent": None},
             "degraded_reason": str(exc),
         }
 
@@ -196,6 +231,10 @@ async def fetch_cfs_agent_state() -> dict[str, Any]:
                 "source": "agent",
                 "active_slot": _parse_slot_number(payload.get("active_slot")),
                 "slots": slots,
+                "climate": {
+                    "temperature_c": _to_float(payload.get("temperature_c")),
+                    "humidity_percent": _to_float(payload.get("humidity_percent")),
+                },
                 "degraded_reason": "",
             }
     except Exception as exc:
@@ -205,5 +244,6 @@ async def fetch_cfs_agent_state() -> dict[str, Any]:
             "source": "agent",
             "active_slot": None,
             "slots": {},
+            "climate": {"temperature_c": None, "humidity_percent": None},
             "degraded_reason": str(exc),
         }

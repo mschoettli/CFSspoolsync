@@ -47,6 +47,8 @@ async def cfs_overview(request: Request) -> dict:
             "reachable": bool(cfs_live.get("reachable", False)) if isinstance(cfs_live, dict) else False,
             "degraded_reason": cfs_live.get("degraded_reason", "") if isinstance(cfs_live, dict) else "",
             "active_slot": cfs_live.get("active_slot") if isinstance(cfs_live, dict) else None,
+            "temperature_c": ((cfs_live.get("climate", {}) or {}).get("temperature_c") if isinstance(cfs_live, dict) else None),
+            "humidity_percent": ((cfs_live.get("climate", {}) or {}).get("humidity_percent") if isinstance(cfs_live, dict) else None),
             "slots": slots,
         }
     finally:

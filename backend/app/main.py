@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routers import app_config, camera, cfs, events, health, jobs, ocr, printer, spools, tare_defaults
+from app.routers import app_config, camera, cfs, events, health, jobs, ocr, printer, rfid, settings as app_settings, spools, tare_defaults
 from app.services.telemetry import TelemetryHub, telemetry_polling_loop
 
 
@@ -51,4 +51,6 @@ app.include_router(spools.router)
 app.include_router(jobs.router)
 app.include_router(camera.router)
 app.include_router(ocr.router)
+app.include_router(rfid.router)
+app.include_router(app_settings.router)
 app.include_router(tare_defaults.router)

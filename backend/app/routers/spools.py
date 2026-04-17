@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/spools", tags=["spools"])
 class SpoolIn(BaseModel):
     material: str
     color: str = "#888888"
-    brand: str = ""
+    brand: str = Field(..., min_length=1)
     name: str = ""
     initial_weight: float = Field(..., gt=0)
     remaining_weight: float | None = None

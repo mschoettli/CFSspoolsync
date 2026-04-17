@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Float, Integer, String
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text
 
 from app.db.session import Base
 
@@ -63,7 +63,16 @@ class TareDefault(Base):
     __tablename__ = "tare_defaults"
 
     id = Column(Integer, primary_key=True, index=True)
-    brand_key = Column(String, nullable=False, unique=True, index=True)
-    brand_label = Column(String, nullable=False)
-    tare_weight_g = Column(Float, nullable=False)
+    manufacturer = Column(String, nullable=False, index=True)
+    material = Column(String, nullable=False, index=True)
+    empty_spool_weight_g = Column(Float, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String, nullable=False, unique=True, index=True)
+    value = Column(Text, nullable=False, default="")
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)

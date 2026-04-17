@@ -9,20 +9,24 @@ router = APIRouter(prefix="/api/tare-defaults", tags=["tare-defaults"])
 
 
 class TareDefaultIn(BaseModel):
-    brand_key: str
-    brand_label: str
-    tare_weight_g: float = Field(..., gt=0)
+    manufacturer: str = Field(..., min_length=1)
+    material: str = Field(..., min_length=1)
+    empty_spool_weight_g: float = Field(..., gt=0)
 
 
 @router.get("")
 def list_defaults(db: Session = Depends(get_db)) -> list[dict]:
-    rows = db.query(TareDefault).order_by(TareDefault.brand_label.asc()).all()
+    rows = (
+        db.query(TareDefault)
+        .order_by(TareDefault.manufacturer.asc(), TareDefault.material.asc(), TareDefault.id.asc())
+        .all()
+    )
     return [
         {
             "id": row.id,
-            "brand_key": row.brand_key,
-            "brand_label": row.brand_label,
-            "tare_weight_g": row.tare_weight_g,
+            "manufacturer": row.manufacturer,
+            "material": row.material,
+            "empty_spool_weight_g": row.empty_spool_weight_g,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
         for row in rows
@@ -31,22 +35,30 @@ def list_defaults(db: Session = Depends(get_db)) -> list[dict]:
 
 @router.post("")
 def create_default(payload: TareDefaultIn, db: Session = Depends(get_db)) -> dict:
-    existing = db.query(TareDefault).filter(TareDefault.brand_key == payload.brand_key).first()
+    existing = (
+        db.query(TareDefault)
+        .filter(
+            TareDefault.manufacturer == payload.manufacturer.strip(),
+            TareDefault.material == payload.material.strip().upper(),
+        )
+        .first()
+    )
     if existing:
-        raise HTTPException(status_code=409, detail="brand_key already exists")
+        raise HTTPException(status_code=409, detail="manufacturer+material already exists")
+
     row = TareDefault(
-        brand_key=payload.brand_key,
-        brand_label=payload.brand_label,
-        tare_weight_g=payload.tare_weight_g,
+        manufacturer=payload.manufacturer.strip(),
+        material=payload.material.strip().upper(),
+        empty_spool_weight_g=payload.empty_spool_weight_g,
     )
     db.add(row)
     db.commit()
     db.refresh(row)
     return {
         "id": row.id,
-        "brand_key": row.brand_key,
-        "brand_label": row.brand_label,
-        "tare_weight_g": row.tare_weight_g,
+        "manufacturer": row.manufacturer,
+        "material": row.material,
+        "empty_spool_weight_g": row.empty_spool_weight_g,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
 

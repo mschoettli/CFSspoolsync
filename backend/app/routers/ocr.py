@@ -3,6 +3,8 @@ import re
 from fastapi import APIRouter, File, UploadFile
 
 from app.core.config import settings
+from app.db.session import SessionLocal
+from app.services.runtime_settings import get_setting
 
 router = APIRouter(prefix="/api/ocr", tags=["ocr"])
 
@@ -46,11 +48,18 @@ async def scan_label(file: UploadFile = File(...)) -> dict:
     if is_text_input and weight_g is None:
         warnings.append("weight_not_detected")
 
+    db = SessionLocal()
+    try:
+        openai_api_key = get_setting(db, "api.openai_key", settings.openai_api_key)
+        anthropic_api_key = get_setting(db, "api.anthropic_key", settings.anthropic_api_key)
+    finally:
+        db.close()
+
     provider_chain = ["text-regex-stub" if is_text_input else "no-image-ocr"]
     fallback_reason = None
     cloud_used = False
 
-    if settings.ocr_enable_cloud_fallback and warnings and (settings.openai_api_key or settings.anthropic_api_key):
+    if settings.ocr_enable_cloud_fallback and warnings and (openai_api_key or anthropic_api_key):
         provider_chain.append("cloud-configured")
         fallback_reason = "cloud_fallback_not_implemented_in_v1"
 

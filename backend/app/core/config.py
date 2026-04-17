@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     timezone: str = "Europe/Zurich"
     language: str = "de"
     datetime_locale: str = "de-DE"
+    ui_theme: str = "dark"
+    settings_admin_token: str = ""
     database_url: str = "postgresql+psycopg2://cfs:cfs@db:5432/cfsspoolsync"
     moonraker_url: str = "http://192.168.178.192:7125"
     telemetry_poll_seconds: float = 2.0

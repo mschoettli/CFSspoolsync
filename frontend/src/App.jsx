@@ -254,10 +254,12 @@ export function App() {
     [language],
   )
 
-  useTelemetry((payload, mode) => {
+  const handleTelemetry = React.useCallback((payload, mode) => {
     setTelemetry(payload)
     setTransport(mode)
-  })
+  }, [])
+
+  useTelemetry(handleTelemetry)
 
   const loadStaticData = React.useCallback(async () => {
     const results = await Promise.allSettled([

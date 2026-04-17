@@ -14,11 +14,14 @@ Greenfield restart for CFS spool sync and live print telemetry.
 
 ## Run
 1. Copy `.env.example` to `.env`
-2. `docker compose up -d --build`
+2. `docker compose up -d`
 3. Frontend: `http://localhost:5173`
 4. Backend: `http://localhost:8080`
 
 ## Update in Dockge
-- `backend` and `frontend` are configured with Git build contexts.
-- Docker builds directly from GitHub (`main`) and does not require local `./backend` or `./frontend` folders on the host.
-- In Dockge, use redeploy with build/rebuild enabled.
+- `backend` and `frontend` are pull-based images from GHCR.
+- Default tags:
+- `ghcr.io/mschoettli/cfsspoolsync-backend:main`
+- `ghcr.io/mschoettli/cfsspoolsync-frontend:main`
+- In Dockge, clicking update/pull fetches new app images directly.
+- If GHCR returns `unauthorized`, run `docker logout ghcr.io` once on the host and retry.

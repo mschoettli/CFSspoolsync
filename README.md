@@ -19,6 +19,6 @@ Greenfield restart for CFS spool sync and live print telemetry.
 4. Backend: `http://localhost:8080`
 
 ## Update in Dockge
-- `backend` and `frontend` are configured with local `build` targets by default.
-- In Dockge, use redeploy with build/rebuild enabled after updating the stack files.
-- A pure pull/update action skips app services because there is no remote image to pull.
+- `backend` and `frontend` are configured with Git build contexts.
+- Docker builds directly from GitHub (`main`) and does not require local `./backend` or `./frontend` folders on the host.
+- In Dockge, use redeploy with build/rebuild enabled.

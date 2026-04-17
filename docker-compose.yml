@@ -17,7 +17,7 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: https://github.com/mschoettli/CFSspoolsync.git#main:backend
     container_name: cfsspoolsync-backend
     restart: unless-stopped
     env_file:
@@ -33,7 +33,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: https://github.com/mschoettli/CFSspoolsync.git#main:frontend
     container_name: cfsspoolsync-frontend
     restart: unless-stopped
     ports:

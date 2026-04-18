@@ -12,7 +12,7 @@ def get_setting(db: Session, key: str, default: str = "") -> str:
     return str(row.value or "")
 
 
-def set_setting(db: Session, key: str, value: Any) -> str:
+def set_setting(db: Session, key: str, value: Any, commit: bool = True) -> str:
     row = db.query(AppSetting).filter(AppSetting.key == key).first()
     normalized = "" if value is None else str(value)
     if row:
@@ -20,8 +20,11 @@ def set_setting(db: Session, key: str, value: Any) -> str:
     else:
         row = AppSetting(key=key, value=normalized)
         db.add(row)
-    db.commit()
-    db.refresh(row)
+    if commit:
+        db.commit()
+        db.refresh(row)
+    else:
+        db.flush()
     return str(row.value or "")
 
 

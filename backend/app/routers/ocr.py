@@ -1,3 +1,4 @@
+import asyncio
 import re
 
 from fastapi import APIRouter, File, UploadFile
@@ -7,6 +8,16 @@ from app.db.session import SessionLocal
 from app.services.runtime_settings import get_setting
 
 router = APIRouter(prefix="/api/ocr", tags=["ocr"])
+
+
+def _resolve_cloud_keys() -> tuple[str, str]:
+    db = SessionLocal()
+    try:
+        openai_api_key = get_setting(db, "api.openai_key", settings.openai_api_key)
+        anthropic_api_key = get_setting(db, "api.anthropic_key", settings.anthropic_api_key)
+        return openai_api_key, anthropic_api_key
+    finally:
+        db.close()
 
 
 @router.post("/scan")
@@ -48,12 +59,7 @@ async def scan_label(file: UploadFile = File(...)) -> dict:
     if is_text_input and weight_g is None:
         warnings.append("weight_not_detected")
 
-    db = SessionLocal()
-    try:
-        openai_api_key = get_setting(db, "api.openai_key", settings.openai_api_key)
-        anthropic_api_key = get_setting(db, "api.anthropic_key", settings.anthropic_api_key)
-    finally:
-        db.close()
+    openai_api_key, anthropic_api_key = await asyncio.to_thread(_resolve_cloud_keys)
 
     provider_chain = ["text-regex-stub" if is_text_input else "no-image-ocr"]
     fallback_reason = None

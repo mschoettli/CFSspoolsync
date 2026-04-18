@@ -51,23 +51,31 @@ def update_settings(
     x_admin_token: str | None = Header(default=None),
 ) -> dict:
     _assert_admin_token(x_admin_token)
+    try:
+        if payload.language is not None:
+            language = payload.language.strip().lower()
+            if language not in SUPPORTED_LANGUAGES:
+                raise HTTPException(status_code=422, detail="unsupported language")
+            set_setting(db, "ui.language", language, commit=False)
 
-    if payload.language is not None:
-        language = payload.language.strip().lower()
-        if language not in SUPPORTED_LANGUAGES:
-            raise HTTPException(status_code=422, detail="unsupported language")
-        set_setting(db, "ui.language", language)
+        if payload.theme is not None:
+            theme = payload.theme.strip().lower()
+            if theme not in SUPPORTED_THEMES:
+                raise HTTPException(status_code=422, detail="unsupported theme")
+            set_setting(db, "ui.theme", theme, commit=False)
 
-    if payload.theme is not None:
-        theme = payload.theme.strip().lower()
-        if theme not in SUPPORTED_THEMES:
-            raise HTTPException(status_code=422, detail="unsupported theme")
-        set_setting(db, "ui.theme", theme)
+        if payload.openai_api_key is not None:
+            set_setting(db, "api.openai_key", payload.openai_api_key.strip(), commit=False)
 
-    if payload.openai_api_key is not None:
-        set_setting(db, "api.openai_key", payload.openai_api_key.strip())
+        if payload.anthropic_api_key is not None:
+            set_setting(db, "api.anthropic_key", payload.anthropic_api_key.strip(), commit=False)
 
-    if payload.anthropic_api_key is not None:
-        set_setting(db, "api.anthropic_key", payload.anthropic_api_key.strip())
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
 
     return read_settings(db)

@@ -64,19 +64,38 @@ def upgrade() -> None:
     )
 
     for row in SEED_ROWS:
-        bind.execute(
+        existing = bind.execute(
             sa.text(
                 """
-                INSERT INTO tare_defaults (manufacturer, material, empty_spool_weight_g)
-                VALUES (:manufacturer, :material, :empty_spool_weight_g)
-                ON CONFLICT(manufacturer, material)
-                DO UPDATE SET
-                    empty_spool_weight_g = excluded.empty_spool_weight_g,
-                    updated_at = CURRENT_TIMESTAMP
+                SELECT id
+                FROM tare_defaults
+                WHERE manufacturer = :manufacturer AND material = :material
                 """
             ),
             row,
-        )
+        ).fetchone()
+        if existing:
+            bind.execute(
+                sa.text(
+                    """
+                    UPDATE tare_defaults
+                    SET empty_spool_weight_g = :empty_spool_weight_g,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE manufacturer = :manufacturer AND material = :material
+                    """
+                ),
+                row,
+            )
+        else:
+            bind.execute(
+                sa.text(
+                    """
+                    INSERT INTO tare_defaults (manufacturer, material, empty_spool_weight_g)
+                    VALUES (:manufacturer, :material, :empty_spool_weight_g)
+                    """
+                ),
+                row,
+            )
 
 
 def downgrade() -> None:

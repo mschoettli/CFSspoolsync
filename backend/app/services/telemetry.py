@@ -1,4 +1,7 @@
 import asyncio
+import copy
+import logging
+import threading
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -11,6 +14,8 @@ from app.services.cfs_agent_client import fetch_cfs_agent_state
 from app.services.conversion import grams_from_mm
 from app.services.moonraker_client import fetch_moonraker_status
 
+logger = logging.getLogger(__name__)
+
 
 def _utcnow_naive() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
@@ -19,6 +24,7 @@ def _utcnow_naive() -> datetime:
 class TelemetryHub:
     def __init__(self) -> None:
         self._condition = asyncio.Condition()
+        self._snapshot_lock = threading.Lock()
         self._version = 0
         self._snapshot: dict[str, Any] = {
             "reachable": False,
@@ -43,15 +49,17 @@ class TelemetryHub:
 
     async def update(self, payload: dict[str, Any]) -> None:
         async with self._condition:
-            self._version += 1
-            merged = {**self._snapshot, **payload}
-            merged["updated_at"] = datetime.now(timezone.utc).isoformat()
-            merged["degraded"] = not bool(merged.get("reachable", False))
-            self._snapshot = merged
+            with self._snapshot_lock:
+                self._version += 1
+                merged = {**self._snapshot, **payload}
+                merged["updated_at"] = datetime.now(timezone.utc).isoformat()
+                merged["degraded"] = not bool(merged.get("reachable", False))
+                self._snapshot = merged
             self._condition.notify_all()
 
     def snapshot(self) -> tuple[int, dict[str, Any]]:
-        return self._version, dict(self._snapshot)
+        with self._snapshot_lock:
+            return self._version, copy.deepcopy(self._snapshot)
 
     async def wait_for_update(self, last_seen_version: int, timeout_seconds: float = 10.0) -> tuple[int, dict[str, Any]]:
         async with self._condition:
@@ -60,7 +68,8 @@ class TelemetryHub:
                     await asyncio.wait_for(self._condition.wait(), timeout=timeout_seconds)
                 except asyncio.TimeoutError:
                     pass
-            return self._version, dict(self._snapshot)
+            with self._snapshot_lock:
+                return self._version, copy.deepcopy(self._snapshot)
 
 
 def _slot_letter(slot: Optional[int]) -> Optional[str]:
@@ -169,54 +178,71 @@ def _apply_live_delta(db: Session, job: PrintJob, filament_used_raw: float, acti
 async def telemetry_polling_loop(hub: TelemetryHub, poll_seconds: float) -> None:
     offline_streak = 0
     while True:
-        moon = await fetch_moonraker_status()
-        cfs = await fetch_cfs_agent_state()
-        reachable = bool(moon.get("reachable", False))
-        state = str(moon.get("state", "unknown"))
-
-        if reachable:
-            offline_streak = 0
-        else:
-            offline_streak += 1
-
-        db = SessionLocal()
         try:
-            job = _get_running_job(db)
+            moon = await fetch_moonraker_status()
+            cfs = await fetch_cfs_agent_state()
+            reachable = bool(moon.get("reachable", False))
+            state = str(moon.get("state", "unknown"))
 
-            if state == "printing":
-                if not job:
-                    job = _init_running_job(
-                        db,
-                        filename=str(moon.get("filename", "")),
-                        filament_raw=float(moon.get("filament_used_raw", 0.0) or 0.0),
-                    )
-                _apply_live_delta(
-                    db,
-                    job,
-                    filament_used_raw=float(moon.get("filament_used_raw", 0.0) or 0.0),
-                    active_slot=cfs.get("active_slot"),
-                )
-            elif not reachable and job and offline_streak < max(1, settings.telemetry_offline_grace_cycles):
-                pass
+            if reachable:
+                offline_streak = 0
             else:
-                _finalize_running_job(db, job, state)
+                offline_streak += 1
+
+            db = SessionLocal()
+            try:
                 job = _get_running_job(db)
 
-            live_mm = float(job.live_consumed_mm) if job else 0.0
-            live_g = float(job.live_consumed_g) if job else 0.0
-            quality = str(job.live_consumed_quality) if job and job.live_consumed_quality else "estimated"
-            source = str(job.consumption_source) if job and job.consumption_source else "none"
+                if state == "printing":
+                    if not job:
+                        job = _init_running_job(
+                            db,
+                            filename=str(moon.get("filename", "")),
+                            filament_raw=float(moon.get("filament_used_raw", 0.0) or 0.0),
+                        )
+                    _apply_live_delta(
+                        db,
+                        job,
+                        filament_used_raw=float(moon.get("filament_used_raw", 0.0) or 0.0),
+                        active_slot=cfs.get("active_slot"),
+                    )
+                elif not reachable and job and offline_streak < max(1, settings.telemetry_offline_grace_cycles):
+                    pass
+                else:
+                    _finalize_running_job(db, job, state)
+                    job = _get_running_job(db)
 
-            snapshot = {
-                **moon,
-                "live_consumed_mm": round(live_mm, 1),
-                "live_consumed_g": round(live_g, 1),
-                "live_consumed_quality": quality,
-                "consumption_source": source,
-                "cfs": cfs,
-            }
-            await hub.update(snapshot)
-        finally:
-            db.close()
+                live_mm = float(job.live_consumed_mm) if job else 0.0
+                live_g = float(job.live_consumed_g) if job else 0.0
+                quality = str(job.live_consumed_quality) if job and job.live_consumed_quality else "estimated"
+                source = str(job.consumption_source) if job and job.consumption_source else "none"
+
+                snapshot = {
+                    **moon,
+                    "live_consumed_mm": round(live_mm, 1),
+                    "live_consumed_g": round(live_g, 1),
+                    "live_consumed_quality": quality,
+                    "consumption_source": source,
+                    "cfs": cfs,
+                }
+                await hub.update(snapshot)
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("telemetry polling loop iteration failed")
+            await hub.update(
+                {
+                    "reachable": False,
+                    "degraded": True,
+                    "state": "error",
+                    "consumption_source": "poll_error",
+                    "cfs": {
+                        "reachable": False,
+                        "active_slot": None,
+                        "slots": {},
+                        "degraded_reason": "telemetry_poll_error",
+                    },
+                }
+            )
 
         await asyncio.sleep(max(0.5, poll_seconds))

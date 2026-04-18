@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
   Thermometer, Droplets, Plus, Wifi, WifiOff, Box, Scale, Languages,
-  Edit3, Trash2, Activity, Printer, Package, ArrowRight, AlertCircle,
+  Edit3, Trash2, Activity, Package, ArrowRight, AlertCircle,
   Play, Pause, X, Radio,
 } from 'lucide-react'
 import { api } from './lib/api'
@@ -76,17 +76,6 @@ export default function App() {
   // ---------- Derived ----------
   const assignedIds = slots.map((s) => s.spool_id).filter(Boolean)
   const shelfSpools = spools.filter((s) => !assignedIds.includes(s.id))
-
-  const totals = useMemo(() => {
-    const activeSlots = slots.filter((s) => s.spool_id).length
-    const totalGrams = slots.reduce((acc, s) => {
-      if (!s.spool_id || !s.spool) return acc
-      return acc + Math.max(0, s.current_weight - s.spool.tare_weight)
-    }, 0) + shelfSpools.reduce(
-      (acc, sp) => acc + Math.max(0, sp.gross_weight - sp.tare_weight), 0,
-    )
-    return { activeSlots, totalGrams }
-  }, [slots, shelfSpools])
 
   // ---------- Actions ----------
   const openAddSpool = (slotId = null) => {
@@ -178,12 +167,10 @@ export default function App() {
           <SectionHead title={t.cfsStatus}
             subtitle={`${t.lastSync}: ${lastSyncAgo} ${t.secondsAgo}`}
             icon={<Activity size={18} />} />
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <EnvCard icon={<Thermometer size={18} />} label={t.temperature} value={fmt(cfs.temperature, 1)} unit="°C" accent="amber" />
             <EnvCard icon={<Droplets size={18} />} label={t.humidity} value={fmt(cfs.humidity, 1)} unit="%" accent="cyan" />
             <EnvCard icon={<Package size={18} />} label={t.spoolCount} value={spools.length} unit="" accent="violet" />
-            <EnvCard icon={<Scale size={18} />} label={t.filamentTotal} value={fmt(totals.totalGrams / 1000, 2)} unit="kg" accent="emerald" />
-            <EnvCard icon={<Printer size={18} />} label={t.slotsActive} value={`${totals.activeSlots}/4`} unit="" accent="rose" />
           </div>
         </section>
 

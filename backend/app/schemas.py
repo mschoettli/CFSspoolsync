@@ -15,6 +15,7 @@ class SpoolBase(BaseModel):
     bed_temp: int = Field(60, ge=0, le=150)
     gross_weight: float = Field(..., gt=0)
     tare_weight: float = Field(..., ge=0)
+    initial_remain_pct: Optional[float] = Field(None, ge=0, le=100)
     name: str = ""
 
 
@@ -32,6 +33,7 @@ class SpoolUpdate(BaseModel):
     bed_temp: Optional[int] = None
     gross_weight: Optional[float] = None
     tare_weight: Optional[float] = None
+    initial_remain_pct: Optional[float] = None
     name: Optional[str] = None
 
 
@@ -64,6 +66,21 @@ class TareOut(TareBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ---------- CFS Snapshot (Live-Erkennung pro Slot) ----------
+class CfsSnapshotOut(BaseModel):
+    slot_id: int
+    present: bool
+    known: bool
+    material_code: Optional[str] = None
+    manufacturer: Optional[str] = None
+    material: Optional[str] = None
+    nozzle_temp: Optional[int] = None
+    bed_temp: Optional[int] = None
+    color_hex: Optional[str] = None
+    remain_pct: Optional[float] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ---------- Slot ----------
 class SlotOut(BaseModel):
     id: int
@@ -72,6 +89,7 @@ class SlotOut(BaseModel):
     is_printing: bool
     flow: float
     spool: Optional[SpoolOut] = None
+    cfs_snapshot: Optional[CfsSnapshotOut] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -102,9 +120,3 @@ class HistoryOut(BaseModel):
     temperature: Optional[float]
     humidity: Optional[float]
     model_config = ConfigDict(from_attributes=True)
-
-
-# ---------- WS broadcast ----------
-class LiveState(BaseModel):
-    cfs: CfsStateOut
-    slots: list[SlotOut]

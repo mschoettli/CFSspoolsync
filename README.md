@@ -1,4 +1,4 @@
-# CFS Filament Tracker
+# CFSspoolsync
 
 Web-App zum Live-Tracking des Creality CFS (Creality Filament System) am K2 Combo. Zeigt Kammer-Temperatur und -Feuchtigkeit, die vier Slots mit eingelegten Spulen, einen Spulenlager-Bestand und den Filament-Verbrauch live während des Drucks.
 
@@ -20,8 +20,8 @@ Web-App zum Live-Tracking des Creality CFS (Creality Filament System) am K2 Comb
 ## Quick Start
 
 ```bash
-git clone https://github.com/<DEIN-USER>/cfs-filament-tracker.git
-cd cfs-filament-tracker
+git clone https://github.com/<DEIN-USER>/CFSspoolsync.git
+cd CFSspoolsync
 cp .env.example .env
 # .env anpassen (siehe unten)
 docker compose up -d
@@ -37,7 +37,7 @@ Alle Werte in `.env`:
 
 | Variable | Default | Beschreibung |
 |---|---|---|
-| `REGISTRY` | `ghcr.io/marius` | GHCR-Namespace für die Images |
+| `REGISTRY` | `ghcr.io/mschoettli` | GHCR-Namespace für die Images |
 | `TAG` | `latest` | Image-Tag |
 | `HTTP_PORT` | `8088` | Port für die Web-UI |
 | `CFS_MOONRAKER_HOST` | *(leer)* | IP/Hostname des K2 — leer = Simulator-Mode |
@@ -88,7 +88,7 @@ Der Stack enthält drei Services:
 ```
 
 Nach `git push` auf `main`:
-1. GitHub Actions baut beide Images (amd64 + arm64) und pusht nach `ghcr.io/<user>/cfs-filament-tracker-{backend,frontend}:latest`
+1. GitHub Actions baut beide Images (amd64 + arm64) und pusht nach `ghcr.io/<user>/cfsspoolsync-{backend,frontend}:latest`
 2. Watchtower erkennt den neuen `latest`-Digest spätestens nach 5 min
 3. Watchtower zieht die neuen Images, stoppt die alten Container und startet neue — SQLite-Volume bleibt bestehen
 

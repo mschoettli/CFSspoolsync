@@ -1,7 +1,7 @@
 // i18n — einfaches Key-Value-Mapping, kein externes Framework nötig
 export const TRANSLATIONS = {
   de: {
-    appTitle: 'CFS Filament Tracker',
+    appTitle: 'CFSspoolsync',
     appSub: 'Live Daten · Creality K2 Combo',
     dashboard: 'Dashboard',
     inventory: 'Spulenlager',
@@ -79,7 +79,7 @@ export const TRANSLATIONS = {
     confirmDeleteSpool: 'Diese Spule wirklich löschen?',
   },
   en: {
-    appTitle: 'CFS Filament Tracker',
+    appTitle: 'CFSspoolsync',
     appSub: 'Live data · Creality K2 Combo',
     dashboard: 'Dashboard',
     inventory: 'Spool inventory',

@@ -1,4 +1,4 @@
-# CFS Filament Tracker — Production Stack
+# CFSspoolsync — Production Stack
 #
 # Nutzt fertig gebaute Images von GitHub Container Registry.
 # Bei jedem git-push auf main baut GitHub Actions neue Images,
@@ -9,13 +9,13 @@
 
 services:
   backend:
-    image: ${REGISTRY:-ghcr.io/marius}/cfs-filament-tracker-backend:${TAG:-latest}
+    image: ${REGISTRY:-ghcr.io/mschoettli}/cfsspoolsync-backend:${TAG:-latest}
     container_name: cfs-backend
     restart: unless-stopped
     environment:
       # Leer lassen für Simulator-Mode. Mit IP/Hostname deines K2 für Live-Modus.
       CFS_MOONRAKER_HOST: ${CFS_MOONRAKER_HOST:-}
-      CFS_MOONRAKER_PORT: ${CFS_MOONRAKER_PORT:-80}
+      CFS_MOONRAKER_PORT: ${CFS_MOONRAKER_PORT:-7125}
       CFS_DATABASE_URL: sqlite:////app/data/cfs.db
       CFS_CORS_ORIGINS: "*"
     volumes:
@@ -26,7 +26,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   frontend:
-    image: ${REGISTRY:-ghcr.io/marius}/cfs-filament-tracker-frontend:${TAG:-latest}
+    image: ${REGISTRY:-ghcr.io/mschoettli}/cfsspoolsync-frontend:${TAG:-latest}
     container_name: cfs-frontend
     restart: unless-stopped
     ports:

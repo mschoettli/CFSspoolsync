@@ -252,7 +252,7 @@ export default function App() {
         </section>
 
         <footer className="text-center text-xs text-zinc-600 pt-6 pb-2">
-          CFS Filament Tracker · <a href="https://github.com" className="hover:text-zinc-400">github.com/marius/cfs-filament-tracker</a>
+          CFSspoolsync · <a href="https://github.com" className="hover:text-zinc-400">github.com/marius/CFSspoolsync</a>
         </footer>
       </main>
 

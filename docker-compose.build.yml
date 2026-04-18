@@ -11,7 +11,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: cfs-filament-tracker-backend:local
+    image: cfsspoolsync-backend:local
     # Watchtower soll lokal gebaute Images NICHT updaten
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
@@ -20,6 +20,6 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    image: cfs-filament-tracker-frontend:local
+    image: cfsspoolsync-frontend:local
     labels:
       - "com.centurylinklabs.watchtower.enable=false"

@@ -1,974 +1,538 @@
-import React from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  Thermometer, Droplets, Plus, Wifi, WifiOff, Box, Scale, Languages,
+  Edit3, Trash2, Activity, Printer, Package, ArrowRight, AlertCircle,
+  Play, Pause, X,
+} from 'lucide-react'
+import { api } from './lib/api'
+import { createLiveSocket } from './lib/ws'
+import { TRANSLATIONS } from './i18n/translations'
+import { AddSpoolModal, TareTableModal, AssignSpoolModal } from './components/Modals'
+import { HistoryChart } from './components/HistoryChart'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
-const DIRECT_API_BASE = `${window.location.protocol}//${window.location.hostname}:8080`
+const fmt = (n, d = 0) => Number(n).toFixed(d)
 
-function buildApiCandidates(path) {
-  if (API_BASE_URL) return [`${API_BASE_URL}${path}`]
-  return [path, `${DIRECT_API_BASE}${path}`]
-}
+export default function App() {
+  const [lang, setLang] = useState(() => localStorage.getItem('cfs_lang') || 'de')
+  const t = TRANSLATIONS[lang]
 
-const I18N = {
-  de: {
-    dashboard: 'Dashboard',
-    spools: 'Spulen',
-    tools: 'Tools',
-    addSpool: 'Spule hinzufügen',
-    activeJobNone: 'Job: Kein aktiver Druck',
-    ready: 'Bereit',
-    notReady: 'Nicht bereit',
-    cfsSlots: 'CFS Slots',
-    storageSpools: 'Spulenlager',
-    liveConnected: 'Live verbunden',
-    degraded: 'Degraded',
-    noSpool: 'Keine Spule',
-    activePrinting: 'Aktiv im Druck',
-    idle: 'Idle',
-    saveSpool: 'Spule speichern',
-    cancel: 'Abbrechen',
-    close: 'Schliessen',
-    rfidRead: 'RFID lesen',
-    rfidWaiting: 'RFID wartet...',
-    rfidOk: 'RFID erkannt',
-    scanLabel: 'Etikette scannen',
-    scanNow: 'Scan starten',
-    applyScan: 'In Felder übernehmen',
-    dropZone: 'Datei hier ablegen oder auswählen',
-    settings: 'Einstellungen',
-    language: 'Sprache',
-    theme: 'Theme',
-    dark: 'Dark',
-    light: 'Light',
-    apiKeys: 'API Keys',
-    show: 'Anzeigen',
-    hide: 'Verbergen',
-    saveSettings: 'Einstellungen speichern',
-    currentJob: 'Job',
-    camera: 'Kamera',
-    reload: 'Neu laden',
-    deleteHistory: 'Historie löschen',
-    refresh: 'Refresh',
-  },
-  en: {
-    dashboard: 'Dashboard',
-    spools: 'Spools',
-    tools: 'Tools',
-    addSpool: 'Add Spool',
-    activeJobNone: 'Job: No active print',
-    ready: 'Ready',
-    notReady: 'Not ready',
-    cfsSlots: 'CFS Slots',
-    storageSpools: 'Spool Storage',
-    liveConnected: 'Live connected',
-    degraded: 'Degraded',
-    noSpool: 'No spool',
-    activePrinting: 'Active in print',
-    idle: 'Idle',
-    saveSpool: 'Save spool',
-    cancel: 'Cancel',
-    close: 'Close',
-    rfidRead: 'Read RFID',
-    rfidWaiting: 'RFID waiting...',
-    rfidOk: 'RFID detected',
-    scanLabel: 'Scan label',
-    scanNow: 'Start scan',
-    applyScan: 'Apply to fields',
-    dropZone: 'Drop file here or choose one',
-    settings: 'Settings',
-    language: 'Language',
-    theme: 'Theme',
-    dark: 'Dark',
-    light: 'Light',
-    apiKeys: 'API keys',
-    show: 'Show',
-    hide: 'Hide',
-    saveSettings: 'Save settings',
-    currentJob: 'Job',
-    camera: 'Camera',
-    reload: 'Reload',
-    deleteHistory: 'Delete history',
-    refresh: 'Refresh',
-  },
-  fr: {
-    dashboard: 'Tableau',
-    spools: 'Bobines',
-    tools: 'Outils',
-    addSpool: 'Ajouter bobine',
-    activeJobNone: 'Job: Aucun print actif',
-    ready: 'Prêt',
-    notReady: 'Non prêt',
-    cfsSlots: 'Slots CFS',
-    storageSpools: 'Stock bobines',
-    liveConnected: 'Connecté',
-    degraded: 'Dégradé',
-    noSpool: 'Aucune bobine',
-    activePrinting: 'Active en impression',
-    idle: 'Inactif',
-    saveSpool: 'Enregistrer bobine',
-    cancel: 'Annuler',
-    close: 'Fermer',
-    rfidRead: 'Lire RFID',
-    rfidWaiting: 'RFID en attente...',
-    rfidOk: 'RFID détecté',
-    scanLabel: 'Scanner étiquette',
-    scanNow: 'Lancer scan',
-    applyScan: 'Appliquer aux champs',
-    dropZone: 'Déposer un fichier ou en choisir un',
-    settings: 'Paramètres',
-    language: 'Langue',
-    theme: 'Thème',
-    dark: 'Sombre',
-    light: 'Clair',
-    apiKeys: 'Clés API',
-    show: 'Afficher',
-    hide: 'Masquer',
-    saveSettings: 'Sauvegarder',
-    currentJob: 'Job',
-    camera: 'Caméra',
-    reload: 'Recharger',
-    deleteHistory: 'Effacer historique',
-    refresh: 'Rafraîchir',
-  },
-}
-
-const defaultSpoolForm = {
-  material: '',
-  color: '#3ba4ff',
-  brand: '',
-  name: '',
-  gross_weight: '',
-  empty_spool_weight: '',
-  status: 'lager',
-  cfs_slot: '',
-  diameter: '',
-  density: '',
-}
-
-async function api(path, init) {
-  let lastError = null
-  for (const url of buildApiCandidates(path)) {
-    try {
-      const res = await fetch(url, init)
-      if (!res.ok) {
-        const txt = await res.text()
-        throw new Error(`${res.status} ${txt}`)
-      }
-      const ct = res.headers.get('content-type') || ''
-      if (ct.includes('application/json')) return res.json()
-      return null
-    } catch (err) {
-      lastError = err
-    }
-  }
-  throw lastError || new Error('API request failed')
-}
-
-function formatState(value) {
-  if (!value) return 'unknown'
-  return String(value).replace(/_/g, ' ')
-}
-
-function num(value, digits = 1) {
-  return Number(value || 0).toFixed(digits)
-}
-
-function useTelemetry(onTelemetry) {
-  React.useEffect(() => {
-    let active = true
-    let pollTimer = null
-
-    const poll = async () => {
-      try {
-        const status = await api('/api/printer/status')
-        if (active) onTelemetry(status, 'polling-fallback')
-      } catch {
-        // ignore polling fallback errors
-      }
-    }
-
-    const eventSourceUrl = buildApiCandidates('/api/events/stream')[0]
-    const source = new EventSource(eventSourceUrl)
-    source.addEventListener('telemetry', (evt) => {
-      try {
-        const parsed = JSON.parse(evt.data)
-        if (active) onTelemetry(parsed.data, 'sse')
-      } catch {
-        // ignore malformed event
-      }
-    })
-
-    source.onerror = () => {
-      if (!active || pollTimer) return
-      poll()
-      pollTimer = setInterval(poll, 3000)
-    }
-
-    return () => {
-      active = false
-      source.close()
-      if (pollTimer) clearInterval(pollTimer)
-    }
-  }, [onTelemetry])
-}
-
-export function App() {
-  const [activeTab, setActiveTab] = React.useState('dashboard')
-  const [transport, setTransport] = React.useState('sse')
-  const [telemetry, setTelemetry] = React.useState(null)
-  const [cfs, setCfs] = React.useState(null)
-  const [spools, setSpools] = React.useState([])
-  const [jobs, setJobs] = React.useState([])
-  const [tare, setTare] = React.useState([])
-  const [config, setConfig] = React.useState(null)
-  const [settingsState, setSettingsState] = React.useState({
-    language: 'de',
-    theme: 'dark',
-    openai_api_key: '',
-    anthropic_api_key: '',
-    openai_api_key_masked: '',
-    anthropic_api_key_masked: '',
+  const [spools, setSpools] = useState([])
+  const [tares, setTares] = useState([])
+  const [slots, setSlots] = useState([
+    { id: 1, spool_id: null, current_weight: 0, is_printing: false, flow: 0, spool: null },
+    { id: 2, spool_id: null, current_weight: 0, is_printing: false, flow: 0, spool: null },
+    { id: 3, spool_id: null, current_weight: 0, is_printing: false, flow: 0, spool: null },
+    { id: 4, spool_id: null, current_weight: 0, is_printing: false, flow: 0, spool: null },
+  ])
+  const [cfs, setCfs] = useState({
+    temperature: 25, humidity: 20, connected: false, last_sync: new Date().toISOString(),
   })
-  const [showSettingsModal, setShowSettingsModal] = React.useState(false)
-  const [showOpenAiKey, setShowOpenAiKey] = React.useState(false)
-  const [showClaudeKey, setShowClaudeKey] = React.useState(false)
-  const [adminToken, setAdminToken] = React.useState('')
-  const [error, setError] = React.useState('')
-  const [cameraNonce, setCameraNonce] = React.useState(() => Date.now())
-  const [isSpoolModalOpen, setIsSpoolModalOpen] = React.useState(false)
-  const [spoolForm, setSpoolForm] = React.useState(defaultSpoolForm)
-  const [rfidState, setRfidState] = React.useState({ loading: false, ok: false, slot: null, error: '' })
-  const [ocrFile, setOcrFile] = React.useState(null)
-  const [ocrResult, setOcrResult] = React.useState(null)
-  const [ocrBusy, setOcrBusy] = React.useState(false)
-  const [tareForm, setTareForm] = React.useState({ manufacturer: '', material: 'PLA', empty_spool_weight_g: 200 })
+  const [wsStatus, setWsStatus] = useState('connecting')
+  const [lastSyncAgo, setLastSyncAgo] = useState(0)
 
-  const language = settingsState.language || config?.language || 'de'
-  const t = (key) => (I18N[language] && I18N[language][key]) || I18N.de[key] || key
+  const [showAddSpool, setShowAddSpool] = useState(false)
+  const [showTareTable, setShowTareTable] = useState(false)
+  const [assignModalSlot, setAssignModalSlot] = useState(null)
+  const [addSpoolForSlot, setAddSpoolForSlot] = useState(null)
+  const [editingSpool, setEditingSpool] = useState(null)
 
-  const tabs = React.useMemo(
-    () => [
-      { key: 'dashboard', label: t('dashboard') },
-      { key: 'spools', label: t('spools') },
-      { key: 'tools', label: t('tools') },
-    ],
-    [language],
-  )
+  // ---------- Sprachpräferenz persistieren ----------
+  useEffect(() => { localStorage.setItem('cfs_lang', lang) }, [lang])
 
-  const handleTelemetry = React.useCallback((payload, mode) => {
-    setTelemetry(payload)
-    setTransport(mode)
-  }, [])
-
-  useTelemetry(handleTelemetry)
-
-  const loadStaticData = React.useCallback(async () => {
-    const results = await Promise.allSettled([
-      api('/api/app-config'),
-      api('/api/cfs'),
-      api('/api/spools'),
-      api('/api/jobs?limit=20'),
-      api('/api/tare-defaults'),
-      api('/api/settings'),
-    ])
-
-    const [cfg, cfsData, spoolData, jobData, tareData, currentSettings] = results
-    const errors = []
-
-    if (cfg.status === 'fulfilled') setConfig(cfg.value)
-    else errors.push(`app-config: ${String(cfg.reason)}`)
-
-    if (cfsData.status === 'fulfilled') setCfs(cfsData.value)
-    else errors.push(`cfs: ${String(cfsData.reason)}`)
-
-    if (spoolData.status === 'fulfilled') setSpools(spoolData.value)
-    else errors.push(`spools: ${String(spoolData.reason)}`)
-
-    if (jobData.status === 'fulfilled') setJobs(jobData.value)
-    else errors.push(`jobs: ${String(jobData.reason)}`)
-
-    if (tareData.status === 'fulfilled') setTare(tareData.value)
-    else errors.push(`tare-defaults: ${String(tareData.reason)}`)
-
-    if (currentSettings.status === 'fulfilled') {
-      setSettingsState((prev) => ({
-        ...prev,
-        language: currentSettings.value.language || prev.language,
-        theme: currentSettings.value.theme || prev.theme,
-        openai_api_key_masked: currentSettings.value.openai_api_key_masked || '',
-        anthropic_api_key_masked: currentSettings.value.anthropic_api_key_masked || '',
-      }))
-    } else {
-      errors.push(`settings: ${String(currentSettings.reason)}`)
+  // ---------- Initial-Load ----------
+  const loadAll = useCallback(async () => {
+    try {
+      const [sp, tr, sl, cf] = await Promise.all([
+        api.listSpools(), api.listTares(), api.listSlots(), api.getCfs(),
+      ])
+      setSpools(sp)
+      setTares(tr)
+      setSlots(sl)
+      setCfs(cf)
+    } catch (err) {
+      console.error('Initial load failed', err)
     }
-
-    setError(errors.length ? errors.join(' | ') : '')
   }, [])
 
-  React.useEffect(() => {
-    loadStaticData()
-  }, [loadStaticData])
+  useEffect(() => { loadAll() }, [loadAll])
 
-  React.useEffect(() => {
-    const id = setInterval(async () => {
-      try {
-        const nextCfs = await api('/api/cfs')
-        setCfs(nextCfs)
-      } catch {
-        // keep last cfs snapshot
-      }
-    }, 5000)
-    return () => clearInterval(id)
-  }, [])
-
-  React.useEffect(() => {
-    document.documentElement.setAttribute('data-theme', settingsState.theme || 'dark')
-  }, [settingsState.theme])
-
-  React.useEffect(() => {
-    const brand = spoolForm.brand.trim().toLowerCase()
-    const material = spoolForm.material.trim().toUpperCase()
-    if (!brand || !material) return
-    const match = tare.find(
-      (row) =>
-        String(row.manufacturer || '').trim().toLowerCase() === brand &&
-        String(row.material || '').trim().toUpperCase() === material,
+  // ---------- Live-WebSocket ----------
+  useEffect(() => {
+    const sock = createLiveSocket(
+      (msg) => {
+        if (msg.type === 'live') {
+          setCfs(msg.data.cfs)
+          setSlots(msg.data.slots)
+        }
+      },
+      (status) => setWsStatus(status),
     )
-    if (!match) return
-    setSpoolForm((prev) => ({ ...prev, empty_spool_weight: String(match.empty_spool_weight_g || '') }))
-  }, [spoolForm.brand, spoolForm.material, tare])
+    return () => sock.close()
+  }, [])
 
-  const activeJobs = jobs.filter((job) => job.status === 'running')
-  const doneJobs = jobs.filter((job) => job.status !== 'running')
-  const currentJobName = telemetry?.filename || activeJobs[0]?.filename || ''
-  const ready = Boolean(telemetry?.reachable) && Boolean(cfs?.reachable)
-  const grossInput = Number(spoolForm.gross_weight)
-  const emptyInput = Number(spoolForm.empty_spool_weight)
-  const remainingPreview =
-    Number.isFinite(grossInput) && Number.isFinite(emptyInput) && grossInput > emptyInput
-      ? Number((grossInput - emptyInput).toFixed(1))
-      : null
-  const climateText = `${cfs?.temperature_c != null ? `${num(cfs.temperature_c)}°C` : '--'} | ${
-    cfs?.humidity_percent != null ? `${num(cfs.humidity_percent, 0)}%` : '--'
-  }`
+  // ---------- "Letzter Sync"-Counter ----------
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const since = Math.floor((Date.now() - new Date(cfs.last_sync).getTime()) / 1000)
+      setLastSyncAgo(Math.max(0, since))
+    }, 1000)
+    return () => clearInterval(iv)
+  }, [cfs.last_sync])
 
-  const openSpoolModal = () => {
-    setSpoolForm(defaultSpoolForm)
-    setRfidState({ loading: false, ok: false, slot: null, error: '' })
-    setOcrResult(null)
-    setOcrFile(null)
-    setIsSpoolModalOpen(true)
+  // ---------- Derived state ----------
+  const getSpool = useCallback((id) => spools.find((s) => s.id === id), [spools])
+  const assignedIds = slots.map((s) => s.spool_id).filter(Boolean)
+  const shelfSpools = spools.filter((s) => !assignedIds.includes(s.id))
+
+  const totals = useMemo(() => {
+    const activeSlots = slots.filter((s) => s.spool_id).length
+    const totalGrams = slots.reduce((acc, s) => {
+      if (!s.spool_id || !s.spool) return acc
+      return acc + Math.max(0, s.current_weight - s.spool.tare_weight)
+    }, 0) + shelfSpools.reduce(
+      (acc, sp) => acc + Math.max(0, sp.gross_weight - sp.tare_weight), 0,
+    )
+    return { activeSlots, totalGrams }
+  }, [slots, shelfSpools])
+
+  // ---------- Actions ----------
+  const openAddSpool = (slotId = null) => {
+    setEditingSpool(null)
+    setAddSpoolForSlot(slotId)
+    setShowAddSpool(true)
   }
 
-  const readRfid = async () => {
-    setRfidState({ loading: true, ok: false, slot: null, error: '' })
+  const openEditSpool = (spool) => {
+    setEditingSpool(spool)
+    setAddSpoolForSlot(null)
+    setShowAddSpool(true)
+  }
+
+  const saveSpool = async (data) => {
     try {
-      const result = await api('/api/rfid/read?timeout_seconds=5', { method: 'POST' })
-      setSpoolForm((prev) => ({
-        ...prev,
-        cfs_slot: result.slot ? String(result.slot) : prev.cfs_slot,
-        material: result.material || prev.material,
-        status: 'aktiv',
-      }))
-      setRfidState({ loading: false, ok: true, slot: result.slot, error: '' })
+      if (editingSpool) {
+        // eslint-disable-next-line no-unused-vars
+        const { assign_to_slot: _discard, ...rest } = data
+        await api.updateSpool(editingSpool.id, rest)
+      } else {
+        await api.createSpool(data)
+      }
+      setShowAddSpool(false)
+      setAddSpoolForSlot(null)
+      setEditingSpool(null)
+      await loadAll()
     } catch (err) {
-      setRfidState({ loading: false, ok: false, slot: null, error: String(err) })
-    }
-  }
-
-  const scanLabel = async (event) => {
-    event.preventDefault()
-    if (!ocrFile) return
-    setOcrBusy(true)
-    try {
-      const fd = new FormData()
-      fd.append('file', ocrFile)
-      const res = await fetch(buildApiCandidates('/api/ocr/scan')[0], { method: 'POST', body: fd })
-      const body = await res.json()
-      if (!res.ok) throw new Error(JSON.stringify(body))
-      setOcrResult(body)
-    } catch (err) {
-      setError(String(err))
-    } finally {
-      setOcrBusy(false)
-    }
-  }
-
-  const applyOcrToForm = () => {
-    if (!ocrResult?.result) return
-    const r = ocrResult.result
-    setSpoolForm((prev) => ({
-      ...prev,
-      material: r.material || '',
-      brand: r.brand || '',
-      color: r.color_hex || '#3ba4ff',
-      gross_weight: r.weight_g != null ? String(r.weight_g) : '',
-      diameter: r.diameter_mm != null ? String(r.diameter_mm) : '',
-      density: r.density != null ? String(r.density) : '',
-    }))
-  }
-
-  const createSpool = async (event) => {
-    event.preventDefault()
-    if (!spoolForm.material.trim() || !spoolForm.brand.trim() || !String(spoolForm.gross_weight).trim()) {
-      setError('Material, Brand und Bruttogewicht sind Pflichtfelder.')
-      return
-    }
-    if (!String(spoolForm.empty_spool_weight).trim()) {
-      setError('Leerspulengewicht fehlt. Bitte Tare-Daten prüfen oder manuell eintragen.')
-      return
-    }
-
-    const gross = Number(spoolForm.gross_weight)
-    const empty = Number(spoolForm.empty_spool_weight)
-    const remaining = Number((gross - empty).toFixed(1))
-    if (!Number.isFinite(remaining) || remaining <= 0) {
-      setError('Verbleibendes Gewicht ist ungültig. Brutto muss größer als Leerspule sein.')
-      return
-    }
-    if (spoolForm.status === 'aktiv' && !rfidState.ok) {
-      setError('RFID muss erfolgreich gelesen werden, bevor eine aktive Spule gespeichert werden kann.')
-      return
-    }
-
-    try {
-      await api('/api/spools', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          material: spoolForm.material.trim(),
-          color: spoolForm.color,
-          brand: spoolForm.brand.trim(),
-          name: spoolForm.name.trim(),
-          status: spoolForm.status,
-          initial_weight: remaining,
-          remaining_weight: remaining,
-          diameter: spoolForm.diameter ? Number(spoolForm.diameter) : 1.75,
-          density: spoolForm.density ? Number(spoolForm.density) : 1.24,
-          cfs_slot: spoolForm.cfs_slot ? Number(spoolForm.cfs_slot) : null,
-        }),
-      })
-      setIsSpoolModalOpen(false)
-      await loadStaticData()
-    } catch (err) {
-      setError(String(err))
+      alert(`${t.errorLoading}: ${err.message}`)
     }
   }
 
   const deleteSpool = async (id) => {
-    try {
-      await api(`/api/spools/${id}`, { method: 'DELETE' })
-      await loadStaticData()
-    } catch (err) {
-      setError(String(err))
-    }
+    if (!confirm(t.confirmDeleteSpool)) return
+    await api.deleteSpool(id)
+    await loadAll()
   }
 
-  const saveSettings = async (event) => {
-    event.preventDefault()
-    try {
-      const payload = {
-        language: settingsState.language,
-        theme: settingsState.theme,
-        openai_api_key: settingsState.openai_api_key,
-        anthropic_api_key: settingsState.anthropic_api_key,
-      }
-      const res = await api('/api/settings', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Token': adminToken,
-        },
-        body: JSON.stringify(payload),
-      })
-      setSettingsState((prev) => ({
-        ...prev,
-        language: res.language || prev.language,
-        theme: res.theme || prev.theme,
-        openai_api_key: '',
-        anthropic_api_key: '',
-        openai_api_key_masked: res.openai_api_key_masked || '',
-        anthropic_api_key_masked: res.anthropic_api_key_masked || '',
-      }))
-      setError('')
-      setShowSettingsModal(false)
-    } catch (err) {
-      setError(String(err))
-    }
+  const doAssignSpool = async (slotId, spoolId) => {
+    await api.assignSpool(slotId, spoolId)
+    setAssignModalSlot(null)
+    await loadAll()
   }
 
-  const clearJobs = async () => {
-    try {
-      await api('/api/jobs/admin/delete-history?confirm=DELETE', { method: 'POST' })
-      await loadStaticData()
-    } catch (err) {
-      setError(String(err))
-    }
+  const doUnassign = async (slotId) => {
+    await api.unassignSlot(slotId)
+    await loadAll()
   }
 
-  const createTare = async (e) => {
-    e.preventDefault()
-    try {
-      await api('/api/tare-defaults', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...tareForm,
-          material: String(tareForm.material || '').toUpperCase(),
-          empty_spool_weight_g: Number(tareForm.empty_spool_weight_g),
-        }),
-      })
-      setTareForm({ manufacturer: '', material: 'PLA', empty_spool_weight_g: 200 })
-      await loadStaticData()
-    } catch (err) {
-      setError(String(err))
-    }
+  const doTogglePrint = async (slotId, cur) => {
+    await api.togglePrint(slotId, !cur)
   }
 
-  const deleteTare = async (id) => {
-    try {
-      await api(`/api/tare-defaults/${id}`, { method: 'DELETE' })
-      await loadStaticData()
-    } catch (err) {
-      setError(String(err))
-    }
+  // Tara actions
+  const createTare = async (data) => { await api.createTare(data); const t2 = await api.listTares(); setTares(t2) }
+  const updateTare = async (id, data) => { await api.updateTare(id, data); const t2 = await api.listTares(); setTares(t2) }
+  const deleteTare = async (id) => { await api.deleteTare(id); const t2 = await api.listTares(); setTares(t2) }
+
+  const cfsDetectedGrossForSlot = (slotId) => {
+    const sl = slots.find((s) => s.id === slotId)
+    if (sl && sl.current_weight > 0) return sl.current_weight
+    return 1200
   }
 
   return (
-    <main className="page">
-      <header className="topbar">
-        <div>
-          <h1>CFSspoolsync</h1>
-          <p className="subtle">Slate Luxury Control Surface</p>
-        </div>
-
-        <div className="top-right">
-          <article className="status-block">
-            <p>{currentJobName ? `${t('currentJob')}: ${currentJobName}` : t('activeJobNone')}</p>
-            <p>CFS: {climateText}</p>
-            <p className={ready ? 'ready-ok' : 'ready-bad'}>
-              {ready ? t('ready') : t('notReady')}
-            </p>
-          </article>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label={t('settings')}
-            onClick={() => setShowSettingsModal(true)}
-          >
-            ⚙
-          </button>
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      {/* ---------- Header ---------- */}
+      <header className="sticky top-0 z-20 backdrop-blur bg-zinc-950/80 border-b border-zinc-800">
+        <div className="max-w-7xl mx-auto px-5 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 to-cyan-600 flex items-center justify-center shadow-lg shadow-emerald-900/40">
+              <Box size={22} className="text-zinc-950" />
+            </div>
+            <div>
+              <div className="font-semibold tracking-tight">{t.appTitle}</div>
+              <div className="text-xs text-zinc-500">{t.appSub}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <ConnectionBadge cfs={cfs} wsStatus={wsStatus} t={t} />
+            <button
+              onClick={() => setLang(lang === 'de' ? 'en' : 'de')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-medium"
+            >
+              <Languages size={14} />
+              {lang.toUpperCase()}
+            </button>
+          </div>
         </div>
       </header>
 
-      <nav className="tabs" aria-label="Navigation">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            className={activeTab === tab.key ? 'tab active' : 'tab'}
-            onClick={() => setActiveTab(tab.key)}
-            type="button"
-          >
-            {tab.label}
-          </button>
-        ))}
-      </nav>
-
-      {error && <p className="error">{error}</p>}
-
-      {activeTab === 'dashboard' && (
-        <section className="stack">
-          <section className="panel">
-            <div className="panel-head">
-              <h2>{t('cfsSlots')}</h2>
-              <span className={cfs?.reachable ? 'status-ok' : 'status-bad'}>
-                {cfs?.reachable ? t('liveConnected') : `${t('degraded')}: ${cfs?.degraded_reason || 'unknown'}`}
-              </span>
-            </div>
-            <div className="cfs-four-grid">
-              {(cfs?.slots || []).map((slot) => (
-                <article key={slot.slot} className={slot.is_active_slot ? 'slot-card active' : 'slot-card'}>
-                  <header>
-                    <h3>{slot.key}</h3>
-                    <span className="slot-badge">{slot.is_active_slot ? t('activePrinting') : t('idle')}</span>
-                  </header>
-                  {slot.spool ? (
-                    <>
-                      <div className="swatch-row">
-                        <span className="color-dot" style={{ backgroundColor: slot.spool.color || '#708090' }} />
-                        <span>{slot.spool.material || '-'}</span>
-                      </div>
-                      <p>{slot.spool.brand || '-'}</p>
-                      <p>{num(slot.spool.remaining_weight)} g</p>
-                    </>
-                  ) : (
-                    <p className="subtle">{t('noSpool')}</p>
-                  )}
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <div className="split-grid">
-            <section className="panel">
-              <div className="panel-head">
-                <h2>{t('camera')}</h2>
-                <button type="button" onClick={() => setCameraNonce(Date.now())}>
-                  {t('reload')}
-                </button>
-              </div>
-              <div className="camera-frame">
-                <img src={`${buildApiCandidates('/api/camera/stream')[0]}?_ts=${cameraNonce}`} alt="camera" />
-              </div>
-            </section>
-
-            <section className="panel">
-              <div className="panel-head">
-                <h2>Active Jobs</h2>
-              </div>
-              <div className="list compact">
-                {activeJobs.length === 0 && <p className="subtle">No running job</p>}
-                {activeJobs.map((job) => (
-                  <article key={job.id} className="card">
-                    <h3>{job.filename || `Job #${job.id}`}</h3>
-                    <p>{job.status}</p>
-                    <p>{num(job.total_consumed_g)} g</p>
-                  </article>
-                ))}
-              </div>
-            </section>
+      <main className="max-w-7xl mx-auto px-5 py-6 space-y-8">
+        {/* ---------- CFS Environment + KPIs ---------- */}
+        <section>
+          <SectionHead
+            title={t.cfsStatus}
+            subtitle={`${t.lastSync}: ${lastSyncAgo} ${t.secondsAgo}`}
+            icon={<Activity size={18} />}
+          />
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <EnvCard icon={<Thermometer size={18} />} label={t.temperature} value={fmt(cfs.temperature, 1)} unit="°C" accent="amber" />
+            <EnvCard icon={<Droplets size={18} />} label={t.humidity} value={fmt(cfs.humidity, 1)} unit="%" accent="cyan" />
+            <EnvCard icon={<Package size={18} />} label={t.spoolCount} value={spools.length} unit="" accent="violet" />
+            <EnvCard icon={<Scale size={18} />} label={t.filamentTotal} value={fmt(totals.totalGrams / 1000, 2)} unit="kg" accent="emerald" />
+            <EnvCard icon={<Printer size={18} />} label={t.slotsActive} value={`${totals.activeSlots}/4`} unit="" accent="rose" />
           </div>
         </section>
-      )}
 
-      {activeTab === 'spools' && (
-        <section className="stack">
-          <section className="panel">
-            <div className="panel-head">
-              <h2>{t('cfsSlots')}</h2>
-              <span className={cfs?.reachable ? 'status-ok' : 'status-bad'}>
-                {cfs?.reachable ? t('liveConnected') : `${t('degraded')}: ${cfs?.degraded_reason || 'unknown'}`}
-              </span>
-            </div>
-            <div className="slot-grid">
-              {(cfs?.slots || []).map((slot) => (
-                <article key={slot.slot} className={slot.is_active_slot ? 'slot-card active' : 'slot-card'}>
-                  <header>
-                    <h3>{slot.key}</h3>
-                    <span className="slot-badge">{slot.is_active_slot ? t('activePrinting') : t('idle')}</span>
-                  </header>
-                  {slot.spool ? (
-                    <>
-                      <div className="swatch-row">
-                        <span className="color-dot" style={{ backgroundColor: slot.spool.color || '#708090' }} />
-                        <span>{slot.spool.material || '-'}</span>
-                      </div>
-                      <p>{slot.spool.brand || '-'}</p>
-                      <p>{num(slot.spool.remaining_weight)} g</p>
-                    </>
-                  ) : (
-                    <p className="subtle">{t('noSpool')}</p>
-                  )}
-                </article>
-              ))}
-            </div>
-          </section>
+        {/* ---------- 4 Slot Panels ---------- */}
+        <section>
+          <SectionHead title={t.dashboard} subtitle={`CFS ${t.slot} 1–4`} icon={<Box size={18} />} />
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            {slots.map((slot) => (
+              <SlotPanel
+                key={slot.id}
+                t={t}
+                slot={slot}
+                onAssign={() => setAssignModalSlot(slot.id)}
+                onUnassign={() => doUnassign(slot.id)}
+                onTogglePrint={() => doTogglePrint(slot.id, slot.is_printing)}
+                onAddNew={() => openAddSpool(slot.id)}
+                onEdit={(sp) => openEditSpool(sp)}
+              />
+            ))}
+          </div>
+        </section>
 
-          <section className="panel">
-            <div className="panel-head">
-              <h2>{t('storageSpools')}</h2>
-              <button type="button" className="primary" onClick={openSpoolModal}>
-                + {t('addSpool')}
+        {/* ---------- History Chart ---------- */}
+        <section>
+          <HistoryChart t={t} spools={spools} />
+        </section>
+
+        {/* ---------- Inventory ---------- */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <SectionHead title={t.inventory} subtitle={`${spools.length} ${t.spoolCount.toLowerCase()}`} icon={<Package size={18} />} compact />
+            <div className="flex gap-2">
+              <button onClick={() => setShowTareTable(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-medium text-zinc-300">
+                <Scale size={14} />{t.manageTares}
+              </button>
+              <button onClick={() => openAddSpool(null)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-xs font-semibold">
+                <Plus size={14} />{t.addSpool}
               </button>
             </div>
-            <div className="spool-grid">
-              {spools.map((spool) => (
-                <article key={spool.id} className="spool-card">
-                  <header>
-                    <h3>#{spool.id} {spool.material}</h3>
-                    <span className="color-badge" style={{ backgroundColor: spool.color || '#708090' }} />
-                  </header>
-                  <p>{spool.brand || '-'} {spool.name || ''}</p>
-                  <p>Status: {spool.status} | Slot: {spool.cfs_slot || '-'}</p>
-                  <p>Rest: {num(spool.remaining_weight)} g</p>
-                  <button type="button" className="danger" onClick={() => deleteSpool(spool.id)}>Delete</button>
-                </article>
-              ))}
+          </div>
+
+          {spools.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/50 p-10 text-center">
+              <Package size={32} className="mx-auto text-zinc-600 mb-3" />
+              <div className="text-zinc-300 font-medium">{t.noSpools}</div>
+              <div className="text-sm text-zinc-500 mt-1 max-w-md mx-auto">{t.noSpoolsHint}</div>
             </div>
-          </section>
+          ) : (
+            <InventoryTable t={t} spools={spools} slots={slots} onEdit={openEditSpool} onDelete={deleteSpool} />
+          )}
         </section>
+
+        <footer className="text-center text-xs text-zinc-600 pt-6 pb-2">
+          CFS Filament Tracker · <a href="https://github.com" className="hover:text-zinc-400">github.com/marius/cfs-filament-tracker</a>
+        </footer>
+      </main>
+
+      {showAddSpool && (
+        <AddSpoolModal
+          t={t}
+          tares={tares}
+          editing={editingSpool}
+          targetSlot={addSpoolForSlot}
+          cfsGross={addSpoolForSlot ? cfsDetectedGrossForSlot(addSpoolForSlot) : null}
+          cfsConnected={cfs.connected}
+          onClose={() => { setShowAddSpool(false); setAddSpoolForSlot(null); setEditingSpool(null) }}
+          onSave={saveSpool}
+          onOpenTares={() => setShowTareTable(true)}
+        />
       )}
 
-      {activeTab === 'tools' && (
-        <section className="stack">
-          <section className="panel">
-            <div className="panel-head">
-              <h2>Jobs History</h2>
-              <button type="button" className="danger" onClick={clearJobs}>{t('deleteHistory')}</button>
-            </div>
-            <div className="list">
-              {doneJobs.map((job) => (
-                <article key={job.id} className="card">
-                  <h3>{job.filename || `Job #${job.id}`}</h3>
-                  <p>Status: {job.status}</p>
-                  <p>Consumption: {num(job.total_consumed_g)} g</p>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <section className="panel">
-            <h2>Tare Defaults</h2>
-            <form className="form" onSubmit={createTare}>
-              <input
-                value={tareForm.manufacturer}
-                onChange={(e) => setTareForm((s) => ({ ...s, manufacturer: e.target.value }))}
-                placeholder="Hersteller"
-              />
-              <input value={tareForm.material} onChange={(e) => setTareForm((s) => ({ ...s, material: e.target.value }))} placeholder="Material" />
-              <input
-                type="number"
-                value={tareForm.empty_spool_weight_g}
-                onChange={(e) => setTareForm((s) => ({ ...s, empty_spool_weight_g: e.target.value }))}
-                placeholder="Leerspule g"
-              />
-              <button type="submit" className="primary">Add</button>
-            </form>
-            <div className="tare-table-wrap">
-              <table className="tare-table">
-                <thead>
-                  <tr>
-                    <th>Hersteller</th>
-                    <th>Material</th>
-                    <th>Gewicht (g)</th>
-                    <th>Aktion</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tare.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.manufacturer || '-'}</td>
-                      <td>{item.material || '-'}</td>
-                      <td>{num(item.empty_spool_weight_g)}</td>
-                      <td>
-                        <button type="button" className="danger" onClick={() => deleteTare(item.id)}>Delete</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </section>
+      {showTareTable && (
+        <TareTableModal
+          t={t}
+          tares={tares}
+          onCreate={createTare}
+          onUpdate={updateTare}
+          onDelete={deleteTare}
+          onClose={() => setShowTareTable(false)}
+        />
       )}
 
-      <footer className="footer">
-        <button type="button" onClick={loadStaticData}>{t('refresh')}</button>
-        {config && <span>{config.timezone} | {settingsState.language} | {transport}</span>}
-      </footer>
+      {assignModalSlot !== null && (
+        <AssignSpoolModal
+          t={t}
+          slotId={assignModalSlot}
+          shelfSpools={shelfSpools}
+          onClose={() => setAssignModalSlot(null)}
+          onAssign={(spId) => doAssignSpool(assignModalSlot, spId)}
+          onCreateNew={() => { setAssignModalSlot(null); openAddSpool(assignModalSlot) }}
+        />
+      )}
+    </div>
+  )
+}
 
-      {isSpoolModalOpen && (
-        <div className="modal-backdrop" onClick={() => setIsSpoolModalOpen(false)}>
-          <section className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
-            <div className="panel-head">
-              <h2>{t('addSpool')}</h2>
-              <button type="button" onClick={() => setIsSpoolModalOpen(false)}>{t('close')}</button>
-            </div>
+// ---------- Sub-components ----------
+function ConnectionBadge({ cfs, wsStatus, t }) {
+  const ok = cfs.connected && wsStatus === 'open'
+  return (
+    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium border ${
+      ok ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-300'
+         : 'bg-red-950/40 border-red-800/60 text-red-300'
+    }`}>
+      {ok ? <Wifi size={14} /> : <WifiOff size={14} />}
+      {wsStatus === 'connecting' ? t.wsConnecting : ok ? t.cfsConnected : t.cfsDisconnected}
+      {ok && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-1" />}
+    </div>
+  )
+}
 
-            <div className="modal-two-col">
-              <form className="form modal-form" onSubmit={createSpool}>
-                <input
-                  value={spoolForm.material}
-                  onChange={(e) => setSpoolForm((s) => ({ ...s, material: e.target.value }))}
-                  placeholder="Material *"
-                />
-                <input
-                  value={spoolForm.brand}
-                  onChange={(e) => setSpoolForm((s) => ({ ...s, brand: e.target.value }))}
-                  placeholder="Brand *"
-                />
-                <input
-                  value={spoolForm.name}
-                  onChange={(e) => setSpoolForm((s) => ({ ...s, name: e.target.value }))}
-                  placeholder="Name"
-                />
-                <input
-                  type="color"
-                  value={spoolForm.color}
-                  onChange={(e) => setSpoolForm((s) => ({ ...s, color: e.target.value }))}
-                />
-                <input
-                  type="number"
-                  value={spoolForm.gross_weight}
-                  onChange={(e) => setSpoolForm((s) => ({ ...s, gross_weight: e.target.value }))}
-                  placeholder="Bruttogewicht (mit Leerspule) g *"
-                />
-                <input
-                  type="number"
-                  value={spoolForm.empty_spool_weight}
-                  onChange={(e) => setSpoolForm((s) => ({ ...s, empty_spool_weight: e.target.value }))}
-                  placeholder="Leerspulengewicht g *"
-                />
-                <input
-                  value={remainingPreview != null ? `${remainingPreview} g` : '--'}
-                  placeholder="Berechnetes Restgewicht"
-                  readOnly
-                />
-                <select
-                  value={spoolForm.status}
-                  onChange={(e) => setSpoolForm((s) => ({ ...s, status: e.target.value }))}
-                >
-                  <option value="lager">lager</option>
-                  <option value="aktiv">aktiv</option>
-                </select>
-                <div className="rfid-row">
-                  <button type="button" onClick={readRfid} disabled={rfidState.loading}>
-                    {rfidState.loading ? t('rfidWaiting') : t('rfidRead')}
-                  </button>
-                  {rfidState.ok && <span className="status-ok">{t('rfidOk')} (Slot {rfidState.slot})</span>}
-                  {!!rfidState.error && <span className="status-bad">{rfidState.error}</span>}
-                </div>
-                <input
-                  type="number"
-                  min="1"
-                  max="4"
-                  value={spoolForm.cfs_slot}
-                  onChange={(e) => setSpoolForm((s) => ({ ...s, cfs_slot: e.target.value }))}
-                  placeholder="Slot 1-4"
-                />
-                <input
-                  type="number"
-                  step="0.01"
-                  value={spoolForm.diameter}
-                  onChange={(e) => setSpoolForm((s) => ({ ...s, diameter: e.target.value }))}
-                  placeholder="Diameter"
-                />
-                <input
-                  type="number"
-                  step="0.01"
-                  value={spoolForm.density}
-                  onChange={(e) => setSpoolForm((s) => ({ ...s, density: e.target.value }))}
-                  placeholder="Density"
-                />
-                <div className="modal-actions">
-                  <button type="button" onClick={() => setIsSpoolModalOpen(false)}>{t('cancel')}</button>
-                  <button type="submit" className="primary">{t('saveSpool')}</button>
-                </div>
-              </form>
+function SectionHead({ title, subtitle, icon, compact }) {
+  return (
+    <div className={`flex items-end justify-between ${compact ? '' : 'mb-3'}`}>
+      <div>
+        <div className="flex items-center gap-2 text-zinc-400 text-xs font-medium uppercase tracking-wider">
+          {icon}{title}
+        </div>
+        {subtitle && <div className="text-xs text-zinc-600 mt-0.5">{subtitle}</div>}
+      </div>
+    </div>
+  )
+}
 
-              <section className="scan-panel">
-                <h3>{t('scanLabel')}</h3>
-                <form onSubmit={scanLabel}>
-                  <label
-                    className="drop-zone"
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault()
-                      if (e.dataTransfer.files?.[0]) setOcrFile(e.dataTransfer.files[0])
-                    }}
-                  >
-                    {ocrFile ? ocrFile.name : t('dropZone')}
-                    <input
-                      type="file"
-                      accept="image/*,.txt"
-                      onChange={(e) => setOcrFile(e.target.files?.[0] || null)}
-                      hidden
-                    />
-                  </label>
-                  <button type="submit" className="primary" disabled={!ocrFile || ocrBusy}>
-                    {ocrBusy ? '...' : t('scanNow')}
-                  </button>
-                </form>
-                {ocrResult && (
-                  <div className="ocr-preview">
-                    <pre>{JSON.stringify(ocrResult.result || {}, null, 2)}</pre>
-                    <button type="button" onClick={applyOcrToForm}>{t('applyScan')}</button>
+function EnvCard({ icon, label, value, unit, accent }) {
+  const accents = {
+    amber:   ['from-amber-500/20 to-amber-900/0', 'text-amber-300', 'border-amber-900/40'],
+    cyan:    ['from-cyan-500/20 to-cyan-900/0', 'text-cyan-300', 'border-cyan-900/40'],
+    emerald: ['from-emerald-500/20 to-emerald-900/0', 'text-emerald-300', 'border-emerald-900/40'],
+    violet:  ['from-violet-500/20 to-violet-900/0', 'text-violet-300', 'border-violet-900/40'],
+    rose:    ['from-rose-500/20 to-rose-900/0', 'text-rose-300', 'border-rose-900/40'],
+  }
+  const [grad, txt, border] = accents[accent]
+  return (
+    <div className={`relative overflow-hidden rounded-xl border bg-zinc-900/40 px-4 py-3 ${border}`}>
+      <div className={`absolute inset-0 bg-gradient-to-br opacity-60 ${grad}`} />
+      <div className="relative">
+        <div className={`flex items-center gap-1.5 text-xs font-medium ${txt}`}>
+          {icon}<span>{label}</span>
+        </div>
+        <div className="mt-2 flex items-baseline gap-1">
+          <span className="text-2xl font-semibold tracking-tight tabular-nums text-zinc-100">{value}</span>
+          <span className="text-xs text-zinc-400">{unit}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SlotPanel({ t, slot, onAssign, onUnassign, onTogglePrint, onAddNew, onEdit }) {
+  const spool = slot.spool
+
+  if (!spool) {
+    return (
+      <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 p-4 flex flex-col">
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-mono font-semibold text-zinc-500">{t.slot} {slot.id}</div>
+          <div className="text-xs px-2 py-0.5 rounded-full bg-zinc-800/70 text-zinc-500 border border-zinc-800">{t.empty}</div>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center py-8 text-center">
+          <Box size={28} className="text-zinc-700 mb-2" />
+          <div className="text-sm text-zinc-500">{t.emptyHint}</div>
+        </div>
+        <div className="flex gap-2 mt-auto">
+          <button onClick={onAssign} className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-200">
+            <ArrowRight size={14} />{t.assignSpool}
+          </button>
+          <button onClick={onAddNew} className="flex items-center justify-center px-3 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-zinc-950">
+            <Plus size={14} />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  const net = Math.max(0, slot.current_weight - spool.tare_weight)
+  const pct = Math.min(100, (net / 1000) * 100)
+  const low = net < 100
+
+  return (
+    <div className={`relative rounded-xl border bg-zinc-900/50 p-4 overflow-hidden transition-colors ${
+      slot.is_printing ? 'border-emerald-700/60' : 'border-zinc-800'
+    }`}>
+      {slot.is_printing && (
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent pointer-events-none" />
+      )}
+
+      <div className="relative flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className="text-xs font-mono font-semibold text-zinc-500">{t.slot} {slot.id}</div>
+          {slot.is_printing ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950/70 border border-emerald-800/60 text-emerald-300 text-[10px] font-semibold uppercase tracking-wide">
+              <Activity size={10} className="animate-pulse" />{t.printing}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-500 text-[10px] font-semibold uppercase tracking-wide">
+              {t.idle}
+            </span>
+          )}
+        </div>
+        <button onClick={() => onEdit(spool)} className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300">
+          <Edit3 size={13} />
+        </button>
+      </div>
+
+      <div className="relative flex items-start gap-3 mb-3">
+        <div className="relative shrink-0">
+          <div className="w-14 h-14 rounded-full border-2 border-zinc-700 shadow-inner" style={{ background: spool.color_hex }} />
+          <div className="absolute inset-2 rounded-full border border-zinc-800/80" />
+          <div className="absolute inset-[1.25rem] rounded-full bg-zinc-950/60" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-zinc-100 truncate">{spool.manufacturer}</div>
+          <div className="text-xs text-zinc-400 truncate">{spool.material} · {spool.color}</div>
+          <div className="text-xs text-zinc-600 mt-0.5">{spool.nozzle_temp}° / {spool.bed_temp}° · {spool.diameter}mm</div>
+        </div>
+      </div>
+
+      <div className="relative space-y-1 mb-3">
+        <div className="flex items-baseline justify-between">
+          <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">{t.remaining}</span>
+          <span className={`text-xs tabular-nums ${low ? 'text-red-400' : 'text-zinc-500'}`}>
+            {low && <AlertCircle size={11} className="inline mr-0.5" />}{fmt(pct, 0)}%
+          </span>
+        </div>
+        <div className="flex items-baseline gap-1">
+          <span className="text-2xl font-bold tabular-nums text-zinc-100">{fmt(net, 1)}</span>
+          <span className="text-xs text-zinc-500">g</span>
+          {slot.is_printing && slot.flow > 0 && (
+            <span className="ml-auto text-[10px] font-mono text-emerald-400 tabular-nums animate-pulse">
+              −{fmt(slot.flow, 2)} g/s
+            </span>
+          )}
+        </div>
+        <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+          <div
+            className={`h-full transition-all duration-500 ${low ? 'bg-gradient-to-r from-red-500 to-amber-400' : 'bg-gradient-to-r from-emerald-500 to-cyan-400'}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-[10px] text-zinc-600 pt-0.5 font-mono">
+          <span>{t.grossWeight} {fmt(slot.current_weight, 0)}g</span>
+          <span>{t.tare} {spool.tare_weight}g</span>
+        </div>
+      </div>
+
+      <div className="relative flex gap-2">
+        <button
+          onClick={onTogglePrint}
+          className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium transition ${
+            slot.is_printing
+              ? 'bg-red-900/50 hover:bg-red-900/70 text-red-300 border border-red-800/60'
+              : 'bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-800/60'
+          }`}
+        >
+          {slot.is_printing ? <Pause size={13} /> : <Play size={13} />}
+          {slot.is_printing ? t.stopPrint : t.startPrint}
+        </button>
+        <button onClick={onUnassign} className="px-2 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-400 border border-zinc-800">
+          <X size={13} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function InventoryTable({ t, spools, slots, onEdit, onDelete }) {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="bg-zinc-900/70 text-xs uppercase tracking-wide text-zinc-500">
+          <tr>
+            <th className="text-left px-4 py-2.5 font-medium"></th>
+            <th className="text-left px-4 py-2.5 font-medium">{t.manufacturer}</th>
+            <th className="text-left px-4 py-2.5 font-medium">{t.material}</th>
+            <th className="text-left px-4 py-2.5 font-medium">{t.color}</th>
+            <th className="text-right px-4 py-2.5 font-medium">{t.remaining}</th>
+            <th className="text-right px-4 py-2.5 font-medium">{t.nozzle}/{t.bed}</th>
+            <th className="text-left px-4 py-2.5 font-medium">Status</th>
+            <th className="text-right px-4 py-2.5 font-medium"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {spools.map((sp) => {
+            const slotFor = slots.find((s) => s.spool_id === sp.id)
+            const netNow = slotFor
+              ? Math.max(0, slotFor.current_weight - sp.tare_weight)
+              : Math.max(0, sp.gross_weight - sp.tare_weight)
+            const pct = Math.min(100, (netNow / 1000) * 100)
+            return (
+              <tr key={sp.id} className="border-t border-zinc-800/70 hover:bg-zinc-900/40">
+                <td className="px-4 py-3">
+                  <div className="w-6 h-6 rounded-full border border-zinc-700 shadow-inner" style={{ background: sp.color_hex }} />
+                </td>
+                <td className="px-4 py-3 font-medium text-zinc-200">{sp.manufacturer}</td>
+                <td className="px-4 py-3 text-zinc-300">
+                  {sp.material}
+                  <span className="text-zinc-500 ml-2 text-xs">{sp.diameter}mm</span>
+                </td>
+                <td className="px-4 py-3 text-zinc-400">{sp.color}</td>
+                <td className="px-4 py-3 text-right tabular-nums">
+                  <div className="text-zinc-100 font-medium">{fmt(netNow, 0)} g</div>
+                  <div className="w-24 ml-auto mt-1 h-1 rounded-full bg-zinc-800 overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-emerald-500 to-cyan-400" style={{ width: `${pct}%` }} />
                   </div>
-                )}
-              </section>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {showSettingsModal && (
-        <div className="modal-backdrop" onClick={() => setShowSettingsModal(false)}>
-          <section className="modal settings-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="panel-head">
-              <h2>{t('settings')}</h2>
-              <button type="button" onClick={() => setShowSettingsModal(false)}>{t('close')}</button>
-            </div>
-            <form className="settings-form" onSubmit={saveSettings}>
-              <label>
-                {t('language')}
-                <select
-                  value={settingsState.language}
-                  onChange={(e) => setSettingsState((s) => ({ ...s, language: e.target.value }))}
-                >
-                  <option value="de">Deutsch</option>
-                  <option value="en">English</option>
-                  <option value="fr">Français</option>
-                </select>
-              </label>
-
-              <label>
-                {t('theme')}
-                <select
-                  value={settingsState.theme}
-                  onChange={(e) => setSettingsState((s) => ({ ...s, theme: e.target.value }))}
-                >
-                  <option value="dark">{t('dark')}</option>
-                  <option value="light">{t('light')}</option>
-                </select>
-              </label>
-
-              <label>
-                Admin Token
-                <input
-                  value={adminToken}
-                  onChange={(e) => setAdminToken(e.target.value)}
-                  placeholder="X-Admin-Token"
-                />
-              </label>
-
-              <h3>{t('apiKeys')}</h3>
-              <label>
-                OpenAI ({settingsState.openai_api_key_masked || 'not set'})
-                <div className="key-row">
-                  <input
-                    type={showOpenAiKey ? 'text' : 'password'}
-                    value={settingsState.openai_api_key}
-                    onChange={(e) => setSettingsState((s) => ({ ...s, openai_api_key: e.target.value }))}
-                    placeholder="sk-..."
-                  />
-                  <button type="button" onClick={() => setShowOpenAiKey((v) => !v)}>
-                    {showOpenAiKey ? t('hide') : t('show')}
-                  </button>
-                </div>
-              </label>
-
-              <label>
-                Claude ({settingsState.anthropic_api_key_masked || 'not set'})
-                <div className="key-row">
-                  <input
-                    type={showClaudeKey ? 'text' : 'password'}
-                    value={settingsState.anthropic_api_key}
-                    onChange={(e) => setSettingsState((s) => ({ ...s, anthropic_api_key: e.target.value }))}
-                    placeholder="sk-ant-..."
-                  />
-                  <button type="button" onClick={() => setShowClaudeKey((v) => !v)}>
-                    {showClaudeKey ? t('hide') : t('show')}
-                  </button>
-                </div>
-              </label>
-
-              <div className="modal-actions">
-                <button type="button" onClick={() => setShowSettingsModal(false)}>{t('cancel')}</button>
-                <button type="submit" className="primary">{t('saveSettings')}</button>
-              </div>
-            </form>
-          </section>
-        </div>
-      )}
-    </main>
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-zinc-400">{sp.nozzle_temp}° / {sp.bed_temp}°</td>
+                <td className="px-4 py-3">
+                  {slotFor ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-950/60 border border-cyan-800/60 text-cyan-300 text-xs">
+                      {t.inSlot} {slotFor.id}
+                      {slotFor.is_printing && <Activity size={10} className="animate-pulse" />}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800/70 border border-zinc-700 text-zinc-400 text-xs">
+                      {t.onShelf}
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex justify-end gap-1">
+                    <button onClick={() => onEdit(sp)} className="p-1.5 rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200">
+                      <Edit3 size={14} />
+                    </button>
+                    <button onClick={() => onDelete(sp.id)} className="p-1.5 rounded-md hover:bg-red-900/40 text-zinc-400 hover:text-red-300">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
   )
 }

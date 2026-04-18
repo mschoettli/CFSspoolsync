@@ -1,45 +1,64 @@
+# CFS Filament Tracker — Production Stack
+#
+# Nutzt fertig gebaute Images von GitHub Container Registry.
+# Bei jedem git-push auf main baut GitHub Actions neue Images,
+# und Watchtower zieht sie automatisch auf den Host.
+#
+# Für lokales Bauen aus dem Source-Code stattdessen:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d
+
 services:
-  db:
-    image: postgres:16-alpine
-    container_name: cfsspoolsync-db
+  backend:
+    image: ${REGISTRY:-ghcr.io/marius}/cfs-filament-tracker-backend:${TAG:-latest}
+    container_name: cfs-backend
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-cfsspoolsync}
-      POSTGRES_USER: ${POSTGRES_USER:-cfs}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cfs}
+      # Leer lassen für Simulator-Mode. Mit IP/Hostname deines K2 für Live-Modus.
+      CFS_MOONRAKER_HOST: ${CFS_MOONRAKER_HOST:-}
+      CFS_MOONRAKER_PORT: ${CFS_MOONRAKER_PORT:-80}
+      CFS_DATABASE_URL: sqlite:////app/data/cfs.db
+      CFS_CORS_ORIGINS: "*"
     volumes:
-      - db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cfs} -d ${POSTGRES_DB:-cfsspoolsync}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  backend:
-    image: ghcr.io/mschoettli/cfsspoolsync-backend:${IMAGE_TAG:-main}
-    pull_policy: always
-    container_name: cfsspoolsync-backend
-    restart: unless-stopped
-    env_file:
-      - .env
-    ports:
-      - "${BACKEND_PORT:-8080}:8080"
-    command: >
-      sh -c "alembic upgrade head &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8080"
-    depends_on:
-      db:
-        condition: service_healthy
+      - cfs-data:/app/data
+    networks:
+      - cfs
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
   frontend:
-    image: ghcr.io/mschoettli/cfsspoolsync-frontend:${IMAGE_TAG:-main}
-    pull_policy: always
-    container_name: cfsspoolsync-frontend
+    image: ${REGISTRY:-ghcr.io/marius}/cfs-filament-tracker-frontend:${TAG:-latest}
+    container_name: cfs-frontend
     restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-5173}:80"
+      - "${HTTP_PORT:-8088}:80"
     depends_on:
       - backend
+    networks:
+      - cfs
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # Auto-update: checked die Registry alle 5 Minuten und updated Images automatisch.
+  # Nur Container mit Label watchtower.enable=true werden berücksichtigt.
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: cfs-watchtower
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_POLL_INTERVAL: 300       # 5 min
+      WATCHTOWER_CLEANUP: "true"          # alte Images löschen
+      WATCHTOWER_LABEL_ENABLE: "true"     # nur Container mit Label updaten
+      WATCHTOWER_INCLUDE_RESTARTING: "true"
+      TZ: ${TZ:-Europe/Zurich}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - cfs
 
 volumes:
-  db_data:
+  cfs-data:
+    name: cfs-data
+
+networks:
+  cfs:
+    name: cfs

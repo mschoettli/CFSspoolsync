@@ -1,27 +1,28 @@
+# ---------- Build stage ----------
 FROM node:20-alpine AS build
 
 WORKDIR /app
 
-ENV NPM_CONFIG_REGISTRY=https://registry.npmjs.org/ \
-    NPM_CONFIG_AUDIT=false \
-    NPM_CONFIG_FUND=false \
-    NPM_CONFIG_UPDATE_NOTIFIER=false \
-    NPM_CONFIG_FETCH_RETRIES=5 \
-    NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
-    NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000 \
-    NPM_CONFIG_FETCH_TIMEOUT=300000
+# Dependencies zuerst für Layer-Caching
+COPY package.json ./
+RUN npm install
 
-COPY package*.json /app/
-RUN npm install --loglevel=info
-
-COPY . /app
+# Rest der Sources und Build
+COPY . .
 RUN npm run build
 
+# ---------- Serve stage ----------
 FROM nginx:1.27-alpine
 
+# Custom nginx config mit /api + /ws Proxy zum Backend
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Built assets
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget -q -O /dev/null http://localhost/ || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]

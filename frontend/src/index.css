@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  @apply bg-zinc-950 text-zinc-100 font-sans antialiased;
+}
+
+.input {
+  @apply w-full bg-zinc-950 border border-zinc-800 text-zinc-100 rounded-md px-3 py-2 text-sm outline-none transition-colors;
+}
+.input:focus {
+  @apply border-emerald-600;
+}
+.input::placeholder {
+  @apply text-zinc-600;
+}
+
+/* scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-zinc-950;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-zinc-800 rounded;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-zinc-700;
+}

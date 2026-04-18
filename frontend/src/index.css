@@ -39,8 +39,7 @@ html[data-theme='light'] .text-zinc-300 {
 }
 
 html[data-theme='light'] .text-zinc-400,
-html[data-theme='light'] .text-zinc-500,
-html[data-theme='light'] .text-zinc-600 {
+html[data-theme='light'] .text-zinc-500 {
   @apply text-zinc-600;
 }
 

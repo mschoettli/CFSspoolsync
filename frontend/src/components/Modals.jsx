@@ -1,10 +1,90 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
-  X, Plus, Trash2, Wifi, Scale, Check, ArrowRight, AlertCircle,
+  X, Plus, Trash2, Wifi, Scale, Check, ArrowRight, AlertCircle, ScanLine,
 } from 'lucide-react'
 import { MATERIAL_PRESETS } from '../i18n/translations'
+import { api } from '../lib/api'
 
 const fmt = (n, d = 0) => Number(n).toFixed(d)
+
+const CANONICAL_COLOR_HEX = {
+  Gold: '#FFD700',
+  Silver: '#C0C0C0',
+  Red: '#EF4444',
+  Blue: '#3B82F6',
+  Green: '#22C55E',
+  Black: '#111827',
+  White: '#FFFFFF',
+  Gray: '#6B7280',
+  Orange: '#F97316',
+  Yellow: '#EAB308',
+  Purple: '#A855F7',
+  Pink: '#EC4899',
+  Brown: '#92400E',
+}
+
+const COLOR_ALIASES = {
+  gold: 'Gold',
+  silber: 'Silver',
+  silver: 'Silver',
+  rot: 'Red',
+  red: 'Red',
+  blau: 'Blue',
+  blue: 'Blue',
+  grun: 'Green',
+  gruen: 'Green',
+  green: 'Green',
+  schwarz: 'Black',
+  black: 'Black',
+  weiss: 'White',
+  weis: 'White',
+  white: 'White',
+  grau: 'Gray',
+  gray: 'Gray',
+  grey: 'Gray',
+  orange: 'Orange',
+  gelb: 'Yellow',
+  yellow: 'Yellow',
+  lila: 'Purple',
+  purple: 'Purple',
+  rosa: 'Pink',
+  pink: 'Pink',
+  braun: 'Brown',
+  brown: 'Brown',
+}
+
+const HEX_TO_CANONICAL_NAME = new Map(
+  Object.entries(CANONICAL_COLOR_HEX).map(([name, hex]) => [hex.toUpperCase(), name]),
+)
+
+function normalizeColorName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ß/g, 'ss')
+    .trim()
+    .toLowerCase()
+}
+
+function normalizeHex(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  const withHash = raw.startsWith('#') ? raw : `#${raw}`
+  if (!/^#[0-9a-fA-F]{6}$/.test(withHash)) return null
+  return withHash.toUpperCase()
+}
+
+function getHexForColorName(value) {
+  const canonical = COLOR_ALIASES[normalizeColorName(value)]
+  if (!canonical) return null
+  return CANONICAL_COLOR_HEX[canonical] || null
+}
+
+function getCanonicalNameForHex(value) {
+  const normalized = normalizeHex(value)
+  if (!normalized) return null
+  return HEX_TO_CANONICAL_NAME.get(normalized) || null
+}
 
 // ---------- Modal shell ----------
 export function Modal({ title, subtitle, onClose, children, maxWidth = 'max-w-2xl' }) {
@@ -64,11 +144,12 @@ export function AddSpoolModal({
   // Ermitteln was wir aus dem Snapshot vorbefüllen können
   const snapKnown = cfsSnapshot?.known === true
   const snapPresent = cfsSnapshot?.present === true
+  const snapshotColorName = getCanonicalNameForHex(cfsSnapshot?.color_hex)
 
   const initial = editing || {
     manufacturer: snapKnown ? (cfsSnapshot.manufacturer || '') : '',
     material: snapKnown ? (cfsSnapshot.material || 'PLA') : 'PLA',
-    color: '',
+    color: snapshotColorName || '',
     color_hex: cfsSnapshot?.color_hex || '#22c55e',
     diameter: 1.75,
     nozzle_temp: snapKnown ? (cfsSnapshot.nozzle_temp || MATERIAL_PRESETS.PLA.nozzle) : MATERIAL_PRESETS.PLA.nozzle,
@@ -86,6 +167,11 @@ export function AddSpoolModal({
   const [bedTemp, setBedTemp]           = useState(initial.bed_temp)
   const [grossWeight, setGrossWeight]   = useState(initial.gross_weight)
   const [name, setName]                 = useState(initial.name)
+  const [ocrBusy, setOcrBusy]           = useState(false)
+  const [ocrError, setOcrError]         = useState('')
+  const [ocrWarnings, setOcrWarnings]   = useState([])
+  const [ocrRawText, setOcrRawText]     = useState('')
+  const fileInputRef = useRef(null)
 
   // Material preset triggert Temperaturen (nur bei Neuanlage ohne RFID)
   useEffect(() => {
@@ -96,6 +182,16 @@ export function AddSpoolModal({
       setBedTemp(preset.bed)
     }
   }, [material, editing, snapKnown])
+
+  useEffect(() => {
+    if (editing) return
+    if (color.trim()) return
+    if (!cfsSnapshot?.color_hex) return
+    const mappedName = getCanonicalNameForHex(cfsSnapshot.color_hex)
+    if (mappedName) {
+      setColor(mappedName)
+    }
+  }, [editing, color, cfsSnapshot?.color_hex])
 
   const matchingTare = tares.find(
     (tr) =>
@@ -111,6 +207,66 @@ export function AddSpoolModal({
   ).sort()
 
   const valid = manufacturer.trim() && material && color.trim() && grossWeight > 0
+
+  const onColorNameChange = (nextColor) => {
+    setColor(nextColor)
+    const mappedHex = getHexForColorName(nextColor)
+    if (mappedHex) {
+      setColorHex(mappedHex)
+    }
+  }
+
+  const onColorHexChange = (nextHex) => {
+    const normalizedHex = normalizeHex(nextHex) || nextHex
+    setColorHex(normalizedHex)
+    const mappedName = getCanonicalNameForHex(normalizedHex)
+    if (mappedName) {
+      setColor(mappedName)
+    }
+  }
+
+  const applyOcrResult = (payload) => {
+    const result = payload?.result || {}
+    if (result.brand) setManufacturer(result.brand)
+    if (result.material) setMaterial(result.material)
+    if (result.color_name) setColor(result.color_name)
+    if (result.color_hex) {
+      const normalized = normalizeHex(result.color_hex)
+      if (normalized) onColorHexChange(normalized)
+    } else if (result.color_name) {
+      const mappedHex = getHexForColorName(result.color_name)
+      if (mappedHex) setColorHex(mappedHex)
+    }
+    if (result.diameter_mm) setDiameter(Number(result.diameter_mm))
+    if (result.weight_g) setGrossWeight(Number(result.weight_g))
+    if (result.nozzle_max || result.nozzle_min) {
+      setNozzleTemp(Number(result.nozzle_max || result.nozzle_min))
+    }
+    if (result.bed_max || result.bed_min) {
+      setBedTemp(Number(result.bed_max || result.bed_min))
+    }
+    if (result.brand && result.material) {
+      setName(`${result.brand} ${result.material}`.trim())
+    }
+    setOcrWarnings(payload?.warnings || [])
+    setOcrRawText(payload?.raw_text || '')
+  }
+
+  const onOcrUpload = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setOcrBusy(true)
+    setOcrError('')
+    try {
+      const data = await api.scanSpoolLabel(file)
+      applyOcrResult(data)
+    } catch (err) {
+      setOcrError(err.message || 'OCR failed')
+    } finally {
+      setOcrBusy(false)
+      event.target.value = ''
+    }
+  }
 
   const save = (assignToSlot) => {
     if (!valid) return
@@ -148,7 +304,6 @@ export function AddSpoolModal({
               <div className="font-semibold text-cyan-200">
                 {t.autoFilled} · {t.slot} {targetSlot}
               </div>
-              <div className="text-cyan-400/80 mt-0.5">{t.autoFillHint}</div>
               <div className="mt-2 flex gap-3 font-mono flex-wrap">
                 <span className="text-cyan-300">
                   {cfsSnapshot.manufacturer} {cfsSnapshot.material}
@@ -201,6 +356,39 @@ export function AddSpoolModal({
           </div>
         )}
 
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium text-zinc-200">{t.ocrTitle}</div>
+              <div className="text-xs text-zinc-500">{t.ocrSub}</div>
+            </div>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={ocrBusy}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-xs font-semibold disabled:opacity-50"
+            >
+              <ScanLine size={14} />
+              {ocrBusy ? t.ocrScanning : t.ocrScanAction}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={onOcrUpload}
+            />
+          </div>
+          {ocrError && (
+            <div className="mt-2 text-xs text-red-400">{ocrError}</div>
+          )}
+          {ocrWarnings.length > 0 && (
+            <div className="mt-2 text-xs text-amber-400">{ocrWarnings.join(', ')}</div>
+          )}
+          {ocrRawText && (
+            <pre className="mt-2 max-h-24 overflow-auto text-[10px] text-zinc-500 whitespace-pre-wrap">{ocrRawText}</pre>
+          )}
+        </div>
+
         {/* Form grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label={t.manufacturer} required hint={snapKnown ? t.rfidRead : null}>
@@ -230,12 +418,12 @@ export function AddSpoolModal({
           <Field label={t.color} required hint={cfsSnapshot?.color_hex ? t.rfidRead : null}>
             <div className="flex gap-2">
               <input
-                value={color} onChange={(e) => setColor(e.target.value)}
+                value={color} onChange={(e) => onColorNameChange(e.target.value)}
                 className="input flex-1" placeholder="Jade White, Hyper Red..."
               />
               <input
                 type="color" value={colorHex}
-                onChange={(e) => setColorHex(e.target.value)}
+                onChange={(e) => onColorHexChange(e.target.value)}
                 className={`w-11 rounded-md border bg-zinc-800 cursor-pointer ${
                   cfsSnapshot?.color_hex ? 'border-cyan-700' : 'border-zinc-700'
                 }`}
@@ -349,40 +537,90 @@ export function AddSpoolModal({
 
 // ---------- Tare Table Modal (unverändert) ----------
 export function TareTableModal({ t, tares, onCreate, onUpdate, onDelete, onClose }) {
+  const [showCreate, setShowCreate] = useState(false)
+
   return (
-    <Modal title={t.tareTableTitle} subtitle={t.tareTableSub} onClose={onClose} maxWidth="max-w-3xl">
-      <div className="p-5">
-        <div className="flex justify-end mb-3">
-          <button onClick={() => onCreate({ manufacturer: 'Neu', material: 'PLA', weight: 200 })}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-xs font-semibold">
-            <Plus size={14} />{t.addTare}
+    <>
+      <Modal title={t.tareTableTitle} subtitle={t.tareTableSub} onClose={onClose} maxWidth="max-w-3xl">
+        <div className="p-5">
+          <div className="flex justify-end mb-3">
+            <button onClick={() => setShowCreate(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-xs font-semibold">
+              <Plus size={14} />{t.addTare}
+            </button>
+          </div>
+          <div className="border border-zinc-800 rounded-lg overflow-hidden max-h-[60vh] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-zinc-900 text-xs uppercase tracking-wider text-zinc-500 sticky top-0">
+                <tr>
+                  <th className="text-left px-3 py-2 font-medium">{t.manufacturer}</th>
+                  <th className="text-left px-3 py-2 font-medium">{t.material}</th>
+                  <th className="text-right px-3 py-2 font-medium">{t.weight} (g)</th>
+                  <th className="px-3 py-2 w-10" />
+                </tr>
+              </thead>
+              <tbody>
+                {tares.map((tr) => (
+                  <TareRow key={tr.id} tare={tr}
+                    onSave={(data) => onUpdate(tr.id, data)}
+                    onDelete={() => onDelete(tr.id)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div className="flex justify-end p-5 border-t border-zinc-800 bg-zinc-950/40 rounded-b-2xl">
+          <button onClick={onClose}
+            className="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-sm font-semibold">
+            {t.close}
           </button>
         </div>
-        <div className="border border-zinc-800 rounded-lg overflow-hidden max-h-[60vh] overflow-y-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-zinc-900 text-xs uppercase tracking-wider text-zinc-500 sticky top-0">
-              <tr>
-                <th className="text-left px-3 py-2 font-medium">{t.manufacturer}</th>
-                <th className="text-left px-3 py-2 font-medium">{t.material}</th>
-                <th className="text-right px-3 py-2 font-medium">{t.weight} (g)</th>
-                <th className="px-3 py-2 w-10" />
-              </tr>
-            </thead>
-            <tbody>
-              {tares.map((tr) => (
-                <TareRow key={tr.id} tare={tr}
-                  onSave={(data) => onUpdate(tr.id, data)}
-                  onDelete={() => onDelete(tr.id)}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
+      </Modal>
+
+      {showCreate && (
+        <AddTareEntryModal
+          t={t}
+          onClose={() => setShowCreate(false)}
+          onCreate={async (payload) => {
+            await onCreate(payload)
+            setShowCreate(false)
+          }}
+        />
+      )}
+    </>
+  )
+}
+
+function AddTareEntryModal({ t, onClose, onCreate }) {
+  const [manufacturer, setManufacturer] = useState('')
+  const [material, setMaterial] = useState('PLA')
+  const [weight, setWeight] = useState(200)
+  const valid = manufacturer.trim() && material.trim() && Number(weight) > 0
+
+  return (
+    <Modal title={t.addTare} onClose={onClose} maxWidth="max-w-md">
+      <div className="p-5 space-y-4">
+        <Field label={t.manufacturer} required>
+          <input value={manufacturer} onChange={(e) => setManufacturer(e.target.value)} className="input" />
+        </Field>
+        <Field label={t.material} required>
+          <input value={material} onChange={(e) => setMaterial(e.target.value)} className="input" />
+        </Field>
+        <Field label={`${t.weight} (g)`} required>
+          <input type="number" value={weight} onChange={(e) => setWeight(e.target.value)} className="input" />
+        </Field>
       </div>
-      <div className="flex justify-end p-5 border-t border-zinc-800 bg-zinc-950/40 rounded-b-2xl">
-        <button onClick={onClose}
-          className="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-sm font-semibold">
-          {t.close}
+      <div className="flex justify-end gap-2 p-5 border-t border-zinc-800 bg-zinc-950/40 rounded-b-2xl">
+        <button onClick={onClose} className="px-4 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 text-sm text-zinc-300">
+          {t.cancel}
+        </button>
+        <button
+          onClick={() => onCreate({ manufacturer: manufacturer.trim(), material: material.trim(), weight: Number(weight) })}
+          disabled={!valid}
+          className="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-sm font-semibold disabled:opacity-40"
+        >
+          {t.save}
         </button>
       </div>
     </Modal>

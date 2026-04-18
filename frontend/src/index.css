@@ -10,6 +10,56 @@ body {
   @apply bg-zinc-950 text-zinc-100 font-sans antialiased;
 }
 
+html[data-theme='light'] body {
+  @apply bg-zinc-100 text-zinc-900;
+}
+
+html[data-theme='light'] .bg-zinc-950,
+html[data-theme='light'] .bg-zinc-950\/80 {
+  @apply bg-zinc-100;
+}
+
+html[data-theme='light'] .bg-zinc-900,
+html[data-theme='light'] .bg-zinc-900\/40,
+html[data-theme='light'] .bg-zinc-900\/50,
+html[data-theme='light'] .bg-zinc-900\/70 {
+  @apply bg-white;
+}
+
+html[data-theme='light'] .border-zinc-800,
+html[data-theme='light'] .border-zinc-800\/70,
+html[data-theme='light'] .border-zinc-700 {
+  @apply border-zinc-300;
+}
+
+html[data-theme='light'] .text-zinc-100,
+html[data-theme='light'] .text-zinc-200,
+html[data-theme='light'] .text-zinc-300 {
+  @apply text-zinc-900;
+}
+
+html[data-theme='light'] .text-zinc-400,
+html[data-theme='light'] .text-zinc-500,
+html[data-theme='light'] .text-zinc-600 {
+  @apply text-zinc-600;
+}
+
+html[data-theme='light'] .input {
+  @apply bg-white border-zinc-300 text-zinc-900;
+}
+
+html[data-theme='light'] ::-webkit-scrollbar-track {
+  @apply bg-zinc-100;
+}
+
+html[data-theme='light'] ::-webkit-scrollbar-thumb {
+  @apply bg-zinc-300;
+}
+
+html[data-theme='light'] ::-webkit-scrollbar-thumb:hover {
+  @apply bg-zinc-400;
+}
+
 .input {
   @apply w-full bg-zinc-950 border border-zinc-800 text-zinc-100 rounded-md px-3 py-2 text-sm outline-none transition-colors;
 }

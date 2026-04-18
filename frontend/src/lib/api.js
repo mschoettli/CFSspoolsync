@@ -3,10 +3,11 @@
 const BASE = '/api'
 
 async function request(path, options = {}) {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...options,
-  })
+  const headers = { ...(options.headers || {}) }
+  if (!(options.body instanceof FormData) && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json'
+  }
+  const res = await fetch(`${BASE}${path}`, { ...options, headers })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`${res.status} ${res.statusText}: ${text}`)
@@ -53,4 +54,11 @@ export const api = {
   },
 
   health: () => request('/health'),
+
+  // OCR
+  scanSpoolLabel: (file) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request('/ocr/scan', { method: 'POST', body: form })
+  },
 }

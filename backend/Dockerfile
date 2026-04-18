@@ -10,6 +10,9 @@ WORKDIR /app
 # System dependencies (curl für healthcheck)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    tesseract-ocr-deu \
     && rm -rf /var/lib/apt/lists/*
 
 # Python dependencies

@@ -2,7 +2,7 @@
 export const TRANSLATIONS = {
   de: {
     appTitle: 'CFSspoolsync',
-    appSub: 'Live Daten · Creality K2 Combo',
+    appSub: '',
     dashboard: 'Dashboard',
     inventory: 'Spulenlager',
     history: 'Verlauf',
@@ -78,6 +78,17 @@ export const TRANSLATIONS = {
     errorLoading: 'Fehler beim Laden',
     retry: 'Erneut versuchen',
     confirmDeleteSpool: 'Diese Spule wirklich löschen?',
+    settings: 'Einstellungen',
+    settingsSub: 'Sprache, Theme und Tabellenzugriff',
+    language: 'Sprache',
+    theme: 'Theme',
+    darkMode: 'Dunkel',
+    lightMode: 'Hell',
+    open: 'Öffnen',
+    ocrTitle: 'Etikett scannen',
+    ocrSub: 'Liest Hersteller, Material und Gewicht direkt vom Spulenlabel.',
+    ocrScanAction: 'Scan starten',
+    ocrScanning: 'Scanne...',
 
     // Auto-Discovery / CFS
     cfsDetectedSpool: 'Spule erkannt',
@@ -92,7 +103,7 @@ export const TRANSLATIONS = {
   },
   en: {
     appTitle: 'CFSspoolsync',
-    appSub: 'Live data · Creality K2 Combo',
+    appSub: '',
     dashboard: 'Dashboard',
     inventory: 'Spool inventory',
     history: 'History',
@@ -168,6 +179,17 @@ export const TRANSLATIONS = {
     errorLoading: 'Error loading data',
     retry: 'Retry',
     confirmDeleteSpool: 'Delete this spool for real?',
+    settings: 'Settings',
+    settingsSub: 'Language, theme and table access',
+    language: 'Language',
+    theme: 'Theme',
+    darkMode: 'Dark',
+    lightMode: 'Light',
+    open: 'Open',
+    ocrTitle: 'Scan label',
+    ocrSub: 'Reads brand, material and weight directly from the spool label.',
+    ocrScanAction: 'Start scan',
+    ocrScanning: 'Scanning...',
 
     cfsDetectedSpool: 'Spool detected',
     unknownSpool: 'Unknown spool',

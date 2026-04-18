@@ -9,6 +9,7 @@ from .config import settings
 from .database import Base, SessionLocal, engine
 from .models import CfsSlotSnapshot, CfsState, Slot, Tare
 from .routes import history as history_routes
+from .routes import ocr as ocr_routes
 from .routes import slots as slot_routes
 from .routes import spools as spool_routes
 from .routes import tares as tare_routes
@@ -91,6 +92,7 @@ app.include_router(slot_routes.router, prefix=prefix)
 app.include_router(slot_routes.cfs_slots_router, prefix=prefix)
 app.include_router(history_routes.router, prefix=prefix)
 app.include_router(history_routes.cfs_router, prefix=prefix)
+app.include_router(ocr_routes.router, prefix=prefix)
 
 
 @app.get(f"{prefix}/health")

@@ -20,6 +20,18 @@ class Settings(BaseSettings):
     simulator_enabled: bool = True  # wenn moonraker_host leer → automatisch an
     simulator_flow_gps: float = 4.0   # Gramm pro Sekunde Referenz
 
+    # OCR + optional cloud normalization
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
+    ocr_enable_cloud_fallback: bool = True
+    ocr_openai_model: str = "gpt-4o-mini"
+    ocr_anthropic_model: str = "claude-3-5-haiku-latest"
+    ocr_cloud_timeout_s: float = 12.0
+    ocr_llm_max_chars: int = 4000
+    ocr_tesseract_lang: str = "eng+deu"
+    ocr_raw_text_limit: int = 5000
+    ocr_max_upload_mb: int = 8
+
     model_config = SettingsConfigDict(env_file=".env", env_prefix="CFS_")
 
 

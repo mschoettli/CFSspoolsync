@@ -1,19 +1,20 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
-  Thermometer, Droplets, Plus, Wifi, WifiOff, Box, Scale, Languages,
-  Edit3, Trash2, Activity, Package, ArrowRight, AlertCircle,
-  Play, Pause, X, Radio,
+  Thermometer, Droplets, Plus, Wifi, WifiOff, Box, Scale, Settings, LineChart,
+  Edit3, Trash2, Activity, Package, ArrowRight, AlertCircle, Sun, Moon,
+  Play, Pause, X,
 } from 'lucide-react'
 import { api } from './lib/api'
 import { createLiveSocket } from './lib/ws'
 import { TRANSLATIONS } from './i18n/translations'
-import { AddSpoolModal, TareTableModal, AssignSpoolModal } from './components/Modals'
+import { AddSpoolModal, TareTableModal, AssignSpoolModal, Modal } from './components/Modals'
 import { HistoryChart } from './components/HistoryChart'
 
 const fmt = (n, d = 0) => Number(n).toFixed(d)
 
 export default function App() {
   const [lang, setLang] = useState(() => localStorage.getItem('cfs_lang') || 'de')
+  const [theme, setTheme] = useState(() => localStorage.getItem('cfs_theme') || 'dark')
   const t = TRANSLATIONS[lang]
 
   const [spools, setSpools] = useState([])
@@ -27,11 +28,17 @@ export default function App() {
 
   const [showAddSpool, setShowAddSpool] = useState(false)
   const [showTareTable, setShowTareTable] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const [assignModalSlot, setAssignModalSlot] = useState(null)
   const [addSpoolForSlot, setAddSpoolForSlot] = useState(null)
   const [editingSpool, setEditingSpool] = useState(null)
 
   useEffect(() => { localStorage.setItem('cfs_lang', lang) }, [lang])
+  useEffect(() => {
+    localStorage.setItem('cfs_theme', theme)
+    document.documentElement.setAttribute('data-theme', theme)
+  }, [theme])
 
   // ---------- Initial load ----------
   const loadAll = useCallback(async () => {
@@ -139,23 +146,24 @@ export default function App() {
     : null
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <div className={`min-h-screen ${theme === 'light' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-950 text-zinc-100'}`}>
       <header className="sticky top-0 z-20 backdrop-blur bg-zinc-950/80 border-b border-zinc-800">
         <div className="max-w-7xl mx-auto px-5 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 to-cyan-600 flex items-center justify-center shadow-lg shadow-emerald-900/40">
-              <Box size={22} className="text-zinc-950" />
-            </div>
+            <SpoolScopeLogo />
             <div>
               <div className="font-semibold tracking-tight">{t.appTitle}</div>
-              <div className="text-xs text-zinc-500">{t.appSub}</div>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <ConnectionBadge cfs={cfs} wsStatus={wsStatus} t={t} />
-            <button onClick={() => setLang(lang === 'de' ? 'en' : 'de')}
+            <button onClick={() => setShowHistory(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-medium">
-              <Languages size={14} />{lang.toUpperCase()}
+              <LineChart size={14} />{t.historyTitle}
+            </button>
+            <button onClick={() => setShowSettings(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-medium">
+              <Settings size={14} />{t.settings}
             </button>
           </div>
         </div>
@@ -189,9 +197,6 @@ export default function App() {
             ))}
           </div>
         </section>
-
-        {/* History */}
-        <section><HistoryChart t={t} spools={spools} /></section>
 
         {/* Inventory */}
         <section>
@@ -252,11 +257,46 @@ export default function App() {
           onCreateNew={() => { setAssignModalSlot(null); openAddSpool(assignModalSlot) }}
         />
       )}
+
+      {showSettings && (
+        <SettingsModal
+          t={t}
+          lang={lang}
+          theme={theme}
+          onClose={() => setShowSettings(false)}
+          onToggleLang={() => setLang(lang === 'de' ? 'en' : 'de')}
+          onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          onOpenTares={() => {
+            setShowSettings(false)
+            setShowTareTable(true)
+          }}
+        />
+      )}
+
+      {showHistory && (
+        <HistoryModal
+          t={t}
+          spools={spools}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
     </div>
   )
 }
 
 // ---------- Sub-components ----------
+function SpoolScopeLogo() {
+  return (
+    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 to-cyan-600 flex items-center justify-center shadow-lg shadow-emerald-900/40">
+      <svg viewBox="0 0 40 40" className="w-7 h-7 text-zinc-950" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="20" cy="20" r="12" />
+        <circle cx="20" cy="20" r="4.5" />
+        <path d="M20 8v4M20 28v4M8 20h4M28 20h4" />
+      </svg>
+    </div>
+  )
+}
+
 function ConnectionBadge({ cfs, wsStatus, t }) {
   const ok = cfs.connected && wsStatus === 'open'
   return (
@@ -306,6 +346,40 @@ function EnvCard({ icon, label, value, unit, accent }) {
         </div>
       </div>
     </div>
+  )
+}
+
+function SettingsModal({ t, lang, theme, onClose, onToggleLang, onToggleTheme, onOpenTares }) {
+  return (
+    <Modal title={t.settings} subtitle={t.settingsSub} onClose={onClose} maxWidth="max-w-lg">
+      <div className="p-5 space-y-3">
+        <button onClick={onToggleLang} className="w-full flex items-center justify-between px-3 py-2 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-sm">
+          <span>{t.language}</span>
+          <span className="font-semibold">{lang.toUpperCase()}</span>
+        </button>
+        <button onClick={onToggleTheme} className="w-full flex items-center justify-between px-3 py-2 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-sm">
+          <span>{t.theme}</span>
+          <span className="inline-flex items-center gap-1 font-semibold">
+            {theme === 'dark' ? <Moon size={14} /> : <Sun size={14} />}
+            {theme === 'dark' ? t.darkMode : t.lightMode}
+          </span>
+        </button>
+        <button onClick={onOpenTares} className="w-full flex items-center justify-between px-3 py-2 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-sm">
+          <span>{t.tareTableTitle}</span>
+          <span className="text-emerald-400">{t.open}</span>
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
+function HistoryModal({ t, spools, onClose }) {
+  return (
+    <Modal title={t.historyTitle} subtitle={t.historySub} onClose={onClose} maxWidth="max-w-6xl">
+      <div className="p-5">
+        <HistoryChart t={t} spools={spools} />
+      </div>
+    </Modal>
   )
 }
 
@@ -364,22 +438,13 @@ function DetectedSlotPanel({ t, slot, snap, onAddNew }) {
   const known = snap.known
   const borderColor = known ? 'border-cyan-800/60' : 'border-amber-800/60'
   const bgAccent = known ? 'from-cyan-500/5' : 'from-amber-500/5'
-  const badgeClass = known
-    ? 'bg-cyan-950/70 border-cyan-800/60 text-cyan-300'
-    : 'bg-amber-950/70 border-amber-800/60 text-amber-300'
 
   return (
     <div className={`relative rounded-xl border bg-zinc-900/50 p-4 overflow-hidden ${borderColor}`}>
       <div className={`absolute inset-0 bg-gradient-to-br ${bgAccent} to-transparent pointer-events-none`} />
 
       <div className="relative flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div className="text-xs font-mono font-semibold text-zinc-500">{t.slot} {slot.id}</div>
-          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold uppercase tracking-wide ${badgeClass}`}>
-            <Radio size={10} className="animate-pulse" />
-            {known ? t.cfsDetectedSpool : t.unknownSpool}
-          </span>
-        </div>
+        <div className="text-xs font-mono font-semibold text-zinc-500">{t.slot} {slot.id}</div>
       </div>
 
       <div className="relative flex items-start gap-3 mb-3">

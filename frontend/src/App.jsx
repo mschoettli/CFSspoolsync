@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Thermometer, Droplets, Plus, Wifi, WifiOff, Box, Scale, Languages,
   Edit3, Trash2, Activity, Printer, Package, ArrowRight, AlertCircle,
-  Play, Pause, X,
+  Play, Pause, X, Radio,
 } from 'lucide-react'
 import { api } from './lib/api'
 import { createLiveSocket } from './lib/ws'
@@ -18,12 +18,7 @@ export default function App() {
 
   const [spools, setSpools] = useState([])
   const [tares, setTares] = useState([])
-  const [slots, setSlots] = useState([
-    { id: 1, spool_id: null, current_weight: 0, is_printing: false, flow: 0, spool: null },
-    { id: 2, spool_id: null, current_weight: 0, is_printing: false, flow: 0, spool: null },
-    { id: 3, spool_id: null, current_weight: 0, is_printing: false, flow: 0, spool: null },
-    { id: 4, spool_id: null, current_weight: 0, is_printing: false, flow: 0, spool: null },
-  ])
+  const [slots, setSlots] = useState([])
   const [cfs, setCfs] = useState({
     temperature: 25, humidity: 20, connected: false, last_sync: new Date().toISOString(),
   })
@@ -36,10 +31,9 @@ export default function App() {
   const [addSpoolForSlot, setAddSpoolForSlot] = useState(null)
   const [editingSpool, setEditingSpool] = useState(null)
 
-  // ---------- Sprachpräferenz persistieren ----------
   useEffect(() => { localStorage.setItem('cfs_lang', lang) }, [lang])
 
-  // ---------- Initial-Load ----------
+  // ---------- Initial load ----------
   const loadAll = useCallback(async () => {
     try {
       const [sp, tr, sl, cf] = await Promise.all([
@@ -56,7 +50,7 @@ export default function App() {
 
   useEffect(() => { loadAll() }, [loadAll])
 
-  // ---------- Live-WebSocket ----------
+  // ---------- Live WebSocket ----------
   useEffect(() => {
     const sock = createLiveSocket(
       (msg) => {
@@ -70,7 +64,7 @@ export default function App() {
     return () => sock.close()
   }, [])
 
-  // ---------- "Letzter Sync"-Counter ----------
+  // ---------- Sync counter ----------
   useEffect(() => {
     const iv = setInterval(() => {
       const since = Math.floor((Date.now() - new Date(cfs.last_sync).getTime()) / 1000)
@@ -79,8 +73,7 @@ export default function App() {
     return () => clearInterval(iv)
   }, [cfs.last_sync])
 
-  // ---------- Derived state ----------
-  const getSpool = useCallback((id) => spools.find((s) => s.id === id), [spools])
+  // ---------- Derived ----------
   const assignedIds = slots.map((s) => s.spool_id).filter(Boolean)
   const shelfSpools = spools.filter((s) => !assignedIds.includes(s.id))
 
@@ -147,20 +140,17 @@ export default function App() {
     await api.togglePrint(slotId, !cur)
   }
 
-  // Tara actions
-  const createTare = async (data) => { await api.createTare(data); const t2 = await api.listTares(); setTares(t2) }
-  const updateTare = async (id, data) => { await api.updateTare(id, data); const t2 = await api.listTares(); setTares(t2) }
-  const deleteTare = async (id) => { await api.deleteTare(id); const t2 = await api.listTares(); setTares(t2) }
+  const createTare = async (data) => { await api.createTare(data); setTares(await api.listTares()) }
+  const updateTare = async (id, data) => { await api.updateTare(id, data); setTares(await api.listTares()) }
+  const deleteTare = async (id) => { await api.deleteTare(id); setTares(await api.listTares()) }
 
-  const cfsDetectedGrossForSlot = (slotId) => {
-    const sl = slots.find((s) => s.id === slotId)
-    if (sl && sl.current_weight > 0) return sl.current_weight
-    return 1200
-  }
+  // CFS-Snapshot für aktuelles Add-Modal (aus slot embedded)
+  const activeSnapshot = addSpoolForSlot
+    ? slots.find((s) => s.id === addSpoolForSlot)?.cfs_snapshot
+    : null
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      {/* ---------- Header ---------- */}
       <header className="sticky top-0 z-20 backdrop-blur bg-zinc-950/80 border-b border-zinc-800">
         <div className="max-w-7xl mx-auto px-5 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -174,25 +164,20 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2">
             <ConnectionBadge cfs={cfs} wsStatus={wsStatus} t={t} />
-            <button
-              onClick={() => setLang(lang === 'de' ? 'en' : 'de')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-medium"
-            >
-              <Languages size={14} />
-              {lang.toUpperCase()}
+            <button onClick={() => setLang(lang === 'de' ? 'en' : 'de')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-medium">
+              <Languages size={14} />{lang.toUpperCase()}
             </button>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-5 py-6 space-y-8">
-        {/* ---------- CFS Environment + KPIs ---------- */}
+        {/* CFS Environment + KPIs */}
         <section>
-          <SectionHead
-            title={t.cfsStatus}
+          <SectionHead title={t.cfsStatus}
             subtitle={`${t.lastSync}: ${lastSyncAgo} ${t.secondsAgo}`}
-            icon={<Activity size={18} />}
-          />
+            icon={<Activity size={18} />} />
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <EnvCard icon={<Thermometer size={18} />} label={t.temperature} value={fmt(cfs.temperature, 1)} unit="°C" accent="amber" />
             <EnvCard icon={<Droplets size={18} />} label={t.humidity} value={fmt(cfs.humidity, 1)} unit="%" accent="cyan" />
@@ -202,15 +187,12 @@ export default function App() {
           </div>
         </section>
 
-        {/* ---------- 4 Slot Panels ---------- */}
+        {/* 4 Slot Panels */}
         <section>
           <SectionHead title={t.dashboard} subtitle={`CFS ${t.slot} 1–4`} icon={<Box size={18} />} />
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             {slots.map((slot) => (
-              <SlotPanel
-                key={slot.id}
-                t={t}
-                slot={slot}
+              <SlotPanel key={slot.id} t={t} slot={slot}
                 onAssign={() => setAssignModalSlot(slot.id)}
                 onUnassign={() => doUnassign(slot.id)}
                 onTogglePrint={() => doTogglePrint(slot.id, slot.is_printing)}
@@ -221,25 +203,24 @@ export default function App() {
           </div>
         </section>
 
-        {/* ---------- History Chart ---------- */}
-        <section>
-          <HistoryChart t={t} spools={spools} />
-        </section>
+        {/* History */}
+        <section><HistoryChart t={t} spools={spools} /></section>
 
-        {/* ---------- Inventory ---------- */}
+        {/* Inventory */}
         <section>
           <div className="flex items-center justify-between mb-3">
             <SectionHead title={t.inventory} subtitle={`${spools.length} ${t.spoolCount.toLowerCase()}`} icon={<Package size={18} />} compact />
             <div className="flex gap-2">
-              <button onClick={() => setShowTareTable(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-medium text-zinc-300">
+              <button onClick={() => setShowTareTable(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-medium text-zinc-300">
                 <Scale size={14} />{t.manageTares}
               </button>
-              <button onClick={() => openAddSpool(null)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-xs font-semibold">
+              <button onClick={() => openAddSpool(null)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-xs font-semibold">
                 <Plus size={14} />{t.addSpool}
               </button>
             </div>
           </div>
-
           {spools.length === 0 ? (
             <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/50 p-10 text-center">
               <Package size={32} className="mx-auto text-zinc-600 mb-3" />
@@ -252,7 +233,7 @@ export default function App() {
         </section>
 
         <footer className="text-center text-xs text-zinc-600 pt-6 pb-2">
-          CFSspoolsync · <a href="https://github.com" className="hover:text-zinc-400">github.com/mschoettli/CFSspoolsync</a>
+          CFSspoolsync · <a href="https://github.com/mschoettli/CFSspoolsync" className="hover:text-zinc-400">github.com/mschoettli/CFSspoolsync</a>
         </footer>
       </main>
 
@@ -262,7 +243,7 @@ export default function App() {
           tares={tares}
           editing={editingSpool}
           targetSlot={addSpoolForSlot}
-          cfsGross={addSpoolForSlot ? cfsDetectedGrossForSlot(addSpoolForSlot) : null}
+          cfsSnapshot={activeSnapshot}
           cfsConnected={cfs.connected}
           onClose={() => { setShowAddSpool(false); setAddSpoolForSlot(null); setEditingSpool(null) }}
           onSave={saveSpool}
@@ -271,20 +252,13 @@ export default function App() {
       )}
 
       {showTareTable && (
-        <TareTableModal
-          t={t}
-          tares={tares}
-          onCreate={createTare}
-          onUpdate={updateTare}
-          onDelete={deleteTare}
-          onClose={() => setShowTareTable(false)}
-        />
+        <TareTableModal t={t} tares={tares}
+          onCreate={createTare} onUpdate={updateTare} onDelete={deleteTare}
+          onClose={() => setShowTareTable(false)} />
       )}
 
       {assignModalSlot !== null && (
-        <AssignSpoolModal
-          t={t}
-          slotId={assignModalSlot}
+        <AssignSpoolModal t={t} slotId={assignModalSlot}
           shelfSpools={shelfSpools}
           onClose={() => setAssignModalSlot(null)}
           onAssign={(spId) => doAssignSpool(assignModalSlot, spId)}
@@ -348,32 +322,140 @@ function EnvCard({ icon, label, value, unit, accent }) {
   )
 }
 
+/**
+ * SlotPanel — zeigt drei Zustände:
+ * A) Spule zugewiesen → normales Panel mit Live-Gewicht
+ * B) Kein Slot-Spool aber CFS hat Spule erkannt → "Erkannte Spule"-Panel
+ *    mit CTA zum Hinzufügen
+ * C) Alles leer → "Leerer Slot" mit manuellem Assign/Add
+ */
 function SlotPanel({ t, slot, onAssign, onUnassign, onTogglePrint, onAddNew, onEdit }) {
   const spool = slot.spool
+  const snap = slot.cfs_snapshot
 
-  if (!spool) {
-    return (
-      <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 p-4 flex flex-col">
-        <div className="flex items-center justify-between">
-          <div className="text-xs font-mono font-semibold text-zinc-500">{t.slot} {slot.id}</div>
-          <div className="text-xs px-2 py-0.5 rounded-full bg-zinc-800/70 text-zinc-500 border border-zinc-800">{t.empty}</div>
-        </div>
-        <div className="flex-1 flex flex-col items-center justify-center py-8 text-center">
-          <Box size={28} className="text-zinc-700 mb-2" />
-          <div className="text-sm text-zinc-500">{t.emptyHint}</div>
-        </div>
-        <div className="flex gap-2 mt-auto">
-          <button onClick={onAssign} className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-200">
-            <ArrowRight size={14} />{t.assignSpool}
-          </button>
-          <button onClick={onAddNew} className="flex items-center justify-center px-3 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-zinc-950">
-            <Plus size={14} />
-          </button>
-        </div>
-      </div>
-    )
+  // ZUSTAND A: Spule eingelegt
+  if (spool) {
+    return <AssignedSlotPanel t={t} slot={slot} spool={spool}
+      onUnassign={onUnassign} onTogglePrint={onTogglePrint} onEdit={onEdit} />
   }
 
+  // ZUSTAND B: CFS hat Spule erkannt, aber im Lager noch nicht angelegt
+  if (snap && snap.present) {
+    return <DetectedSlotPanel t={t} slot={slot} snap={snap} onAddNew={onAddNew} />
+  }
+
+  // ZUSTAND C: Slot komplett leer
+  return <EmptySlotPanel t={t} slot={slot} onAssign={onAssign} onAddNew={onAddNew} />
+}
+
+function EmptySlotPanel({ t, slot, onAssign, onAddNew }) {
+  return (
+    <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 p-4 flex flex-col">
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-mono font-semibold text-zinc-500">{t.slot} {slot.id}</div>
+        <div className="text-xs px-2 py-0.5 rounded-full bg-zinc-800/70 text-zinc-500 border border-zinc-800">{t.empty}</div>
+      </div>
+      <div className="flex-1 flex flex-col items-center justify-center py-8 text-center">
+        <Box size={28} className="text-zinc-700 mb-2" />
+        <div className="text-sm text-zinc-500">{t.emptyHint}</div>
+      </div>
+      <div className="flex gap-2 mt-auto">
+        <button onClick={onAssign}
+          className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-200">
+          <ArrowRight size={14} />{t.assignSpool}
+        </button>
+        <button onClick={onAddNew}
+          className="flex items-center justify-center px-3 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-zinc-950">
+          <Plus size={14} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function DetectedSlotPanel({ t, slot, snap, onAddNew }) {
+  const known = snap.known
+  const borderColor = known ? 'border-cyan-800/60' : 'border-amber-800/60'
+  const bgAccent = known ? 'from-cyan-500/5' : 'from-amber-500/5'
+  const badgeClass = known
+    ? 'bg-cyan-950/70 border-cyan-800/60 text-cyan-300'
+    : 'bg-amber-950/70 border-amber-800/60 text-amber-300'
+
+  return (
+    <div className={`relative rounded-xl border bg-zinc-900/50 p-4 overflow-hidden ${borderColor}`}>
+      <div className={`absolute inset-0 bg-gradient-to-br ${bgAccent} to-transparent pointer-events-none`} />
+
+      <div className="relative flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className="text-xs font-mono font-semibold text-zinc-500">{t.slot} {slot.id}</div>
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold uppercase tracking-wide ${badgeClass}`}>
+            <Radio size={10} className="animate-pulse" />
+            {known ? t.cfsDetectedSpool : t.unknownSpool}
+          </span>
+        </div>
+      </div>
+
+      <div className="relative flex items-start gap-3 mb-3">
+        <div className="relative shrink-0">
+          <div className="w-14 h-14 rounded-full border-2 border-zinc-700 shadow-inner"
+            style={{ background: snap.color_hex || '#6b7280' }} />
+          <div className="absolute inset-2 rounded-full border border-zinc-800/80" />
+          <div className="absolute inset-[1.25rem] rounded-full bg-zinc-950/60" />
+        </div>
+        <div className="flex-1 min-w-0">
+          {known ? (
+            <>
+              <div className="text-sm font-semibold text-zinc-100 truncate">{snap.manufacturer}</div>
+              <div className="text-xs text-zinc-400 truncate">{snap.material}</div>
+              <div className="text-xs text-zinc-600 mt-0.5 font-mono">
+                Code {snap.material_code} · {snap.color_hex}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-sm font-semibold text-amber-300 truncate">{t.unknownSpool}</div>
+              <div className="text-xs text-zinc-500 truncate font-mono">
+                {t.materialCode}: {snap.material_code || '—'}
+              </div>
+              <div className="text-xs text-zinc-600 mt-0.5 font-mono">{snap.color_hex}</div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Remaining in % — kein Gewicht da keine Spule angelegt */}
+      {snap.remain_pct != null && (
+        <div className="relative space-y-1 mb-3">
+          <div className="flex items-baseline justify-between">
+            <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">
+              {t.remaining}
+            </span>
+            <span className="text-xs tabular-nums text-zinc-400">{fmt(snap.remain_pct, 0)}%</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+            <div className={`h-full transition-all duration-500 ${
+              known ? 'bg-gradient-to-r from-cyan-500 to-emerald-400'
+                    : 'bg-gradient-to-r from-amber-500 to-amber-400'
+            }`} style={{ width: `${snap.remain_pct}%` }} />
+          </div>
+        </div>
+      )}
+
+      <div className="relative">
+        <button onClick={onAddNew}
+          className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold transition ${
+            known
+              ? 'bg-cyan-600 hover:bg-cyan-500 text-zinc-950'
+              : 'bg-amber-600 hover:bg-amber-500 text-zinc-950'
+          }`}>
+          <Plus size={14} />{t.assignToInventory}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function AssignedSlotPanel({ t, slot, spool, onUnassign, onTogglePrint, onEdit }) {
   const net = Math.max(0, slot.current_weight - spool.tare_weight)
   const pct = Math.min(100, (net / 1000) * 100)
   const low = net < 100
@@ -434,10 +516,9 @@ function SlotPanel({ t, slot, onAssign, onUnassign, onTogglePrint, onAddNew, onE
           )}
         </div>
         <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-          <div
-            className={`h-full transition-all duration-500 ${low ? 'bg-gradient-to-r from-red-500 to-amber-400' : 'bg-gradient-to-r from-emerald-500 to-cyan-400'}`}
-            style={{ width: `${pct}%` }}
-          />
+          <div className={`h-full transition-all duration-500 ${
+            low ? 'bg-gradient-to-r from-red-500 to-amber-400' : 'bg-gradient-to-r from-emerald-500 to-cyan-400'
+          }`} style={{ width: `${pct}%` }} />
         </div>
         <div className="flex justify-between text-[10px] text-zinc-600 pt-0.5 font-mono">
           <span>{t.grossWeight} {fmt(slot.current_weight, 0)}g</span>
@@ -446,18 +527,17 @@ function SlotPanel({ t, slot, onAssign, onUnassign, onTogglePrint, onAddNew, onE
       </div>
 
       <div className="relative flex gap-2">
-        <button
-          onClick={onTogglePrint}
+        <button onClick={onTogglePrint}
           className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium transition ${
             slot.is_printing
               ? 'bg-red-900/50 hover:bg-red-900/70 text-red-300 border border-red-800/60'
               : 'bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-800/60'
-          }`}
-        >
+          }`}>
           {slot.is_printing ? <Pause size={13} /> : <Play size={13} />}
           {slot.is_printing ? t.stopPrint : t.startPrint}
         </button>
-        <button onClick={onUnassign} className="px-2 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-400 border border-zinc-800">
+        <button onClick={onUnassign}
+          className="px-2 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-400 border border-zinc-800">
           <X size={13} />
         </button>
       </div>

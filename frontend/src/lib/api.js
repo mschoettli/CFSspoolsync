@@ -44,6 +44,8 @@ export const api = {
 
   // CFS + History
   getCfs: () => request('/cfs'),
+  getCfsSlots: () => request('/cfs/slots'),
+  getCfsSlot: (slotId) => request(`/cfs/slots/${slotId}`),
   getHistory: (days = 7, slotId = null) => {
     const q = new URLSearchParams({ days: String(days) })
     if (slotId !== null) q.set('slot_id', String(slotId))

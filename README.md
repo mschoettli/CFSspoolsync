@@ -1,147 +1,121 @@
 # CFSspoolsync
 
-Web-App zum Live-Tracking des Creality CFS (Creality Filament System) am K2 Combo. Zeigt Kammer-Temperatur und -Feuchtigkeit, die vier Slots mit eingelegten Spulen, einen Spulenlager-Bestand und den Filament-Verbrauch live während des Drucks.
+CFSspoolsync is a web app for tracking Creality K2 Combo CFS slots, spool inventory, and filament consumption with live updates.
 
-- **FastAPI-Backend** mit SQLite-Persistenz, WebSocket-Live-Updates und Moonraker-Bridge
-- **React-Frontend** mit Tailwind, Recharts-History und DE/EN-Umschaltung
-- **Docker-Compose-Stack** mit Watchtower für Zero-Touch-Updates nach `git push`
-- **GitHub Actions** baut bei jedem Push nach `main` Multi-Arch-Images (amd64/arm64) und pusht sie nach GHCR
+It combines:
+- A FastAPI backend with SQLite persistence
+- A React frontend with real-time updates over WebSocket
+- OCR-assisted spool creation
+- Docker Compose deployment with optional Watchtower auto-updates
 
-## Features
+<!-- screenshot: dashboard-overview -->
 
-- 4 Slot-Panels mit Live-Gewicht, Flow-Rate während des Drucks und Low-Filament-Warnung
-- Spulen-Verwaltung (Hersteller, Material, Farbe, Durchmesser, Temperaturen, Brutto-/Tara-/Nettogewicht)
-- Tara-Tabelle mit 20 vorgepflegten Community-Referenzwerten (Bambu Lab, Creality, eSun, Polymaker, Prusament usw.), inline editierbar
-- Dashboard-KPIs: Kammer-Klima, Gesamt-Filament, aktive Slots
-- Verbrauchsverlauf als Chart (24 h / 7 Tage / 30 Tage)
-- WebSocket-Broadcast aktualisiert alle Clients gleichzeitig
-- Simulator-Modus für Demo/Entwicklung ohne echten Drucker
+## Current Feature Set
+
+- Live CFS environment data: temperature, humidity, connection status
+- Four slot panels with:
+  - Assigned spool details
+  - Remaining weight derived from live CFS data
+  - Automatic print-state display (Moonraker-driven, no manual print button)
+- Inventory management:
+  - Create, edit, delete spools
+  - Assign/unassign to slots
+  - Color name and HEX synchronization (`color` or `color_hex`)
+- Tare management modal:
+  - Community defaults + custom entries
+  - Inline editing and dedicated add-entry modal
+- History modal (24h / 7d / 30d) based on backend history records
+- Settings modal:
+  - Language toggle (DE/EN)
+  - Theme toggle (dark/light)
+  - Quick access to tare management
+- OCR spool label scan:
+  - Tesseract-based extraction
+  - Optional OpenAI/Anthropic post-processing fallback (server-side only)
+
+<!-- screenshot: settings-and-history -->
+<!-- screenshot: tare-management-modal -->
+<!-- screenshot: add-spool-ocr-modal -->
+
+## K2 Slot Refresh Workflow (Important)
+
+CFS data is polled continuously, but slot metadata and remaining values are only updated after the slot is re-read on the K2 UI.
+
+On the K2 screen:
+1. Open the CFS view.
+2. Tap the colored spool.
+3. Tap the slot refresh arrow above the slot.
+4. Wait for the next backend poll cycle; values appear in the web app.
+
+<!-- screenshot: slot-refresh-on-k2 -->
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/<DEIN-USER>/CFSspoolsync.git
+git clone https://github.com/<your-user>/CFSspoolsync.git
 cd CFSspoolsync
 cp .env.example .env
-# .env anpassen (siehe unten)
+# Edit .env (required)
 docker compose up -d
 ```
 
-Dann auf `http://<dein-host>:8088` öffnen.
+Open:
+- `http://<host>:8088` (or your configured `HTTP_PORT`)
 
-Beim ersten Start legt das Backend automatisch 4 leere Slots, die Default-Tara-Tabelle und eine CFS-State-Row an. Die SQLite-Datenbank wird im Docker-Volume `cfs-data` persistiert.
+## Configuration
 
-## Konfiguration
+Personal values (printer IP/hostname, API keys, private endpoints) must be stored only in `.env`.
+Do not hardcode personal values in tracked repository files.
 
-Alle Werte in `.env`:
+### Required / Common `.env` Variables
 
-| Variable | Default | Beschreibung |
+| Variable | Example / Default | Notes |
 |---|---|---|
-| `REGISTRY` | `ghcr.io/mschoettli` | GHCR-Namespace für die Images |
-| `TAG` | `latest` | Image-Tag |
-| `HTTP_PORT` | `8088` | Port für die Web-UI |
-| `CFS_MOONRAKER_HOST` | *(leer)* | IP/Hostname des K2 — leer = Simulator-Mode |
-| `CFS_MOONRAKER_PORT` | `80` | Moonraker-Port |
-| `TZ` | `Europe/Zurich` | Zeitzone |
+| `REGISTRY` | `ghcr.io/mschoettli` | Image namespace |
+| `TAG` | `latest` | Image tag |
+| `HTTP_PORT` | `8088` | Frontend port |
+| `CFS_MOONRAKER_HOST` | *(set your own)* | Required for live K2 mode |
+| `CFS_MOONRAKER_PORT` | `7125` | Moonraker API port |
+| `TZ` | `Europe/Zurich` | Container timezone |
+| `CFS_OPENAI_API_KEY` | *(optional)* | OCR cloud fallback |
+| `CFS_ANTHROPIC_API_KEY` | *(optional)* | OCR cloud fallback |
+| `CFS_OCR_ENABLE_CLOUD_FALLBACK` | `true` | Enable/disable cloud OCR normalization |
 
-### Simulator vs. Live-Mode
+### Live Mode vs Simulator
 
-**Simulator (default):** `CFS_MOONRAKER_HOST` leer lassen → das Backend erzeugt realistisch wobbelnde Temperatur- und Feuchtigkeitswerte und simuliert Druckverbrauch auf Slots, die auf „Druckt" geschaltet sind. Ideal für Demo und UI-Entwicklung.
+- Live mode: set `CFS_MOONRAKER_HOST` to your K2 host/IP.
+- Simulator mode: leave `CFS_MOONRAKER_HOST` empty.
 
-**Live-Mode:** `CFS_MOONRAKER_HOST=192.168.x.x` setzen → das Backend pollt alle 2 s `http://<host>:<port>/printer/objects/query?box&extruder&cfs` und zieht Temperatur/Feuchtigkeit aus dem `box`- oder `cfs`-Objekt.
+## Deployment
 
-> **Hinweis zur K2-Combo-Firmware:** Die stock OpenWrt-basierte Moonraker-Version des K2 Combo unterstützt je nach Firmware-Version unterschiedliche Objekt-Namen. Der Parser in `backend/app/services/cfs_bridge.py` deckt die zwei gängigsten Varianten ab (`box` und `cfs`). Falls deine Firmware andere Felder liefert, passe das Mapping in `_poll_moonraker()` an.
-
-## Auto-Update
-
-Der Stack enthält drei Services:
-
-1. **backend** — FastAPI + SQLite (Volume `cfs-data`)
-2. **frontend** — nginx serviert das React-Build, proxied `/api` und `/ws` zum Backend
-3. **watchtower** — überwacht alle 5 min die Registry und zieht neue Images automatisch
-
-### Auto-Update-Kette
-
-```
- ┌──────────┐    git push main    ┌──────────────┐
- │  Laptop  │────────────────────▶│    GitHub    │
- └──────────┘                     └──────┬───────┘
-                                         │ trigger
-                                         ▼
-                                  ┌──────────────┐
-                                  │ GH Actions   │
-                                  │ build & push │
-                                  └──────┬───────┘
-                                         │ push :latest
-                                         ▼
-                                  ┌──────────────┐
-                                  │ ghcr.io      │
-                                  └──────┬───────┘
-                                         │ poll (5 min)
-                                         ▼
- ┌──────────────────────────────────────────────┐
- │  Proxmox-Host                                │
- │   ┌──────────┐   ┌──────────┐   ┌─────────┐  │
- │   │ backend  │   │ frontend │   │watchtower│ │
- │   └──────────┘   └──────────┘   └─────────┘  │
- └──────────────────────────────────────────────┘
-```
-
-Nach `git push` auf `main`:
-1. GitHub Actions baut beide Images (amd64 + arm64) und pusht nach `ghcr.io/<user>/cfsspoolsync-{backend,frontend}:latest`
-2. Watchtower erkennt den neuen `latest`-Digest spätestens nach 5 min
-3. Watchtower zieht die neuen Images, stoppt die alten Container und startet neue — SQLite-Volume bleibt bestehen
-
-### Manuelles Update
-
-Falls du Watchtower nicht willst oder sofort updaten möchtest:
+### Standard (prebuilt images)
 
 ```bash
-./update.sh
+docker compose up -d
 ```
 
-Macht `git pull`, `docker compose pull`, `docker compose up -d`, und räumt alte Images auf.
-
-### Einrichtung der Registry
-
-Für öffentliche Repos funktioniert GHCR ohne zusätzliche Secrets — der `GITHUB_TOKEN` im Workflow reicht. Für private Images:
-
-1. In deinen GitHub-Settings ein Personal Access Token mit `write:packages`-Scope erzeugen
-2. Auf dem Host:
-   ```bash
-   echo $GHCR_PAT | docker login ghcr.io -u <github-user> --password-stdin
-   ```
-3. Danach liest auch Watchtower die Credentials aus `~/.docker/config.json`
-
-## Lokales Bauen (ohne Registry)
-
-Wenn du komplett ohne GitHub und GHCR laufen willst, nutze das Build-Override:
+### Local build override
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
-Watchtower ignoriert lokal gebaute Images (Label-Opt-Out), aktualisiert also nichts automatisch. Für ein Update nach Code-Änderung:
+## Development
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
-```
-
-## Entwicklung
-
-### Backend lokal
+### Backend
 
 ```bash
 cd backend
 python -m venv .venv
+# Linux/macOS:
 source .venv/bin/activate
+# Windows PowerShell:
+# .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Backend läuft dann auf `http://localhost:8000`, OpenAPI-Docs unter `/docs`.
-
-### Frontend lokal
+### Frontend
 
 ```bash
 cd frontend
@@ -149,75 +123,52 @@ npm install
 npm run dev
 ```
 
-Frontend läuft auf `http://localhost:5173`. Requests an `/api` und `/ws` werden per Vite-Proxy an `http://localhost:8000` weitergeleitet (siehe `vite.config.js`). Wenn das Backend auf einem anderen Host läuft:
+## API Overview (Active Stack)
 
-```bash
-VITE_BACKEND_URL=http://192.168.1.10:8000 npm run dev
-```
+All endpoints are under `/api`.
 
-## API-Übersicht
+### Spools
+- `GET /spools`
+- `POST /spools`
+- `GET /spools/{spool_id}`
+- `PATCH /spools/{spool_id}`
+- `DELETE /spools/{spool_id}`
 
-Alle Endpunkte unter `/api/`:
+### Tares
+- `GET /tares`
+- `POST /tares`
+- `PATCH /tares/{tare_id}`
+- `DELETE /tares/{tare_id}`
 
-| Methode | Pfad | Zweck |
-|---|---|---|
-| `GET` | `/spools` | Alle Spulen |
-| `POST` | `/spools` | Neue Spule (optional `assign_to_slot`) |
-| `PATCH` | `/spools/{id}` | Spule bearbeiten |
-| `DELETE` | `/spools/{id}` | Spule löschen |
-| `GET` | `/tares` | Tara-Tabelle |
-| `POST/PATCH/DELETE` | `/tares[/{id}]` | Tara-CRUD |
-| `GET` | `/slots` | Alle 4 Slots |
-| `POST` | `/slots/{id}/assign` | Spule in Slot einlegen |
-| `POST` | `/slots/{id}/unassign` | Slot leeren |
-| `POST` | `/slots/{id}/print` | Druck starten/stoppen |
-| `GET` | `/cfs` | Aktueller CFS-State |
-| `GET` | `/history?days=7&slot_id=1` | Verbrauchsverlauf |
-| `GET` | `/health` | Healthcheck |
+### Slots
+- `GET /slots`
+- `POST /slots/{slot_id}/assign`
+- `POST /slots/{slot_id}/unassign`
+- `GET /cfs/slots`
+- `GET /cfs/slots/{slot_id}`
 
-**WebSocket:** `ws://<host>/ws` broadcastet bei jedem Backend-Tick (1 s) ein JSON mit aktuellem CFS-State und allen Slots:
+### CFS + History + OCR
+- `GET /cfs`
+- `GET /history?days=7&slot_id=1`
+- `POST /ocr/scan`
+- `GET /health`
 
-```json
-{
-  "type": "live",
-  "data": {
-    "cfs": {"temperature": 28.4, "humidity": 17.8, "connected": true, "last_sync": "..."},
-    "slots": [{"id": 1, "spool_id": 5, "current_weight": 894.2, "is_printing": true, "flow": 4.12, "spool": {...}}, ...]
-  }
-}
-```
+### WebSocket
+- `ws://<host>/ws`
+- Broadcast payload type: `live`
 
-## Datenmodell
+## Architecture
 
-```
-spools                    tares
-─────────                 ────────
-id                        id
-manufacturer              manufacturer
-material                  material
-color, color_hex          weight
-diameter                  updated_at
-nozzle_temp, bed_temp
-gross_weight              slots
-tare_weight               ─────
-name                      id (1..4)
-created_at, updated_at    spool_id  ──→  spools.id
-                          current_weight
-history                   is_printing
-────────                  flow
-id                        updated_at
-timestamp
-slot_id                   cfs_state
-spool_id                  ─────────
-net_weight                id (=1)
-consumed                  temperature, humidity
-temperature, humidity     connected, last_sync
-```
+- Backend: `backend/app/main.py` + `backend/app/routes/*`
+- Live bridge: `backend/app/services/cfs_bridge.py`
+- Frontend: `frontend/src/App.jsx` and `frontend/src/components/*`
+- Persistence: SQLite at `/app/data/cfs.db` inside backend container
 
-## Lizenz
+## Troubleshooting
 
-MIT — siehe [LICENSE](LICENSE).
+See:
+- [Troubleshooting Guide](docs/troubleshooting.md)
 
-## Tara-Referenzwerte
+## License
 
-Die 20 vorgeladenen Leerspulen-Gewichte basieren auf der [stlDenise3D-Community-Datenbank](https://stldenise3d.com/how-much-do-empty-spools-weigh/) und dem [Printables Empty Spool Catalog](https://www.printables.com/model/464663-empty-spool-weight-catalog). Korrekturen und Ergänzungen einfach über das Tara-Modal im UI.
+MIT. See [LICENSE](LICENSE).

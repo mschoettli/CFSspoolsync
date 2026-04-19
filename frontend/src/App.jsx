@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Thermometer, Droplets, Plus, Wifi, WifiOff, Box, Scale, Settings, LineChart,
+  Thermometer, Droplets, Plus, Box, Scale, Settings, LineChart,
   Edit3, Trash2, Activity, Package, ArrowRight, AlertCircle, Sun, Moon, Printer, Download, Upload,
 } from 'lucide-react'
 import { api } from './lib/api'
@@ -535,14 +535,26 @@ function SpoolScopeLogo() {
 
 function ConnectionBadge({ cfs, wsStatus, t }) {
   const ok = cfs.connected && wsStatus === 'open'
+  const isConnecting = wsStatus === 'connecting'
+  const label = isConnecting ? t.wsConnecting : ok ? t.cfsConnected : t.cfsDisconnected
+  const borderClass = ok
+    ? 'border-emerald-700/70'
+    : isConnecting
+      ? 'border-amber-700/70'
+      : 'border-red-700/70'
+  const dotClass = ok
+    ? 'bg-emerald-400 animate-pulse'
+    : isConnecting
+      ? 'bg-amber-400'
+      : 'bg-red-400'
+
   return (
-    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium border ${
-      ok ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-300'
-         : 'bg-red-950/40 border-red-800/60 text-red-300'
-    }`}>
-      {ok ? <Wifi size={14} /> : <WifiOff size={14} />}
-      {wsStatus === 'connecting' ? t.wsConnecting : ok ? t.cfsConnected : t.cfsDisconnected}
-      {ok && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-1" />}
+    <div
+      className={`h-7 w-7 shrink-0 rounded-full border bg-zinc-900/70 flex items-center justify-center ${borderClass}`}
+      title={label}
+      aria-label={label}
+    >
+      <span className={`h-2.5 w-2.5 rounded-full ${dotClass}`} />
     </div>
   )
 }

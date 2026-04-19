@@ -484,3 +484,98 @@ button.danger {
     grid-template-columns: 1fr;
   }
 }
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text);
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.chip--active {
+  border-color: color-mix(in oklab, var(--ok) 68%, white 5%);
+  color: var(--ok);
+}
+
+.chip-count {
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--surface) 65%, #0f1720 35%);
+  padding: 2px 7px;
+  font-size: 0.72rem;
+}
+
+.spool-list {
+  display: grid;
+  gap: 8px;
+}
+
+.spool-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  padding: 10px;
+  text-align: left;
+}
+
+.spool-meta {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.fill-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--surface) 60%, #111827 40%);
+  overflow: hidden;
+}
+
+.fill-bar > div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #34d399, #22d3ee);
+}
+
+.fill-bar > .fill-bar--low {
+  background: linear-gradient(90deg, #fb923c, #ef4444);
+}
+
+.slot-pill,
+.status-pill {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.spool-detail {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px 10px;
+}
+
+@media (min-width: 640px) {
+  .spool-detail {
+    grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
+  }
+}

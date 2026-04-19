@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Thermometer, Droplets, Plus, Wifi, WifiOff, Box, Scale, Settings, LineChart,
   Edit3, Trash2, Activity, Package, ArrowRight, AlertCircle, Sun, Moon, Printer,
@@ -46,6 +46,9 @@ export default function App() {
   const [assignModalSlot, setAssignModalSlot] = useState(null)
   const [addSpoolForSlot, setAddSpoolForSlot] = useState(null)
   const [editingSpool, setEditingSpool] = useState(null)
+  const [activeFilter, setActiveFilter] = useState('all')
+  const [sortMode, setSortMode] = useState('newest')
+  const [selectedSpool, setSelectedSpool] = useState(null)
 
   useEffect(() => { localStorage.setItem('cfs_lang', lang) }, [lang])
   useEffect(() => {
@@ -102,8 +105,79 @@ export default function App() {
   }, [cfs.last_sync])
 
   // ---------- Derived ----------
-  const assignedIds = slots.map((s) => s.spool_id).filter(Boolean)
-  const shelfSpools = spools.filter((s) => !assignedIds.includes(s.id))
+  const slotBySpoolId = useMemo(() => {
+    const map = new Map()
+    slots.forEach((slot) => {
+      if (slot.spool_id != null) map.set(slot.spool_id, slot)
+    })
+    return map
+  }, [slots])
+
+  const assignedIds = useMemo(() => Array.from(slotBySpoolId.keys()), [slotBySpoolId])
+  const shelfSpools = useMemo(
+    () => spools.filter((spool) => !assignedIds.includes(spool.id)),
+    [assignedIds, spools],
+  )
+
+  const inventoryEntries = useMemo(
+    () => spools.map((spool, index) => {
+      const slotFor = slotBySpoolId.get(spool.id) ?? null
+      const netNow = slotFor
+        ? Math.max(0, Number(slotFor.current_weight) - Number(spool.tare_weight))
+        : Math.max(0, Number(spool.gross_weight) - Number(spool.tare_weight))
+      const percent = Math.min(100, Math.max(0, (netNow / 1000) * 100))
+      const rawDate = spool.updated_at || spool.created_at || null
+      const timestamp = rawDate ? new Date(rawDate).getTime() : null
+      return {
+        spool,
+        slotFor,
+        index,
+        netNow,
+        percent,
+        isLow: netNow < 50,
+        timestamp: Number.isFinite(timestamp) ? timestamp : null,
+      }
+    }),
+    [slotBySpoolId, spools],
+  )
+
+  const inventoryCounts = useMemo(() => ({
+    all: inventoryEntries.length,
+    active: inventoryEntries.filter((entry) => entry.slotFor).length,
+    shelf: inventoryEntries.filter((entry) => !entry.slotFor).length,
+    low: inventoryEntries.filter((entry) => entry.isLow).length,
+  }), [inventoryEntries])
+
+  const filteredInventoryEntries = useMemo(() => {
+    if (activeFilter === 'active') return inventoryEntries.filter((entry) => entry.slotFor)
+    if (activeFilter === 'shelf') return inventoryEntries.filter((entry) => !entry.slotFor)
+    if (activeFilter === 'low') return inventoryEntries.filter((entry) => entry.isLow)
+    return inventoryEntries
+  }, [activeFilter, inventoryEntries])
+
+  const sortedInventoryEntries = useMemo(() => {
+    const normalize = (value) => (value || '').toString().toLowerCase()
+    return [...filteredInventoryEntries].sort((a, b) => {
+      if (a.slotFor && b.slotFor) return a.slotFor.id - b.slotFor.id
+      if (a.slotFor) return -1
+      if (b.slotFor) return 1
+
+      if (sortMode === 'remainingAsc') return a.netNow - b.netNow
+      if (sortMode === 'remainingDesc') return b.netNow - a.netNow
+      if (sortMode === 'material') return normalize(a.spool.material).localeCompare(normalize(b.spool.material))
+      if (sortMode === 'manufacturer') return normalize(a.spool.manufacturer).localeCompare(normalize(b.spool.manufacturer))
+
+      if (a.timestamp != null && b.timestamp != null) return b.timestamp - a.timestamp
+      if (a.timestamp != null) return -1
+      if (b.timestamp != null) return 1
+      return b.index - a.index
+    })
+  }, [filteredInventoryEntries, sortMode])
+
+  const selectedInventoryEntry = useMemo(
+    () => inventoryEntries.find((entry) => entry.spool.id === selectedSpool) ?? null,
+    [inventoryEntries, selectedSpool],
+  )
 
   // ---------- Actions ----------
   const openAddSpool = (slotId = null) => {
@@ -139,6 +213,7 @@ export default function App() {
   const deleteSpool = async (id) => {
     if (!confirm(t.confirmDeleteSpool)) return
     await api.deleteSpool(id)
+    if (selectedSpool === id) setSelectedSpool(null)
     await loadAll()
   }
 
@@ -251,7 +326,16 @@ export default function App() {
               <div className="text-sm text-zinc-500 mt-1 max-w-md mx-auto">{t.noSpoolsHint}</div>
             </div>
           ) : (
-            <InventoryTable t={t} spools={spools} slots={slots} onEdit={openEditSpool} onDelete={deleteSpool} />
+            <InventoryList
+              t={t}
+              entries={sortedInventoryEntries}
+              activeFilter={activeFilter}
+              setActiveFilter={setActiveFilter}
+              sortMode={sortMode}
+              setSortMode={setSortMode}
+              counts={inventoryCounts}
+              onSelect={setSelectedSpool}
+            />
           )}
         </section>
 
@@ -309,6 +393,19 @@ export default function App() {
           t={t}
           spools={spools}
           onClose={() => setShowHistory(false)}
+        />
+      )}
+
+      {selectedInventoryEntry && (
+        <InventoryDetailModal
+          t={t}
+          entry={selectedInventoryEntry}
+          onClose={() => setSelectedSpool(null)}
+          onEdit={(spool) => {
+            setSelectedSpool(null)
+            openEditSpool(spool)
+          }}
+          onDelete={deleteSpool}
         />
       )}
     </div>
@@ -762,5 +859,148 @@ function InventoryTable({ t, spools, slots, onEdit, onDelete }) {
         </tbody>
       </table>
     </div>
+  )
+}
+
+function InventoryList({
+  t, entries, activeFilter, setActiveFilter, sortMode, setSortMode, counts, onSelect,
+}) {
+  const filters = [
+    { key: 'all', label: t.filterAll, count: counts.all },
+    { key: 'active', label: t.filterActive, count: counts.active },
+    { key: 'shelf', label: t.filterShelf, count: counts.shelf },
+    { key: 'low', label: t.filterLow, count: counts.low },
+  ]
+
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 sm:p-4">
+      <div className="filter-bar mb-3">
+        {filters.map((filter) => (
+          <button
+            key={filter.key}
+            type="button"
+            onClick={() => setActiveFilter(filter.key)}
+            className={`chip ${activeFilter === filter.key ? 'chip--active' : ''}`}
+          >
+            <span>{filter.label}</span>
+            <span className="chip-count">{filter.count}</span>
+          </button>
+        ))}
+        <div className="ml-auto w-full sm:w-auto">
+          <label className="sr-only" htmlFor="inventory-sort">{t.sortBy}</label>
+          <select
+            id="inventory-sort"
+            value={sortMode}
+            onChange={(event) => setSortMode(event.target.value)}
+            className="input text-sm w-full sm:w-56"
+          >
+            <option value="newest">{t.sortNewest}</option>
+            <option value="remainingDesc">{t.sortRemainingDesc}</option>
+            <option value="remainingAsc">{t.sortRemainingAsc}</option>
+            <option value="material">{t.sortMaterial}</option>
+            <option value="manufacturer">{t.sortManufacturer}</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="spool-list">
+        {entries.map((entry) => (
+          <button
+            key={entry.spool.id}
+            type="button"
+            onClick={() => onSelect(entry.spool.id)}
+            className="spool-row"
+          >
+            <div
+              className="w-9 h-9 rounded-full border border-zinc-700 shadow-inner shrink-0"
+              style={{ background: entry.spool.color_hex || '#6b7280' }}
+            />
+            <div className="min-w-0">
+              <div className="font-semibold text-zinc-100 truncate">
+                {entry.spool.manufacturer}
+              </div>
+              <div className="text-sm text-zinc-400 truncate">
+                {entry.spool.material} · {entry.spool.color || entry.spool.color_hex}
+              </div>
+              <div className="text-xs text-zinc-500 mt-1 truncate">
+                {entry.spool.nozzle_temp}° / {entry.spool.bed_temp}° · {entry.spool.diameter}mm
+              </div>
+              <div className="fill-bar mt-2">
+                <div
+                  className={`h-full ${entry.isLow ? 'fill-bar--low' : ''}`}
+                  style={{ width: `${entry.percent}%` }}
+                />
+              </div>
+            </div>
+            <div className="spool-meta">
+              <div className="text-base font-semibold tabular-nums text-zinc-100">
+                {fmt(entry.netNow, 0)} g
+              </div>
+              <span className={entry.slotFor ? 'slot-pill' : 'status-pill'}>
+                {entry.slotFor ? `${t.inSlot} ${entry.slotFor.id}` : t.onShelf}
+              </span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function InventoryDetailModal({ t, entry, onClose, onEdit, onDelete }) {
+  const { spool, slotFor, netNow } = entry
+
+  return (
+    <Modal title={t.spoolDetails} subtitle={spool.name || `${spool.manufacturer} ${spool.material}`} onClose={onClose} maxWidth="max-w-3xl">
+      <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
+        <dl className="spool-detail">
+          <DetailItem label={t.manufacturer} value={spool.manufacturer} />
+          <DetailItem label={t.material} value={spool.material} />
+          <DetailItem label={t.color} value={spool.color || spool.color_hex} />
+          <DetailItem label={t.diameter} value={`${spool.diameter} mm`} />
+          <DetailItem label={t.remaining} value={`${fmt(netNow, 1)} g`} />
+          <DetailItem label={t.grossWeight} value={`${fmt(spool.gross_weight, 1)} g`} />
+          <DetailItem label={t.tare} value={`${fmt(spool.tare_weight, 1)} g`} />
+          <DetailItem label={`${t.nozzle}/${t.bed}`} value={`${spool.nozzle_temp}° / ${spool.bed_temp}°`} />
+          <DetailItem label={t.status} value={slotFor ? `${t.inSlot} ${slotFor.id}` : t.onShelf} />
+          {spool.name && <DetailItem label={t.nameOpt} value={spool.name} />}
+        </dl>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={() => onEdit(spool)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-medium"
+          >
+            <Edit3 size={14} />
+            {t.edit}
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(spool.id)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-red-950/30 border border-red-800/60 hover:border-red-700 text-xs font-medium text-red-300"
+          >
+            <Trash2 size={14} />
+            {t.delete}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-2 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-medium"
+          >
+            {t.close}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function DetailItem({ label, value }) {
+  return (
+    <>
+      <dt className="text-xs uppercase tracking-wide text-zinc-500">{label}</dt>
+      <dd className="text-sm text-zinc-200 break-words">{value}</dd>
+    </>
   )
 }

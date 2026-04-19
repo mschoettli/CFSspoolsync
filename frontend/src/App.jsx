@@ -627,6 +627,22 @@ function AssignedSlotPanel({ t, slot, spool, onUnassign, onEdit }) {
 }
 
 function InventoryTable({ t, spools, slots, onEdit, onDelete }) {
+  const sortedSpools = spools
+    .map((spool, index) => {
+      const slotFor = slots.find((s) => s.spool_id === spool.id)
+      return { spool, slotFor, index }
+    })
+    .sort((a, b) => {
+      const aInSlot = Boolean(a.slotFor)
+      const bInSlot = Boolean(b.slotFor)
+
+      if (aInSlot && bInSlot) return a.slotFor.id - b.slotFor.id
+      if (aInSlot) return -1
+      if (bInSlot) return 1
+      return a.index - b.index
+    })
+    .map((entry) => entry.spool)
+
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden overflow-x-auto">
       <table className="w-full text-sm">
@@ -643,7 +659,7 @@ function InventoryTable({ t, spools, slots, onEdit, onDelete }) {
           </tr>
         </thead>
         <tbody>
-          {spools.map((sp) => {
+          {sortedSpools.map((sp) => {
             const slotFor = slots.find((s) => s.spool_id === sp.id)
             const netNow = slotFor
               ? Math.max(0, slotFor.current_weight - sp.tare_weight)

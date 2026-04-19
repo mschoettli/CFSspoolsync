@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Thermometer, Droplets, Plus, Wifi, WifiOff, Box, Scale, Settings, LineChart,
-  Edit3, Trash2, Activity, Package, ArrowRight, AlertCircle, Sun, Moon, Printer,
+  Edit3, Trash2, Activity, Package, ArrowRight, AlertCircle, Sun, Moon, Printer, Download, Upload,
 } from 'lucide-react'
 import { api } from './lib/api'
 import { createLiveSocket } from './lib/ws'
@@ -79,6 +79,8 @@ export default function App() {
   const [activeFilter, setActiveFilter] = useState('all')
   const [sortMode, setSortMode] = useState('newest')
   const [selectedSpool, setSelectedSpool] = useState(null)
+  const [libraryBusy, setLibraryBusy] = useState(false)
+  const libraryImportInputRef = useRef(null)
 
   useEffect(() => { localStorage.setItem('cfs_lang', lang) }, [lang])
   useEffect(() => {
@@ -267,6 +269,53 @@ export default function App() {
   }
   const deleteTare = async (id) => { await api.deleteTare(id); setTares(await api.listTares()) }
 
+  const exportLibrary = async () => {
+    try {
+      setLibraryBusy(true)
+      const payload = await api.exportLibrary()
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      link.href = url
+      link.download = `cfsspoolsync-library-${stamp}.json`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      alert(`${t.errorLoading}: ${err.message}`)
+    } finally {
+      setLibraryBusy(false)
+    }
+  }
+
+  const triggerImportLibrary = () => {
+    if (libraryBusy) return
+    libraryImportInputRef.current?.click()
+  }
+
+  const importLibrary = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    try {
+      setLibraryBusy(true)
+      const result = await api.importLibrary(file)
+      await loadAll()
+      alert(
+        `${t.importDone || 'Import completed.'}\n` +
+        `Tares created: ${result.tares_created}\n` +
+        `Tares updated: ${result.tares_updated}\n` +
+        `Spools imported: ${result.spools_imported}`,
+      )
+    } catch (err) {
+      alert(`${t.errorLoading}: ${err.message}`)
+    } finally {
+      setLibraryBusy(false)
+      event.target.value = ''
+    }
+  }
+
   // CFS snapshot for the current add-spool modal (from embedded slot data)
   const activeSnapshot = addSpoolForSlot
     ? slots.find((s) => s.id === addSpoolForSlot)?.cfs_snapshot
@@ -419,10 +468,15 @@ export default function App() {
           t={t}
           lang={lang}
           theme={theme}
+          libraryBusy={libraryBusy}
+          libraryImportInputRef={libraryImportInputRef}
           languageOptions={LANGUAGE_OPTIONS}
           onClose={() => setShowSettings(false)}
           onLanguageChange={(nextLang) => setLang(resolveLanguage(nextLang))}
           onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          onExportLibrary={exportLibrary}
+          onTriggerImportLibrary={triggerImportLibrary}
+          onImportLibrary={importLibrary}
           onOpenTares={() => {
             setShowSettings(false)
             setShowTareTable(true)
@@ -565,7 +619,9 @@ function PrintJobCard({ t, printJob }) {
 }
 
 function SettingsModal({
-  t, lang, theme, languageOptions, onClose, onLanguageChange, onToggleTheme, onOpenTares,
+  t, lang, theme, languageOptions, libraryBusy, libraryImportInputRef,
+  onClose, onLanguageChange, onToggleTheme, onOpenTares,
+  onExportLibrary, onTriggerImportLibrary, onImportLibrary,
 }) {
   const currentOption = languageOptions.find((option) => option.value === lang)
 
@@ -601,6 +657,31 @@ function SettingsModal({
           <span>{t.tareTableTitle}</span>
           <span className="text-emerald-400">{t.open}</span>
         </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={onExportLibrary}
+            disabled={libraryBusy}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-sm disabled:opacity-50"
+          >
+            <Download size={14} />
+            <span>{t.exportJson || 'Export JSON'}</span>
+          </button>
+          <button
+            onClick={onTriggerImportLibrary}
+            disabled={libraryBusy}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-sm disabled:opacity-50"
+          >
+            <Upload size={14} />
+            <span>{t.importJson || 'Import JSON'}</span>
+          </button>
+          <input
+            ref={libraryImportInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={onImportLibrary}
+          />
+        </div>
       </div>
     </Modal>
   )

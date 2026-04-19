@@ -130,3 +130,27 @@ class HistoryOut(BaseModel):
     humidity: Optional[float]
     model_config = ConfigDict(from_attributes=True)
 
+
+# ---------- Library backup ----------
+class LibraryExportMeta(BaseModel):
+    schema_version: int = 1
+    exported_at: datetime
+
+
+class LibrarySpoolItem(SpoolBase):
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class LibraryExportPayload(BaseModel):
+    meta: LibraryExportMeta
+    spools: list[LibrarySpoolItem]
+    tares: list[TareBase]
+
+
+class LibraryImportResult(BaseModel):
+    tares_created: int
+    tares_updated: int
+    spools_imported: int
+    errors: list[str] = []
+

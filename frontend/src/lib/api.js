@@ -55,4 +55,12 @@ export const api = {
     form.append('file', file)
     return request('/ocr/scan', { method: 'POST', body: form })
   },
+
+  // Library backup
+  exportLibrary: () => request('/library/export'),
+  importLibrary: (file) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request('/library/import', { method: 'POST', body: form })
+  },
 }

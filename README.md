@@ -31,8 +31,6 @@ CFSspoolsync is a web app for tracking Creality K2 Combo CFS slots, spool invent
 
 <img width="1585" height="223" alt="status" src="https://github.com/user-attachments/assets/c88ab44b-299d-461e-a27c-d7383f603401" />
 <img width="1573" height="369" alt="slots" src="https://github.com/user-attachments/assets/6641c32b-4ee3-45ec-8382-47f9d401f881" />
-<img width="660" height="643" alt="new spool" src="https://github.com/user-attachments/assets/cd1e1a04-82e3-49f9-8e65-5eeae17c493f" />
-<img width="463" height="270" alt="settings" src="https://github.com/user-attachments/assets/730c0ff1-0cd4-4187-a82d-eb481f7af888" />
 
 
 ## Installation

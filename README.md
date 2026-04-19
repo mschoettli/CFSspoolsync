@@ -1,3 +1,6 @@
+
+<a href="https://www.buymeacoffee.com/mschoettli" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-green.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;" ></a>
+
 # CFSspoolsync
 
 CFSspoolsync is a web app for tracking Creality K2 Combo CFS slots, spool inventory, and filament consumption with live updates.
@@ -25,10 +28,10 @@ CFSspoolsync is a web app for tracking Creality K2 Combo CFS slots, spool invent
   - Tesseract-based extraction
   - Optional OpenAI/Anthropic post-processing fallback (server-side only)
 
-<!-- screenshot: dashboard-overview -->
-<!-- screenshot: settings-and-history -->
-<!-- screenshot: tare-management-modal -->
-<!-- screenshot: add-spool-ocr-modal -->
+docs/screenshots/status.png
+docs/screenshots/slots.png
+docs/screenshots/new spool.png
+docs/screenshots/settings.png
 
 ## Installation
 

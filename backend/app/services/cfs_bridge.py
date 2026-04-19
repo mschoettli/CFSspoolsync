@@ -16,7 +16,6 @@ Das Gewicht einer eingelegten Spule (current_weight in gramm) wird aus
 dem verbleibenden Prozentwert relativ zum Snapshot bei Anlage berechnet.
 """
 import asyncio
-import math
 import random
 from datetime import datetime
 from typing import Optional
@@ -36,6 +35,11 @@ class CfsBridge:
         self._task: Optional[asyncio.Task] = None
         self._stop = False
         self._last_history_write = 0.0
+        self._last_moonraker_ok_ts = 0.0
+        self._last_printing_state = False
+        self._last_active_slot: Optional[int] = None
+        self._last_remain_pct: dict[int, float] = {}
+        self._last_slot_weights: dict[int, float] = {}
 
     async def start(self) -> None:
         self._stop = False
@@ -70,13 +74,16 @@ class CfsBridge:
                 db.refresh(cfs)
 
             # ---------- 1. Moonraker / Simulator ----------
+            print_probe = {"reachable": False, "is_printing": False}
             if settings.moonraker_host:
                 parsed = await self._poll_moonraker()
+                print_probe = await self._poll_moonraker_print_state()
                 if parsed is not None:
                     cfs.connected = True
                     cfs.temperature = parsed["temperature"]
                     cfs.humidity = parsed["humidity"]
                     self._write_snapshots(db, parsed["slots"])
+                    self._last_active_slot = self._detect_active_slot(parsed["slots"])
                 else:
                     cfs.connected = False
             else:
@@ -94,25 +101,25 @@ class CfsBridge:
                 ).first()
                 if not any_populated:
                     self._write_snapshots(db, _fake_snapshots())
+                print_probe = {"reachable": True, "is_printing": False}
 
             cfs.last_sync = datetime.utcnow()
 
             # ---------- 2. Slot-Gewichte live aktualisieren ----------
             self._update_slot_weights(db)
 
-            # ---------- 3. Print simulation ----------
+            # ---------- 3. Automatic print status + live flow ----------
             slots = db.query(Slot).order_by(Slot.id).all()
             now_ts = datetime.utcnow().timestamp()
+            is_printing = self._resolve_printing_state(print_probe, now_ts)
+            active_slot = self._choose_active_slot(db, slots) if is_printing else None
             for slot in slots:
-                if slot.is_printing and slot.spool_id and slot.current_weight > 0:
-                    flow = settings.simulator_flow_gps + math.sin(now_ts / 2) * 0.6
-                    slot.flow = round(flow, 2)
-                    slot.current_weight = max(0.0, slot.current_weight - flow / 10.0)
-                    if slot.current_weight <= 0:
-                        slot.is_printing = False
-                        slot.flow = 0
-                else:
-                    slot.flow = 0
+                previous_weight = self._last_slot_weights.get(slot.id, float(slot.current_weight))
+                current_weight = float(slot.current_weight)
+                consumed_per_second = max(0.0, previous_weight - current_weight)
+                slot.is_printing = bool(active_slot and slot.id == active_slot)
+                slot.flow = round(consumed_per_second, 2) if slot.is_printing else 0.0
+                self._last_slot_weights[slot.id] = current_weight
 
             db.commit()
 
@@ -129,7 +136,7 @@ class CfsBridge:
                                 slot_id=slot.id,
                                 spool_id=slot.spool_id,
                                 net_weight=net,
-                                consumed=slot.flow * 60 if slot.is_printing else 0,
+                                consumed=slot.flow * 60 if slot.is_printing else 0.0,
                                 temperature=cfs.temperature,
                                 humidity=cfs.humidity,
                             ))
@@ -204,6 +211,75 @@ class CfsBridge:
             "slots": slots,
         }
 
+    async def _poll_moonraker_print_state(self) -> dict:
+        """Read global Klipper print state from Moonraker."""
+        url = (
+            f"http://{settings.moonraker_host}:{settings.moonraker_port}"
+            f"/printer/objects/query?print_stats"
+        )
+        try:
+            async with httpx.AsyncClient(timeout=2.5) as client:
+                response = await client.get(url)
+                if response.status_code != 200:
+                    return {"reachable": False, "is_printing": False}
+                payload = response.json().get("result", {}).get("status", {}).get("print_stats", {})
+        except (httpx.HTTPError, ValueError):
+            return {"reachable": False, "is_printing": False}
+
+        state = str(payload.get("state", "")).strip().lower()
+        return {"reachable": True, "is_printing": state == "printing"}
+
+    def _resolve_printing_state(self, probe: dict, now_ts: float) -> bool:
+        """Keep the last print state for a short grace window."""
+        if probe.get("reachable"):
+            self._last_moonraker_ok_ts = now_ts
+            self._last_printing_state = bool(probe.get("is_printing"))
+            return self._last_printing_state
+        if now_ts - self._last_moonraker_ok_ts <= settings.moonraker_print_grace_s:
+            return self._last_printing_state
+        self._last_printing_state = False
+        return False
+
+    def _detect_active_slot(self, cfs_slots: list[dict]) -> Optional[int]:
+        """Infer active slot from the strongest negative remain_pct delta."""
+        deltas: list[tuple[float, int]] = []
+        current_remains: dict[int, float] = {}
+        for slot in cfs_slots:
+            slot_id = int(slot["slot_id"])
+            remain_pct = slot.get("remain_pct")
+            if remain_pct is None:
+                continue
+            remain_value = float(remain_pct)
+            current_remains[slot_id] = remain_value
+            if slot_id in self._last_remain_pct:
+                deltas.append((remain_value - self._last_remain_pct[slot_id], slot_id))
+
+        self._last_remain_pct = current_remains
+        if deltas:
+            most_negative = min(deltas, key=lambda item: item[0])
+            if most_negative[0] < -0.01:
+                return most_negative[1]
+        return self._last_active_slot
+
+    def _choose_active_slot(self, db: Session, slots: list[Slot]) -> Optional[int]:
+        """Resolve a printing slot using detected slot and safe fallbacks."""
+        candidate_ids = {slot.id for slot in slots if slot.spool_id}
+        if self._last_active_slot in candidate_ids:
+            return self._last_active_slot
+
+        present_with_spool: list[int] = []
+        for slot in slots:
+            if not slot.spool_id:
+                continue
+            snapshot = db.query(CfsSlotSnapshot).get(slot.id)
+            if snapshot and snapshot.present:
+                present_with_spool.append(slot.id)
+
+        if len(present_with_spool) == 1:
+            self._last_active_slot = present_with_spool[0]
+            return self._last_active_slot
+        return None
+
     # ---------- DB helpers ----------
     def _write_snapshots(self, db: Session, cfs_slots: list[dict]) -> None:
         """
@@ -237,8 +313,8 @@ class CfsBridge:
         """
         slots = db.query(Slot).order_by(Slot.id).all()
         for slot in slots:
-            if not slot.spool_id or slot.is_printing:
-                continue  # während Print-Simulation nicht überschreiben
+            if not slot.spool_id:
+                continue
             snap = db.query(CfsSlotSnapshot).get(slot.id)
             sp = db.query(Spool).get(slot.spool_id)
             if snap is None or sp is None:
@@ -341,3 +417,4 @@ def _snapshot_dict(snap: CfsSlotSnapshot) -> dict:
 
 
 bridge = CfsBridge()
+

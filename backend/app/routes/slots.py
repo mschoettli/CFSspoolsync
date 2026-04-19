@@ -1,10 +1,10 @@
-"""Slot-Aktionen: Spule zuweisen/entfernen, Druck starten/stoppen."""
+"""Slot actions for assignment, unassignment, and CFS snapshots."""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import CfsSlotSnapshot, Slot, Spool
-from ..schemas import CfsSnapshotOut, SlotAssign, SlotOut, SlotPrintToggle
+from ..schemas import CfsSnapshotOut, SlotAssign, SlotOut
 
 router = APIRouter(prefix="/slots", tags=["slots"])
 
@@ -68,19 +68,6 @@ def unassign(slot_id: int, db: Session = Depends(get_db)):
     return _attach_snapshot(slot, db)
 
 
-@router.post("/{slot_id}/print", response_model=SlotOut)
-def toggle_print(slot_id: int, payload: SlotPrintToggle, db: Session = Depends(get_db)):
-    slot = db.query(Slot).get(slot_id)
-    if not slot:
-        raise HTTPException(404, "Slot nicht gefunden")
-    if payload.is_printing and not slot.spool_id:
-        raise HTTPException(400, "Slot ist leer — keine Spule zugewiesen")
-    slot.is_printing = payload.is_printing
-    if not payload.is_printing:
-        slot.flow = 0
-    db.commit()
-    db.refresh(slot)
-    return _attach_snapshot(slot, db)
 
 
 # ---------- CFS-Snapshot Endpoint ----------
@@ -119,3 +106,4 @@ def get_cfs_snapshot(slot_id: int, db: Session = Depends(get_db)):
             nozzle_temp=None, bed_temp=None, color_hex=None, remain_pct=None,
         )
     return snap
+

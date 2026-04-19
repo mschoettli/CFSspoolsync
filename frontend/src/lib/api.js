@@ -37,12 +37,6 @@ export const api = {
       body: JSON.stringify({ spool_id: spoolId }),
     }),
   unassignSlot: (slotId) => request(`/slots/${slotId}/unassign`, { method: 'POST' }),
-  togglePrint: (slotId, isPrinting) =>
-    request(`/slots/${slotId}/print`, {
-      method: 'POST',
-      body: JSON.stringify({ is_printing: isPrinting }),
-    }),
-
   // CFS + History
   getCfs: () => request('/cfs'),
   getCfsSlots: () => request('/cfs/slots'),

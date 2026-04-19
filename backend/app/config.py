@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     moonraker_host: str = ""            # z.B. "192.168.1.42"
     moonraker_port: int = 80
     moonraker_poll_interval: float = 2.0  # Sekunden
+    moonraker_print_grace_s: float = 10.0
 
     # API
     api_prefix: str = "/api"

@@ -106,10 +106,6 @@ class SlotAssign(BaseModel):
     spool_id: int
 
 
-class SlotPrintToggle(BaseModel):
-    is_printing: bool
-
-
 # ---------- CFS ----------
 class CfsStateOut(BaseModel):
     temperature: float

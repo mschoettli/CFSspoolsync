@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import {
   Thermometer, Droplets, Plus, Wifi, WifiOff, Box, Scale, Settings, LineChart,
   Edit3, Trash2, Activity, Package, ArrowRight, AlertCircle, Sun, Moon,
-  Play, Pause, X,
+  X,
 } from 'lucide-react'
 import { api } from './lib/api'
 import { createLiveSocket } from './lib/ws'
@@ -132,10 +132,6 @@ export default function App() {
     await loadAll()
   }
 
-  const doTogglePrint = async (slotId, cur) => {
-    await api.togglePrint(slotId, !cur)
-  }
-
   const createTare = async (data) => { await api.createTare(data); setTares(await api.listTares()) }
   const updateTare = async (id, data) => { await api.updateTare(id, data); setTares(await api.listTares()) }
   const deleteTare = async (id) => { await api.deleteTare(id); setTares(await api.listTares()) }
@@ -190,7 +186,6 @@ export default function App() {
               <SlotPanel key={slot.id} t={t} slot={slot}
                 onAssign={() => setAssignModalSlot(slot.id)}
                 onUnassign={() => doUnassign(slot.id)}
-                onTogglePrint={() => doTogglePrint(slot.id, slot.is_printing)}
                 onAddNew={() => openAddSpool(slot.id)}
                 onEdit={(sp) => openEditSpool(sp)}
               />
@@ -390,14 +385,14 @@ function HistoryModal({ t, spools, onClose }) {
  *    mit CTA zum Hinzufügen
  * C) Alles leer → "Leerer Slot" mit manuellem Assign/Add
  */
-function SlotPanel({ t, slot, onAssign, onUnassign, onTogglePrint, onAddNew, onEdit }) {
+function SlotPanel({ t, slot, onAssign, onUnassign, onAddNew, onEdit }) {
   const spool = slot.spool
   const snap = slot.cfs_snapshot
 
   // ZUSTAND A: Spule eingelegt
   if (spool) {
     return <AssignedSlotPanel t={t} slot={slot} spool={spool}
-      onUnassign={onUnassign} onTogglePrint={onTogglePrint} onEdit={onEdit} />
+      onUnassign={onUnassign} onEdit={onEdit} />
   }
 
   // ZUSTAND B: CFS hat Spule erkannt, aber im Lager noch nicht angelegt
@@ -507,7 +502,7 @@ function DetectedSlotPanel({ t, slot, snap, onAddNew }) {
   )
 }
 
-function AssignedSlotPanel({ t, slot, spool, onUnassign, onTogglePrint, onEdit }) {
+function AssignedSlotPanel({ t, slot, spool, onUnassign, onEdit }) {
   const net = Math.max(0, slot.current_weight - spool.tare_weight)
   const pct = Math.min(100, (net / 1000) * 100)
   const low = net < 100
@@ -579,17 +574,8 @@ function AssignedSlotPanel({ t, slot, spool, onUnassign, onTogglePrint, onEdit }
       </div>
 
       <div className="relative flex gap-2">
-        <button onClick={onTogglePrint}
-          className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium transition ${
-            slot.is_printing
-              ? 'bg-red-900/50 hover:bg-red-900/70 text-red-300 border border-red-800/60'
-              : 'bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-800/60'
-          }`}>
-          {slot.is_printing ? <Pause size={13} /> : <Play size={13} />}
-          {slot.is_printing ? t.stopPrint : t.startPrint}
-        </button>
         <button onClick={onUnassign}
-          className="px-2 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-400 border border-zinc-800">
+          className="w-full px-2 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-400 border border-zinc-800">
           <X size={13} />
         </button>
       </div>

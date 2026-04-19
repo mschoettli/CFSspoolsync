@@ -153,13 +153,23 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2">
             <ConnectionBadge cfs={cfs} wsStatus={wsStatus} t={t} />
-            <button onClick={() => setShowHistory(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-medium">
-              <LineChart size={14} />{t.historyTitle}
+            <button
+              onClick={() => setShowHistory(true)}
+              aria-label={t.historyTitle}
+              title={t.historyTitle}
+              className="flex items-center sm:gap-1.5 px-2.5 py-2 sm:px-3 sm:py-1.5 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-medium"
+            >
+              <LineChart size={14} />
+              <span className="hidden sm:inline">{t.historyTitle}</span>
             </button>
-            <button onClick={() => setShowSettings(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-medium">
-              <Settings size={14} />{t.settings}
+            <button
+              onClick={() => setShowSettings(true)}
+              aria-label={t.settings}
+              title={t.settings}
+              className="flex items-center sm:gap-1.5 px-2.5 py-2 sm:px-3 sm:py-1.5 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-medium"
+            >
+              <Settings size={14} />
+              <span className="hidden sm:inline">{t.settings}</span>
             </button>
           </div>
         </div>
@@ -198,13 +208,23 @@ export default function App() {
           <div className="flex items-center justify-between mb-3">
             <SectionHead title={t.inventory} subtitle={`${spools.length} ${t.spoolCount.toLowerCase()}`} icon={<Package size={18} />} compact />
             <div className="flex gap-2">
-              <button onClick={() => setShowTareTable(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-medium text-zinc-300">
-                <Scale size={14} />{t.manageTares}
+              <button
+                onClick={() => setShowTareTable(true)}
+                aria-label={t.manageTares}
+                title={t.manageTares}
+                className="flex items-center sm:gap-1.5 px-2.5 py-2 sm:px-3 sm:py-1.5 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-medium text-zinc-300"
+              >
+                <Scale size={14} />
+                <span className="hidden sm:inline">{t.manageTares}</span>
               </button>
-              <button onClick={() => openAddSpool(null)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-xs font-semibold">
-                <Plus size={14} />{t.addSpool}
+              <button
+                onClick={() => openAddSpool(null)}
+                aria-label={t.addSpool}
+                title={t.addSpool}
+                className="flex items-center sm:gap-1.5 px-2.5 py-2 sm:px-3 sm:py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-xs font-semibold"
+              >
+                <Plus size={14} />
+                <span className="hidden sm:inline">{t.addSpool}</span>
               </button>
             </div>
           </div>
@@ -416,12 +436,21 @@ function EmptySlotPanel({ t, slot, onAssign, onAddNew }) {
         <div className="text-sm text-zinc-500">{t.emptyHint}</div>
       </div>
       <div className="flex gap-2 mt-auto">
-        <button onClick={onAssign}
-          className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-200">
-          <ArrowRight size={14} />{t.assignSpool}
+        <button
+          onClick={onAssign}
+          aria-label={t.assignSpool}
+          title={t.assignSpool}
+          className="flex-1 flex items-center justify-center sm:gap-1 px-2.5 py-2 sm:px-3 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-200"
+        >
+          <ArrowRight size={14} />
+          <span className="hidden sm:inline">{t.assignSpool}</span>
         </button>
-        <button onClick={onAddNew}
-          className="flex items-center justify-center px-3 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-zinc-950">
+        <button
+          onClick={onAddNew}
+          aria-label={t.addSpool}
+          title={t.addSpool}
+          className="flex items-center justify-center px-2.5 py-2 sm:px-3 rounded-md bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-zinc-950"
+        >
           <Plus size={14} />
         </button>
       </div>
@@ -489,13 +518,17 @@ function DetectedSlotPanel({ t, slot, snap, onAddNew }) {
       )}
 
       <div className="relative">
-        <button onClick={onAddNew}
-          className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold transition ${
+        <button
+          onClick={onAddNew}
+          aria-label={t.assignToInventory}
+          title={t.assignToInventory}
+          className={`w-full flex items-center justify-center sm:gap-1.5 px-2.5 py-2 sm:px-3 rounded-md text-xs font-semibold transition ${
             known
               ? 'bg-cyan-600 hover:bg-cyan-500 text-zinc-950'
               : 'bg-amber-600 hover:bg-amber-500 text-zinc-950'
           }`}>
-          <Plus size={14} />{t.assignToInventory}
+          <Plus size={14} />
+          <span className="hidden sm:inline">{t.assignToInventory}</span>
         </button>
       </div>
     </div>
@@ -528,7 +561,12 @@ function AssignedSlotPanel({ t, slot, spool, onUnassign, onEdit }) {
             </span>
           )}
         </div>
-        <button onClick={() => onEdit(spool)} className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300">
+        <button
+          onClick={() => onEdit(spool)}
+          aria-label={t.edit}
+          title={t.edit}
+          className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300"
+        >
           <Edit3 size={13} />
         </button>
       </div>
@@ -574,9 +612,14 @@ function AssignedSlotPanel({ t, slot, spool, onUnassign, onEdit }) {
       </div>
 
       <div className="relative flex gap-2">
-        <button onClick={onUnassign}
-          className="w-full px-2 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-400 border border-zinc-800">
+        <button
+          onClick={onUnassign}
+          aria-label={t.unassign}
+          title={t.unassign}
+          className="w-full inline-flex items-center justify-center sm:gap-1.5 px-2.5 py-1.5 sm:px-3 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-400 border border-zinc-800"
+        >
           <X size={13} />
+          <span className="hidden sm:inline">{t.unassign}</span>
         </button>
       </div>
     </div>
@@ -638,10 +681,20 @@ function InventoryTable({ t, spools, slots, onEdit, onDelete }) {
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-1">
-                    <button onClick={() => onEdit(sp)} className="p-1.5 rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200">
+                    <button
+                      onClick={() => onEdit(sp)}
+                      aria-label={t.edit}
+                      title={t.edit}
+                      className="p-1.5 rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                    >
                       <Edit3 size={14} />
                     </button>
-                    <button onClick={() => onDelete(sp.id)} className="p-1.5 rounded-md hover:bg-red-900/40 text-zinc-400 hover:text-red-300">
+                    <button
+                      onClick={() => onDelete(sp.id)}
+                      aria-label={t.delete}
+                      title={t.delete}
+                      className="p-1.5 rounded-md hover:bg-red-900/40 text-zinc-400 hover:text-red-300"
+                    >
                       <Trash2 size={14} />
                     </button>
                   </div>

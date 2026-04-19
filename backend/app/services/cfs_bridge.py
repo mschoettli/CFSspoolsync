@@ -304,11 +304,11 @@ class CfsBridge:
 
     def _update_slot_weights(self, db: Session) -> None:
         """
-        Aktualisiert `current_weight` pro Slot basierend auf aktuellem CFS-
-        Remain-Prozentwert relativ zum Snapshot bei Spulen-Anlage.
+        Aktualisiert `current_weight` pro Slot basierend auf dem aktuellen
+        CFS-RFID-Restwert (`remain_pct`) als absolutem Prozentwert.
 
         Formel:
-            net_now = (remain_now / remain_at_creation) × (gross - tare)
+            net_now = (remain_pct / 100) × (gross - tare)
             current_weight = net_now + tare
         """
         slots = db.query(Slot).order_by(Slot.id).all()
@@ -319,13 +319,11 @@ class CfsBridge:
             sp = db.query(Spool).get(slot.spool_id)
             if snap is None or sp is None:
                 continue
-            if snap.remain_pct is None or sp.initial_remain_pct is None:
-                continue
-            if sp.initial_remain_pct <= 0:
+            if snap.remain_pct is None:
                 continue
 
             net_initial = max(0.0, sp.gross_weight - sp.tare_weight)
-            ratio = max(0.0, min(1.0, snap.remain_pct / sp.initial_remain_pct))
+            ratio = max(0.0, min(1.0, float(snap.remain_pct) / 100.0))
             net_now = net_initial * ratio
             slot.current_weight = round(sp.tare_weight + net_now, 2)
 

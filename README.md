@@ -43,10 +43,11 @@ docker compose up -d
 Open:
 - `http://<host>:8088` (or your configured `HTTP_PORT`)
 
-## Technical Documentation
+## Documentation
 
-All technical details were moved to:
 - [Technical Reference](docs/technical-reference.md)
+- [Development Guide](docs/development.md)
+- [Troubleshooting Guide](docs/troubleshooting.md)
 
 ## License
 

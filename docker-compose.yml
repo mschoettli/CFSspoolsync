@@ -10,7 +10,7 @@
 services:
   backend:
     image: ${REGISTRY:-ghcr.io/mschoettli}/cfsspoolsync-backend:${TAG:-latest}
-    container_name: cfs-backend
+    container_name: cfsspoolsync
     restart: unless-stopped
     environment:
       # Leer lassen für Simulator-Mode. Mit IP/Hostname deines K2 für Live-Modus.

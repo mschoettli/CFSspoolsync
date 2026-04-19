@@ -36,7 +36,7 @@ CFSspoolsync is a web app for tracking Creality K2 Combo CFS slots, spool invent
 ## Installation
 
 ```bash
-git clone https://github.com/<your-user>/CFSspoolsync.git
+git clone https://github.com/mschoettli/CFSspoolsync.git
 cd CFSspoolsync
 cp .env.example .env
 # Edit .env (required)

@@ -1,4 +1,4 @@
-﻿"""Library export/import routes for spool inventory backup."""
+"""Library export/import routes for spool inventory backup."""
 from __future__ import annotations
 
 import json
@@ -140,11 +140,13 @@ async def import_library(file: UploadFile = File(...), db: Session = Depends(get
             key = (_normalize_text(tare.manufacturer), _normalize_text(tare.material))
             existing = existing_tares.get(key)
             if existing is None:
-                db.add(Tare(
+                new_tare = Tare(
                     manufacturer=tare.manufacturer.strip(),
                     material=tare.material.strip(),
                     weight=float(tare.weight),
-                ))
+                )
+                db.add(new_tare)
+                existing_tares[key] = new_tare
                 tares_created += 1
             else:
                 if float(existing.weight) != float(tare.weight):

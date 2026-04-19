@@ -61,7 +61,7 @@ function normalizeColorName(value) {
   return String(value || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/ß/g, 'ss')
+    .replace(/\u00DF/g, 'ss')
     .trim()
     .toLowerCase()
 }
@@ -84,6 +84,79 @@ function getCanonicalNameForHex(value) {
   const normalized = normalizeHex(value)
   if (!normalized) return null
   return HEX_TO_CANONICAL_NAME.get(normalized) || null
+}
+
+function getOcrWarningMessage(code, lang) {
+  const normalized = String(code || '').trim().toLowerCase()
+  const labels = {
+    de: {
+      material_not_detected: 'Material wurde nicht erkannt.',
+      weight_not_detected: 'Gewicht wurde nicht erkannt.',
+      color_not_detected: 'Farbe wurde nicht erkannt.',
+      brand_not_detected: 'Hersteller wurde nicht erkannt.',
+      ocr_low_confidence: 'Scan-QualitÃ¤t ist niedrig. Bitte prÃ¼fen.',
+      no_text_detected: 'Kein lesbarer Text erkannt.',
+    },
+    en: {
+      material_not_detected: 'Material could not be detected.',
+      weight_not_detected: 'Weight could not be detected.',
+      color_not_detected: 'Color could not be detected.',
+      brand_not_detected: 'Brand could not be detected.',
+      ocr_low_confidence: 'Scan quality is low. Please verify.',
+      no_text_detected: 'No readable text detected.',
+    },
+    fr: {
+      material_not_detected: 'MatÃ©riau non dÃ©tectÃ©.',
+      weight_not_detected: 'Poids non dÃ©tectÃ©.',
+      color_not_detected: 'Couleur non dÃ©tectÃ©e.',
+      brand_not_detected: 'Marque non dÃ©tectÃ©e.',
+      ocr_low_confidence: 'QualitÃ© de scan faible. VÃ©rifiez les donnÃ©es.',
+      no_text_detected: 'Aucun texte lisible dÃ©tectÃ©.',
+    },
+    it: {
+      material_not_detected: 'Materiale non rilevato.',
+      weight_not_detected: 'Peso non rilevato.',
+      color_not_detected: 'Colore non rilevato.',
+      brand_not_detected: 'Produttore non rilevato.',
+      ocr_low_confidence: 'QualitÃ  scansione bassa. Verifica i dati.',
+      no_text_detected: 'Nessun testo leggibile rilevato.',
+    },
+    es: {
+      material_not_detected: 'No se detectÃ³ el material.',
+      weight_not_detected: 'No se detectÃ³ el peso.',
+      color_not_detected: 'No se detectÃ³ el color.',
+      brand_not_detected: 'No se detectÃ³ el fabricante.',
+      ocr_low_confidence: 'La calidad del escaneo es baja. Revisa los datos.',
+      no_text_detected: 'No se detectÃ³ texto legible.',
+    },
+    pt: {
+      material_not_detected: 'Material nÃ£o detectado.',
+      weight_not_detected: 'Peso nÃ£o detectado.',
+      color_not_detected: 'Cor nÃ£o detectada.',
+      brand_not_detected: 'Fabricante nÃ£o detectado.',
+      ocr_low_confidence: 'Qualidade do scan baixa. Verifique os dados.',
+      no_text_detected: 'Nenhum texto legÃ­vel detectado.',
+    },
+    nl: {
+      material_not_detected: 'Materiaal niet gedetecteerd.',
+      weight_not_detected: 'Gewicht niet gedetecteerd.',
+      color_not_detected: 'Kleur niet gedetecteerd.',
+      brand_not_detected: 'Fabrikant niet gedetecteerd.',
+      ocr_low_confidence: 'Scankwaliteit is laag. Controleer de gegevens.',
+      no_text_detected: 'Geen leesbare tekst gedetecteerd.',
+    },
+    pl: {
+      material_not_detected: 'Nie wykryto materiaÅ‚u.',
+      weight_not_detected: 'Nie wykryto wagi.',
+      color_not_detected: 'Nie wykryto koloru.',
+      brand_not_detected: 'Nie wykryto producenta.',
+      ocr_low_confidence: 'Niska jakoÅ›Ä‡ skanu. SprawdÅº dane.',
+      no_text_detected: 'Nie wykryto czytelnego tekstu.',
+    },
+  }
+  const dictionary = labels[lang] || labels.de
+  if (dictionary[normalized]) return dictionary[normalized]
+  return normalized.replace(/_/g, ' ').replace(/^\w/, (char) => char.toUpperCase())
 }
 
 // ---------- Modal shell ----------
@@ -125,15 +198,35 @@ function Field({ label, children, required, hint }) {
 }
 
 // ---------- Add / Edit Spool Modal ----------
-// Neu: `cfsSnapshot` prop — wenn gegeben werden Felder aus dem RFID-Tag
-// vorbefüllt. Bei bekanntem Material-Code: Hersteller, Material, Farbe,
+// Neu: `cfsSnapshot` prop â€” wenn gegeben werden Felder aus dem RFID-Tag
+// vorbefÃ¼llt. Bei bekanntem Material-Code: Hersteller, Material, Farbe,
 // Temperaturen automatisch. Bei unbekanntem Code: Warnbanner, Farbe wenn
-// vorhanden, Rest leer zum manuellen Ergänzen.
+// vorhanden, Rest leer zum manuellen ErgÃ¤nzen.
 export function AddSpoolModal({
-  t, tares, editing, targetSlot, cfsSnapshot, cfsConnected,
+  t, lang = 'de', tares, editing, targetSlot, cfsSnapshot, cfsConnected,
   onClose, onSave, onOpenTares,
 }) {
-  // Ermitteln was wir aus dem Snapshot vorbefüllen können
+  const grossEstimateHintByLang = {
+    de: 'Das Bruttogewicht wird aus Netto-Labelgewicht plus Tara-Standard geschÃ¤tzt. Manuelle Bruttoeingabe ist am genauesten.',
+    en: 'Gross weight is estimated from label net weight plus tare default. Manual gross entry is most accurate.',
+    fr: 'Le poids brut est estimÃ© avec le poids net de l Ã©tiquette plus la tare par dÃ©faut. La saisie manuelle du brut est la plus prÃ©cise.',
+    it: 'Il peso lordo Ã¨ stimato dal peso netto in etichetta piÃ¹ la tara predefinita. L inserimento manuale del lordo Ã¨ piÃ¹ preciso.',
+    es: 'El peso bruto se estima a partir del peso neto de la etiqueta mÃ¡s la tara por defecto. La entrada manual del bruto es mÃ¡s precisa.',
+    pt: 'O peso bruto Ã© estimado pelo peso lÃ­quido do rÃ³tulo mais a tara padrÃ£o. A entrada manual do bruto Ã© mais precisa.',
+    nl: 'Brutogewicht wordt geschat op basis van nettogewicht op het label plus standaard tara. Handmatige brutoinvoer is het nauwkeurigst.',
+    pl: 'Waga brutto jest szacowana z wagi netto z etykiety i domyÅ›lnej tary. RÄ™czne podanie brutto jest najdokÅ‚adniejsze.',
+  }
+  const warningTitleByLang = {
+    de: 'Hinweise',
+    en: 'Warnings',
+    fr: 'Avertissements',
+    it: 'Avvisi',
+    es: 'Avisos',
+    pt: 'Avisos',
+    nl: 'Waarschuwingen',
+    pl: 'Ostrzeżenia',
+  }
+  // Ermitteln was wir aus dem Snapshot vorbefÃ¼llen kÃ¶nnen
   const snapKnown = cfsSnapshot?.known === true
   const snapPresent = cfsSnapshot?.present === true
   const snapshotColorName = getCanonicalNameForHex(cfsSnapshot?.color_hex)
@@ -235,6 +328,9 @@ export function AddSpoolModal({
 
   const hasColorOrHex = Boolean(color.trim() || normalizeHex(colorHex))
   const valid = manufacturer.trim() && material && hasColorOrHex && grossWeight > 0
+  const readableOcrWarnings = Array.from(
+    new Set(ocrWarnings.map((code) => getOcrWarningMessage(code, lang))),
+  )
 
   useEffect(() => {
     if (editing || grossEdited) return
@@ -331,7 +427,7 @@ export function AddSpoolModal({
   return (
     <Modal
       title={editing ? t.editSpool : t.newSpool}
-      subtitle={targetSlot ? `→ ${t.slot} ${targetSlot}` : undefined}
+      subtitle={targetSlot ? `-> ${t.slot} ${targetSlot}` : undefined}
       onClose={onClose}
     >
       <div className="p-5 space-y-5 overflow-y-auto flex-1 min-h-0">
@@ -422,11 +518,20 @@ export function AddSpoolModal({
           {ocrError && (
             <div className="mt-2 text-xs text-red-400">{ocrError}</div>
           )}
-          {ocrWarnings.length > 0 && (
-            <div className="mt-2 text-xs text-amber-400">{ocrWarnings.join(', ')}</div>
+          {readableOcrWarnings.length > 0 && (
+            <div className="mt-2 rounded-md border border-amber-900/50 bg-amber-950/20 px-3 py-2">
+              <div className="text-[11px] font-semibold text-amber-300">{warningTitleByLang[lang] || warningTitleByLang.de}</div>
+              <ul className="mt-1 space-y-1">
+                {readableOcrWarnings.map((message) => (
+                  <li key={message} className="text-xs text-amber-200/95">
+                    {message}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
           {ocrRawText && (
-            <pre className="mt-2 max-h-24 overflow-auto text-[10px] text-zinc-500 whitespace-pre-wrap">{ocrRawText}</pre>
+            <div className="mt-2 max-h-24 overflow-auto text-[10px] text-zinc-500 whitespace-pre-wrap">{ocrRawText}</div>
           )}
         </div>
 
@@ -522,7 +627,7 @@ export function AddSpoolModal({
             </div>
             <button onClick={onOpenTares}
               className="text-xs text-emerald-400 hover:text-emerald-300 font-medium underline-offset-2 hover:underline">
-              {t.editTareLink} →
+              {t.editTareLink} ->
             </button>
           </div>
           <div className="mt-3 grid grid-cols-3 gap-3 text-center">
@@ -531,7 +636,7 @@ export function AddSpoolModal({
               <div className="mt-0.5 text-lg font-semibold tabular-nums text-zinc-100">{fmt(grossWeight, 0)} g</div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-zinc-500">− {t.tare}</div>
+              <div className="text-[10px] uppercase tracking-wider text-zinc-500">- {t.tare}</div>
               <div className="mt-0.5 text-lg font-semibold tabular-nums text-zinc-100">{fmt(tareWeight, 0)} g</div>
               {!matchingTare && manufacturer && (
                 <div className="text-[10px] text-amber-400 mt-1">{t.noMatchingTare} · {tareEstimateSource}</div>
@@ -549,7 +654,7 @@ export function AddSpoolModal({
           )}
           {!editing && (
             <div className="mt-2 text-[10px] text-zinc-500 text-center">
-              Gross weight is estimated by label net weight plus tare default. Manual gross entry is most accurate.
+              {grossEstimateHintByLang[lang] || grossEstimateHintByLang.de}
             </div>
           )}
         </div>
@@ -585,7 +690,7 @@ export function AddSpoolModal({
   )
 }
 
-// ---------- Tare Table Modal (unverändert) ----------
+// ---------- Tare Table Modal ----------
 export function TareTableModal({ t, tares, onCreate, onUpdate, onDelete, onClose }) {
   const [showCreate, setShowCreate] = useState(false)
 
@@ -713,11 +818,11 @@ function TareRow({ tare, onSave, onDelete }) {
   )
 }
 
-// ---------- Assign Spool Modal (unverändert) ----------
+// ---------- Assign Spool Modal ----------
 export function AssignSpoolModal({ t, slotId, shelfSpools, onClose, onAssign, onCreateNew }) {
   const fmtGrams = (n) => Number(n).toFixed(0)
   return (
-    <Modal title={`${t.assignSpool} → ${t.slot} ${slotId}`} subtitle={t.selectSpool}
+    <Modal title={`${t.assignSpool} -> ${t.slot} ${slotId}`} subtitle={t.selectSpool}
       onClose={onClose} maxWidth="max-w-lg">
       <div className="p-5 space-y-3 max-h-[60vh] overflow-y-auto">
         {shelfSpools.length === 0 ? (
@@ -754,3 +859,4 @@ export function AssignSpoolModal({ t, slotId, shelfSpools, onClose, onAssign, on
     </Modal>
   )
 }
+

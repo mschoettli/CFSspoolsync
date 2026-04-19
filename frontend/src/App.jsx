@@ -27,6 +27,31 @@ function formatRemaining(seconds) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
 
+function formatSyncAge(seconds, lang) {
+  const value = Math.max(0, Number(seconds) || 0)
+  const units = {
+    de: { sec: 'Sek.', min: 'Min.', hour: 'Std.', day: 'Tg.' },
+    en: { sec: 'sec', min: 'min', hour: 'h', day: 'd' },
+    fr: { sec: 's', min: 'min', hour: 'h', day: 'j' },
+    it: { sec: 's', min: 'min', hour: 'h', day: 'g' },
+    es: { sec: 's', min: 'min', hour: 'h', day: 'd' },
+    pt: { sec: 's', min: 'min', hour: 'h', day: 'd' },
+    nl: { sec: 'sec', min: 'min', hour: 'u', day: 'd' },
+    pl: { sec: 'sek', min: 'min', hour: 'godz.', day: 'dni' },
+  }
+  const unit = units[lang] || units.de
+  if (value < 60) return `${value} ${unit.sec}`
+  if (value < 3600) return `${Math.floor(value / 60)} ${unit.min}`
+  if (value < 86400) {
+    const hours = Math.floor(value / 3600)
+    const minutes = Math.floor((value % 3600) / 60)
+    return minutes > 0 ? `${hours} ${unit.hour} ${minutes} ${unit.min}` : `${hours} ${unit.hour}`
+  }
+  const days = Math.floor(value / 86400)
+  const hours = Math.floor((value % 86400) / 3600)
+  return hours > 0 ? `${days} ${unit.day} ${hours} ${unit.hour}` : `${days} ${unit.day}`
+}
+
 function resolveLanguage(value) {
   const normalized = String(value || '').trim().toLowerCase()
   return TRANSLATIONS[normalized] ? normalized : DEFAULT_LANGUAGE
@@ -275,7 +300,7 @@ export default function App() {
         {/* CFS Environment + KPIs */}
         <section>
           <SectionHead title={t.cfsStatus}
-            subtitle={`${t.lastSync}: ${lastSyncAgo} ${t.secondsAgo}`}
+            subtitle={`${t.lastSync}: ${formatSyncAge(lastSyncAgo, lang)}`}
             icon={<Activity size={18} />} />
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
             <EnvCard icon={<Thermometer size={18} />} label={t.temperature} value={fmt(cfs.temperature, 1)} unit="°C" accent="amber" />
@@ -352,6 +377,7 @@ export default function App() {
       {showAddSpool && (
         <AddSpoolModal
           t={t}
+          lang={lang}
           tares={tares}
           editing={editingSpool}
           targetSlot={addSpoolForSlot}
@@ -421,11 +447,13 @@ export default function App() {
 // ---------- Sub-components ----------
 function SpoolScopeLogo() {
   return (
-    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 to-cyan-600 flex items-center justify-center shadow-lg shadow-emerald-900/40">
-      <svg viewBox="0 0 40 40" className="w-7 h-7 text-zinc-950" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="20" cy="20" r="12" />
-        <circle cx="20" cy="20" r="4.5" />
-        <path d="M20 8v4M20 28v4M8 20h4M28 20h4" />
+    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 via-cyan-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-900/40">
+      <svg viewBox="0 0 40 40" className="w-7 h-7 text-zinc-950" fill="none">
+        <circle cx="20" cy="20" r="13.5" stroke="currentColor" strokeWidth="2" opacity="0.35" />
+        <circle cx="20" cy="20" r="10.5" stroke="currentColor" strokeWidth="1.5" opacity="0.9" />
+        <circle cx="20" cy="20" r="4.2" fill="currentColor" opacity="0.9" />
+        <path d="M20 6.5v3.5M20 30v3.5M6.5 20h3.5M30 20h3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M13 13.5c1.2-1 3-1.6 4.9-1.6h4.2c2.1 0 4 0.8 5.2 2.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.85" />
       </svg>
     </div>
   )
@@ -488,10 +516,10 @@ function PrintJobCard({ t, printJob }) {
   const title = (printJob?.title || '').trim() || t.noActivePrintJob
   const remaining = formatRemaining(printJob?.remaining_seconds)
   const accentClass = isActive
-    ? ['from-emerald-500/20 to-cyan-900/0', 'text-emerald-300', 'border-emerald-900/40']
-    : ['from-zinc-500/15 to-zinc-900/0', 'text-zinc-400', 'border-zinc-800']
+    ? ['from-sky-500/24 via-cyan-500/10 to-sky-900/0', 'text-sky-300', 'border-sky-900/40', 'text-sky-200']
+    : ['from-indigo-500/18 via-violet-500/8 to-indigo-900/0', 'text-indigo-300', 'border-indigo-900/40', 'text-indigo-100']
 
-  const [grad, txt, border] = accentClass
+  const [grad, txt, border, titleClass] = accentClass
   return (
     <div className={`relative overflow-hidden rounded-xl border bg-zinc-900/40 px-4 py-3 ${border}`}>
       <div className={`absolute inset-0 bg-gradient-to-br opacity-60 ${grad}`} />
@@ -506,7 +534,7 @@ function PrintJobCard({ t, printJob }) {
           </span>
         </div>
         <div className="flex-1 min-h-0 flex items-center justify-center">
-          <div className="text-sm font-semibold text-zinc-100 truncate max-w-full">
+          <div className={`text-sm font-semibold truncate max-w-full ${titleClass}`}>
             {title}
           </div>
         </div>

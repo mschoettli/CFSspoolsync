@@ -451,7 +451,7 @@ function SpoolScopeLogo() {
       <svg viewBox="0 0 40 40" className="w-7 h-7 text-zinc-950" fill="none">
         <circle cx="20" cy="20" r="13.5" stroke="currentColor" strokeWidth="2" opacity="0.35" />
         <circle cx="20" cy="20" r="10.5" stroke="currentColor" strokeWidth="1.5" opacity="0.9" />
-        <circle cx="20" cy="20" r="4.2" fill="currentColor" opacity="0.9" />
+        <circle cx="20" cy="20" r="6.1" fill="currentColor" opacity="0.92" />
         <path d="M20 6.5v3.5M20 30v3.5M6.5 20h3.5M30 20h3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
         <path d="M13 13.5c1.2-1 3-1.6 4.9-1.6h4.2c2.1 0 4 0.8 5.2 2.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.85" />
       </svg>
@@ -516,13 +516,14 @@ function PrintJobCard({ t, printJob }) {
   const title = (printJob?.title || '').trim() || t.noActivePrintJob
   const remaining = formatRemaining(printJob?.remaining_seconds)
   const accentClass = isActive
-    ? ['from-sky-500/24 via-cyan-500/10 to-sky-900/0', 'text-sky-300', 'border-sky-900/40', 'text-sky-200']
-    : ['from-indigo-500/18 via-violet-500/8 to-indigo-900/0', 'text-indigo-300', 'border-indigo-900/40', 'text-indigo-100']
+    ? ['from-lime-500/20 via-emerald-500/10 to-transparent', 'text-lime-300', 'border-lime-900/50', 'text-lime-100', 'bg-lime-500/80']
+    : ['from-emerald-500/16 via-teal-500/8 to-transparent', 'text-emerald-300', 'border-emerald-900/50', 'text-emerald-100', 'bg-emerald-500/70']
 
-  const [grad, txt, border, titleClass] = accentClass
+  const [grad, txt, border, titleClass, topBar] = accentClass
   return (
-    <div className={`relative overflow-hidden rounded-xl border bg-zinc-900/40 px-4 py-3 ${border}`}>
-      <div className={`absolute inset-0 bg-gradient-to-br opacity-60 ${grad}`} />
+    <div className={`relative overflow-hidden rounded-xl border bg-zinc-900/35 px-4 py-3 ${border}`}>
+      <div className={`absolute inset-x-0 top-0 h-[2px] ${topBar}`} />
+      <div className={`absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br ${grad} blur-2xl opacity-80`} />
       <div className="relative h-full min-h-[84px] flex flex-col">
         <div className="flex items-center justify-between gap-2">
           <div className={`flex items-center gap-1.5 text-xs font-medium ${txt}`}>

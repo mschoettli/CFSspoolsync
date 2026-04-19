@@ -16,6 +16,7 @@ FROM nginx:1.27-alpine
 
 # Custom nginx config with /api + /ws proxy to backend
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+RUN sed -i '1s/^\xEF\xBB\xBF//' /etc/nginx/conf.d/default.conf
 
 # Built assets
 COPY --from=build /app/dist /usr/share/nginx/html

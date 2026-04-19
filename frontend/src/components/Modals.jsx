@@ -704,6 +704,9 @@ export function TareTableModal({ t, tares, onCreate, onUpdate, onDelete, onClose
               <Plus size={14} />{t.addTare}
             </button>
           </div>
+          <div className="mb-3 text-xs text-zinc-500">
+            {t.tareAutoApplyHint || 'Changes are automatically applied to matching existing spools.'}
+          </div>
           <div className="border border-zinc-800 rounded-lg overflow-hidden max-h-[60vh] overflow-y-auto">
             <table className="w-full text-sm">
               <thead className="bg-zinc-900 text-xs uppercase tracking-wider text-zinc-500 sticky top-0">

@@ -1,4 +1,4 @@
-"""Runtime configuration — read from environment variables."""
+﻿"""Runtime configuration - read from environment variables."""
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -7,10 +7,10 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/cfs.db"
 
     # CFS / Moonraker bridge
-    # Wenn leer → Simulator-Mode (zufällige Jitter-Werte, kein echter Drucker)
-    moonraker_host: str = ""            # z.B. "192.168.1.42"
+    # If empty -> simulator mode (random jitter values, no real printer)
+    moonraker_host: str = ""            # e.g. "192.168.1.42"
     moonraker_port: int = 80
-    moonraker_poll_interval: float = 2.0  # Sekunden
+    moonraker_poll_interval: float = 2.0  # seconds
     moonraker_print_grace_s: float = 10.0
 
     # API
@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     cors_origins: str = "*"
 
     # Simulator
-    simulator_enabled: bool = True  # wenn moonraker_host leer → automatisch an
-    simulator_flow_gps: float = 4.0   # Gramm pro Sekunde Referenz
+    simulator_enabled: bool = True  # automatically enabled when moonraker_host is empty
+    simulator_flow_gps: float = 4.0   # grams-per-second reference
 
     # OCR + optional cloud normalization
     openai_api_key: str = ""

@@ -1,10 +1,12 @@
-"""CRUD für Leerspulen-Gewichte (Tara)."""
+"""CRUD for empty spool tare weights."""
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Tare
-from ..schemas import TareCreate, TareOut, TareUpdate
+from ..models import Spool, Tare
+from ..schemas import TareCreate, TareOut, TareUpdate, TareUpdateOut
 
 router = APIRouter(prefix="/tares", tags=["tares"])
 
@@ -23,16 +25,41 @@ def create_tare(payload: TareCreate, db: Session = Depends(get_db)):
     return tare
 
 
-@router.patch("/{tare_id}", response_model=TareOut)
+@router.patch("/{tare_id}", response_model=TareUpdateOut)
 def update_tare(tare_id: int, payload: TareUpdate, db: Session = Depends(get_db)):
     tare = db.query(Tare).get(tare_id)
     if not tare:
         raise HTTPException(404, "Tara-Eintrag nicht gefunden")
-    for k, v in payload.model_dump(exclude_unset=True).items():
-        setattr(tare, k, v)
-    db.commit()
-    db.refresh(tare)
-    return tare
+
+    try:
+        for key, value in payload.model_dump(exclude_unset=True).items():
+            setattr(tare, key, value)
+
+        normalized_manufacturer = (tare.manufacturer or "").strip().lower()
+        normalized_material = (tare.material or "").strip().lower()
+
+        updated_spools_count = (
+            db.query(Spool)
+            .filter(
+                func.lower(func.trim(Spool.manufacturer)) == normalized_manufacturer,
+                func.lower(func.trim(Spool.material)) == normalized_material,
+            )
+            .update({Spool.tare_weight: tare.weight}, synchronize_session=False)
+        )
+
+        db.commit()
+        db.refresh(tare)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(500, "Tara-Update fehlgeschlagen") from exc
+
+    return {
+        "id": tare.id,
+        "manufacturer": tare.manufacturer,
+        "material": tare.material,
+        "weight": tare.weight,
+        "updated_spools_count": updated_spools_count,
+    }
 
 
 @router.delete("/{tare_id}", status_code=204)

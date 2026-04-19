@@ -1,10 +1,10 @@
-# CFSspoolsync — Production Stack
+﻿# CFSspoolsync - Production Stack
 #
-# Nutzt fertig gebaute Images von GitHub Container Registry.
-# Bei jedem git-push auf main baut GitHub Actions neue Images,
-# und Watchtower zieht sie automatisch auf den Host.
+# Uses prebuilt images from GitHub Container Registry.
+# On every push to main, GitHub Actions builds new images,
+# and Watchtower pulls them automatically to the host.
 #
-# Für lokales Bauen aus dem Source-Code stattdessen:
+# For local builds from source code instead:
 #   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d
 
 services:
@@ -13,7 +13,7 @@ services:
     container_name: cfsspoolsync
     restart: unless-stopped
     environment:
-      # Leer lassen für Simulator-Mode. Mit IP/Hostname deines K2 für Live-Modus.
+      # Leave empty for simulator mode. Set IP/hostname of your K2 for live mode.
       CFS_MOONRAKER_HOST: ${CFS_MOONRAKER_HOST:-}
       CFS_MOONRAKER_PORT: ${CFS_MOONRAKER_PORT:-7125}
       CFS_DATABASE_URL: sqlite:////app/data/cfs.db
@@ -38,8 +38,8 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
-  # Auto-update: checked die Registry alle 5 Minuten und updated Images automatisch.
-  # Nur Container mit Label watchtower.enable=true werden berücksichtigt.
+  # Auto-update: checks the registry every 5 minutes and updates images automatically.
+  # Only containers with label watchtower.enable=true are considered.
   watchtower:
     image: containrrr/watchtower:latest
     container_name: cfs-watchtower
@@ -48,8 +48,8 @@ services:
       # Guard against old injected Docker API values (for example 1.25).
       DOCKER_API_VERSION: "1.44"
       WATCHTOWER_POLL_INTERVAL: 300       # 5 min
-      WATCHTOWER_CLEANUP: "true"          # alte Images löschen
-      WATCHTOWER_LABEL_ENABLE: "true"     # nur Container mit Label updaten
+      WATCHTOWER_CLEANUP: "true"          # remove old images
+      WATCHTOWER_LABEL_ENABLE: "true"     # update only labeled containers
       WATCHTOWER_INCLUDE_RESTARTING: "true"
       TZ: ${TZ:-Europe/Zurich}
     volumes:

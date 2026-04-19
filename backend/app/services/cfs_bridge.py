@@ -1,16 +1,16 @@
-"""CFS / Moonraker Bridge — Version 2.
+﻿"""CFS / Moonraker Bridge â€” Version 2.
 
-Parser für die echte Struktur der K2-Combo-Firmware:
+Parser fÃ¼r die echte Struktur der K2-Combo-Firmware:
 
-    box.T1.temperature         → Kammer-Temperatur (Celsius)
-    box.T1.dry_and_humidity    → Kammer-Feuchtigkeit (%)
-    box.T1.material_type[0..3] → RFID-Material-Code pro Slot A/B/C/D
-    box.T1.color_value[0..3]   → RFID-Farb-Hex pro Slot
-    box.T1.remain_len[0..3]    → Verbleibende Filament-Länge in Prozent
+    box.T1.temperature         â†’ Kammer-Temperatur (Celsius)
+    box.T1.dry_and_humidity    â†’ Kammer-Feuchtigkeit (%)
+    box.T1.material_type[0..3] â†’ RFID-Material-Code pro Slot A/B/C/D
+    box.T1.color_value[0..3]   â†’ RFID-Farb-Hex pro Slot
+    box.T1.remain_len[0..3]    â†’ Verbleibende Filament-LÃ¤nge in Prozent
 
 Schreibt die erkannten Werte in zwei Tabellen:
   - CfsState: Kammer-Klima + Verbindungsstatus
-  - CfsSlotSnapshot: was das CFS pro Slot aktuell sieht (für UI-Vorbefüllung)
+  - CfsSlotSnapshot: was das CFS pro Slot aktuell sieht (fÃ¼r UI-VorbefÃ¼llung)
 
 Das Gewicht einer eingelegten Spule (current_weight in gramm) wird aus
 dem verbleibenden Prozentwert relativ zum Snapshot bei Anlage berechnet.
@@ -105,7 +105,7 @@ class CfsBridge:
                 cfs.humidity = _clamp(
                     cfs.humidity + (random.random() - 0.5) * 0.4, 10, 35
                 )
-                # Sim-Snapshots nur falls bisher alle leer sind (first start)
+                # Sim snapshots only if all are still empty (first start)
                 any_populated = db.query(CfsSlotSnapshot).filter(
                     CfsSlotSnapshot.present == True  # noqa: E712
                 ).first()
@@ -120,7 +120,7 @@ class CfsBridge:
 
             cfs.last_sync = datetime.utcnow()
 
-            # ---------- 2. Slot-Gewichte live aktualisieren ----------
+            # ---------- 2. Update slot weights live ----------
             self._update_slot_weights(db)
 
             # ---------- 3. Automatic print status + live flow ----------
@@ -139,7 +139,7 @@ class CfsBridge:
 
             db.commit()
 
-            # ---------- 4. History (alle 60s) ----------
+            # ---------- 4. History (every 60s) ----------
             if now_ts - self._last_history_write >= 60:
                 self._last_history_write = now_ts
                 for slot in slots:
@@ -342,7 +342,7 @@ class CfsBridge:
     # ---------- DB helpers ----------
     def _write_snapshots(self, db: Session, cfs_slots: list[dict]) -> None:
         """
-        Persistiert den aktuellen CFS-Zustand pro Slot. Überschreibt immer
+        Persistiert den aktuellen CFS-Zustand pro Slot. Ãœberschreibt immer
         genau 4 Rows (slot_id 1..4) damit kein Wachstum passiert.
         """
         for slot_data in cfs_slots:
@@ -366,13 +366,13 @@ class CfsBridge:
         Aktualisiert `current_weight` pro Slot basierend auf CFS-RFID-Restwert.
 
         Einige Firmware-Staende liefern `remain_len` als echtes Prozent (0..100),
-        andere als relative Länge/Baseline (>100). Daher:
+        andere als relative LÃ¤nge/Baseline (>100). Daher:
           - <= 100  -> als Prozent interpretieren
           - > 100   -> relativ zu `initial_remain_pct` skalieren
                      (wird bei Bedarf aus erstem Live-Wert initialisiert)
 
         Formel:
-            net_now = ratio × (gross - tare)
+            net_now = ratio Ã— (gross - tare)
             current_weight = net_now + tare
         """
         slots = db.query(Slot).order_by(Slot.id).all()
@@ -425,7 +425,7 @@ def _normalize_print_title(raw_filename) -> str:
 
 
 def _fake_snapshots() -> list[dict]:
-    """Demo-Snapshots für Simulator-Mode damit UI was zum Anzeigen hat."""
+    """Demo-Snapshots fÃ¼r Simulator-Mode damit UI was zum Anzeigen hat."""
     return [
         {"slot_id": 1, "present": True,  "known": True,
          "material_code": "104001", "manufacturer": "Creality", "material": "Hyper PLA",
@@ -498,4 +498,5 @@ def _snapshot_dict(snap: CfsSlotSnapshot) -> dict:
 
 
 bridge = CfsBridge()
+
 

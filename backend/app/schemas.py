@@ -1,4 +1,4 @@
-"""Pydantic-Schemas für die JSON-API."""
+﻿"""Pydantic-Schemas fÃ¼r die JSON-API."""
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict, model_validator
@@ -75,7 +75,11 @@ class TareOut(TareBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ---------- CFS Snapshot (Live-Erkennung pro Slot) ----------
+class TareUpdateOut(TareOut):
+    updated_spools_count: int = 0
+
+
+# ---------- CFS Snapshot (live detection per slot) ----------
 class CfsSnapshotOut(BaseModel):
     slot_id: int
     present: bool
@@ -125,3 +129,4 @@ class HistoryOut(BaseModel):
     temperature: Optional[float]
     humidity: Optional[float]
     model_config = ConfigDict(from_attributes=True)
+

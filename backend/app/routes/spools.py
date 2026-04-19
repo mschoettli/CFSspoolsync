@@ -1,4 +1,4 @@
-"""CRUD für Spulen."""
+﻿"""CRUD fÃ¼r Spulen."""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -37,11 +37,11 @@ def create_spool(payload: SpoolCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(spool)
 
-    # optional direkt in einen Slot einlegen
+    # optionally assign directly to a slot
     if payload.assign_to_slot:
         slot = db.query(Slot).get(payload.assign_to_slot)
         if not slot:
-            raise HTTPException(400, "Ungültiger Slot")
+            raise HTTPException(400, "UngÃ¼ltiger Slot")
         slot.spool_id = spool.id
         slot.current_weight = spool.gross_weight
         slot.is_printing = False
@@ -80,7 +80,7 @@ def update_spool(spool_id: int, payload: SpoolUpdate, db: Session = Depends(get_
     db.commit()
     db.refresh(spool)
 
-    # falls diese Spule aktuell eingelegt ist: current_weight synchron halten
+    # if this spool is currently assigned: keep current_weight in sync
     if payload.gross_weight is not None:
         slot = db.query(Slot).filter(Slot.spool_id == spool_id).first()
         if slot:
@@ -95,7 +95,7 @@ def delete_spool(spool_id: int, db: Session = Depends(get_db)):
     spool = db.query(Spool).get(spool_id)
     if not spool:
         raise HTTPException(404, "Spule nicht gefunden")
-    # Slot-Referenz entfernen
+    # Remove slot reference
     slot = db.query(Slot).filter(Slot.spool_id == spool_id).first()
     if slot:
         slot.spool_id = None
@@ -105,3 +105,4 @@ def delete_spool(spool_id: int, db: Session = Depends(get_db)):
     db.delete(spool)
     db.commit()
     return None
+

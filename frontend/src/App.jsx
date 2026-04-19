@@ -254,7 +254,17 @@ export default function App() {
   }
 
   const createTare = async (data) => { await api.createTare(data); setTares(await api.listTares()) }
-  const updateTare = async (id, data) => { await api.updateTare(id, data); setTares(await api.listTares()) }
+  const updateTare = async (id, data) => {
+    await api.updateTare(id, data)
+    const [nextTares, nextSpools, nextSlots] = await Promise.all([
+      api.listTares(),
+      api.listSpools(),
+      api.listSlots(),
+    ])
+    setTares(nextTares)
+    setSpools(nextSpools)
+    setSlots(nextSlots)
+  }
   const deleteTare = async (id) => { await api.deleteTare(id); setTares(await api.listTares()) }
 
   // CFS snapshot for the current add-spool modal (from embedded slot data)

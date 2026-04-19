@@ -1,4 +1,4 @@
-"""Slot actions for assignment, unassignment, and CFS snapshots."""
+﻿"""Slot actions for assignment, unassignment, and CFS snapshots."""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -10,7 +10,7 @@ router = APIRouter(prefix="/slots", tags=["slots"])
 
 
 def _attach_snapshot(slot: Slot, db: Session) -> Slot:
-    """Pydantic-v2 liest `cfs_snapshot` via from_attributes, wir hängen es an."""
+    """Pydantic-v2 liest `cfs_snapshot` via from_attributes, wir hÃ¤ngen es an."""
     snap = db.query(CfsSlotSnapshot).get(slot.id)
     slot.cfs_snapshot = snap  # type: ignore[attr-defined]
     return slot
@@ -43,8 +43,8 @@ def assign_spool(slot_id: int, payload: SlotAssign, db: Session = Depends(get_db
     slot.is_printing = False
     slot.flow = 0
 
-    # Wenn im Moment CFS-Snapshot mit remain_pct existiert, übernehmen wir
-    # den als initial_remain_pct falls die Spule noch keinen hat.
+    # If a CFS snapshot with remain_pct exists right now, use it
+    # as initial_remain_pct if the spool does not have one yet.
     snap = db.query(CfsSlotSnapshot).get(slot_id)
     if snap and snap.remain_pct is not None and spool.initial_remain_pct is None:
         spool.initial_remain_pct = snap.remain_pct
@@ -70,18 +70,18 @@ def unassign(slot_id: int, db: Session = Depends(get_db)):
 
 
 
-# ---------- CFS-Snapshot Endpoint ----------
+# ---------- CFS Snapshot endpoint ----------
 cfs_slots_router = APIRouter(prefix="/cfs/slots", tags=["cfs"])
 
 
 @cfs_slots_router.get("", response_model=list[CfsSnapshotOut])
 def list_cfs_snapshots(db: Session = Depends(get_db)):
     """
-    Was das CFS gerade in allen 4 Slots erkennt — unabhängig davon, ob der
-    User bereits eine Spule im Lager angelegt hat. Quelle für Auto-Discovery.
+    Was das CFS gerade in allen 4 Slots erkennt â€” unabhÃ¤ngig davon, ob der
+    User bereits eine Spule im Lager angelegt hat. Quelle fÃ¼r Auto-Discovery.
     """
     snaps = db.query(CfsSlotSnapshot).order_by(CfsSlotSnapshot.slot_id).all()
-    # Falls noch nie gefüllt (frischer Start): 4 leere Einträge zurückgeben
+    # If never populated yet (fresh start): return 4 empty entries
     if not snaps:
         return [
             CfsSnapshotOut(
@@ -106,4 +106,5 @@ def get_cfs_snapshot(slot_id: int, db: Session = Depends(get_db)):
             nozzle_temp=None, bed_temp=None, color_hex=None, remain_pct=None,
         )
     return snap
+
 

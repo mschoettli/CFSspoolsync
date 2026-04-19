@@ -1,11 +1,11 @@
-"""SQLAlchemy engine, session und Basisklasse."""
+﻿"""SQLAlchemy engine, session und Basisklasse."""
 from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from .config import settings
 
-# Sicherstellen dass das Data-Verzeichnis existiert (für SQLite-File)
+# Ensure the data directory exists (for the SQLite file)
 if settings.database_url.startswith("sqlite"):
     db_path = settings.database_url.split("sqlite:///")[-1]
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -25,3 +25,4 @@ def get_db():
         yield db
     finally:
         db.close()
+

@@ -1,4 +1,4 @@
-"""Verbrauchs-Historie für Charts im Frontend."""
+﻿"""Verbrauchs-Historie fÃ¼r Charts im Frontend."""
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
@@ -25,7 +25,7 @@ def get_history(
     return q.order_by(HistoryEntry.timestamp.asc()).all()
 
 
-# CFS-Snapshot (zusätzlich für Frontend-Initial-Load)
+# CFS snapshot (also used for frontend initial load)
 cfs_router = APIRouter(prefix="/cfs", tags=["cfs"])
 
 
@@ -38,3 +38,4 @@ def get_cfs(db: Session = Depends(get_db)):
         db.commit()
         db.refresh(state)
     return state
+

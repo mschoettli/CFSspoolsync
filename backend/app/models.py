@@ -1,4 +1,4 @@
-"""ORM-Modelle."""
+﻿"""ORM-Modelle."""
 from datetime import datetime
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, DateTime, ForeignKey
@@ -21,8 +21,8 @@ class Spool(Base):
     bed_temp = Column(Integer, nullable=False, default=60)
     gross_weight = Column(Float, nullable=False)
     tare_weight = Column(Float, nullable=False)
-    # Snapshot der Restmenge in Prozent zum Zeitpunkt der Spulen-Anlage.
-    # Nötig damit wir das aktuelle Gewicht korrekt skalieren können.
+    # Snapshot of remaining percentage at spool creation time.
+    # Used to compute current weight from live remaining percentage.
     initial_remain_pct = Column(Float, nullable=True)
     name = Column(String(200), default="")
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -58,16 +58,16 @@ class Slot(Base):
 class CfsSlotSnapshot(Base):
     """
     Aktueller Roh-Zustand, wie das CFS den jeweiligen Slot sieht. Wird
-    jede Sekunde vom Bridge-Service überschrieben.
+    jede Sekunde vom Bridge-Service Ã¼berschrieben.
 
-    Unabhängig davon ob User schon eine Spule im Spool-Lager angelegt hat.
-    Dient als Daten-Quelle für Auto-Discovery und Modal-Vorbefüllung.
+    UnabhÃ¤ngig davon ob User schon eine Spule im Spool-Lager angelegt hat.
+    Dient als Daten-Quelle fÃ¼r Auto-Discovery und Modal-VorbefÃ¼llung.
     """
     __tablename__ = "cfs_slot_snapshots"
 
     slot_id = Column(Integer, primary_key=True)
-    present = Column(Boolean, default=False)        # Spule physisch eingelegt
-    known = Column(Boolean, default=False)          # Material-Code bekannt
+    present = Column(Boolean, default=False)        # Physical spool is present
+    known = Column(Boolean, default=False)          # Material code is known
     material_code = Column(String(20), nullable=True)
     manufacturer = Column(String(100), nullable=True)
     material = Column(String(50), nullable=True)
@@ -100,3 +100,4 @@ class HistoryEntry(Base):
     consumed = Column(Float, nullable=False, default=0)
     temperature = Column(Float, nullable=True)
     humidity = Column(Float, nullable=True)
+

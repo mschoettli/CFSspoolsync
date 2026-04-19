@@ -457,13 +457,23 @@ export default function App() {
 // ---------- Sub-components ----------
 function SpoolScopeLogo() {
   return (
-    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 via-cyan-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-900/40">
-      <svg viewBox="0 0 40 40" className="w-7 h-7 text-zinc-950" fill="none">
-        <circle cx="20" cy="20" r="13.5" stroke="currentColor" strokeWidth="2" opacity="0.35" />
-        <circle cx="20" cy="20" r="10.5" stroke="currentColor" strokeWidth="1.5" opacity="0.9" />
-        <circle cx="20" cy="20" r="6.1" fill="currentColor" opacity="0.92" />
-        <path d="M20 6.5v3.5M20 30v3.5M6.5 20h3.5M30 20h3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-        <path d="M13 13.5c1.2-1 3-1.6 4.9-1.6h4.2c2.1 0 4 0.8 5.2 2.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.85" />
+    <div className="w-10 h-10 flex items-center justify-center">
+      <svg viewBox="0 0 40 40" className="w-8 h-8" fill="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="logoV05Outer" x1="20" y1="5.5" x2="20" y2="34.5" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#C4B5FD" />
+            <stop offset="100%" stopColor="#8B5CF6" />
+          </linearGradient>
+          <radialGradient id="logoV05Inner" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(20 20) rotate(90) scale(9.4)">
+            <stop offset="0%" stopColor="#A5F3FC" />
+            <stop offset="100%" stopColor="#22D3EE" />
+          </radialGradient>
+        </defs>
+        <circle cx="20" cy="20" r="12.4" stroke="url(#logoV05Outer)" strokeWidth="2.2" />
+        <circle cx="20" cy="20" r="9.0" stroke="url(#logoV05Outer)" strokeOpacity="0.56" strokeWidth="1.3" />
+        <circle cx="20" cy="20" r="5.9" fill="url(#logoV05Inner)" stroke="url(#logoV05Outer)" strokeWidth="1.2" />
+        <circle cx="20" cy="20" r="2.0" fill="#09090b" />
+        <path d="M20 5.2v3M20 31.8v3M5.2 20h3M31.8 20h3" stroke="url(#logoV05Outer)" strokeWidth="1.5" strokeLinecap="round" />
       </svg>
     </div>
   )

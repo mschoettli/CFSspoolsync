@@ -37,18 +37,6 @@ It combines:
 <!-- screenshot: tare-management-modal -->
 <!-- screenshot: add-spool-ocr-modal -->
 
-## K2 Slot Refresh Workflow (Important)
-
-CFS data is polled continuously, but slot metadata and remaining values are only updated after the slot is re-read on the K2 UI.
-
-On the K2 screen:
-1. Open the CFS view.
-2. Tap the colored spool.
-3. Tap the slot refresh arrow above the slot.
-4. Wait for the next backend poll cycle; values appear in the web app.
-
-<!-- screenshot: slot-refresh-on-k2 -->
-
 ## Quick Start
 
 ```bash
@@ -74,7 +62,7 @@ Do not hardcode personal values in tracked repository files.
 | `REGISTRY` | `ghcr.io/mschoettli` | Image namespace |
 | `TAG` | `latest` | Image tag |
 | `HTTP_PORT` | `8088` | Frontend port |
-| `CFS_MOONRAKER_HOST` | *(set your own)* | Required for live K2 mode |
+| `CFS_MOONRAKER_HOST` | *(set printer IP)* | Set the printer IP for live K2 mode |
 | `CFS_MOONRAKER_PORT` | `7125` | Moonraker API port |
 | `TZ` | `Europe/Zurich` | Container timezone |
 | `CFS_OPENAI_API_KEY` | *(optional)* | OCR cloud fallback |
@@ -102,26 +90,8 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 
 ## Development
 
-### Backend
-
-```bash
-cd backend
-python -m venv .venv
-# Linux/macOS:
-source .venv/bin/activate
-# Windows PowerShell:
-# .venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
+See:
+- [Development Guide](docs/development.md)
 
 ## API Overview (Active Stack)
 

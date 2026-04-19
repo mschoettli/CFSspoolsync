@@ -1,15 +1,15 @@
 """Pydantic-Schemas für die JSON-API."""
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 
 # ---------- Spool ----------
 class SpoolBase(BaseModel):
     manufacturer: str = Field(..., min_length=1, max_length=100)
     material: str = Field(..., min_length=1, max_length=50)
-    color: str = Field(..., min_length=1, max_length=100)
-    color_hex: str = Field("#22c55e", pattern=r"^#[0-9a-fA-F]{6}$")
+    color: Optional[str] = Field(None, max_length=100)
+    color_hex: Optional[str] = Field(None, pattern=r"^$|^#[0-9a-fA-F]{6}$")
     diameter: float = Field(1.75, ge=1.0, le=4.0)
     nozzle_temp: int = Field(210, ge=150, le=350)
     bed_temp: int = Field(60, ge=0, le=150)
@@ -17,6 +17,15 @@ class SpoolBase(BaseModel):
     tare_weight: float = Field(..., ge=0)
     initial_remain_pct: Optional[float] = Field(None, ge=0, le=100)
     name: str = ""
+
+    @model_validator(mode="after")
+    def validate_color_fields(self):
+        """Ensure at least one color field is provided."""
+        has_color = bool((self.color or "").strip())
+        has_color_hex = bool((self.color_hex or "").strip())
+        if not has_color and not has_color_hex:
+            raise ValueError("Either 'color' or 'color_hex' must be provided.")
+        return self
 
 
 class SpoolCreate(SpoolBase):
@@ -27,7 +36,7 @@ class SpoolUpdate(BaseModel):
     manufacturer: Optional[str] = None
     material: Optional[str] = None
     color: Optional[str] = None
-    color_hex: Optional[str] = None
+    color_hex: Optional[str] = Field(None, pattern=r"^$|^#[0-9a-fA-F]{6}$")
     diameter: Optional[float] = None
     nozzle_temp: Optional[int] = None
     bed_temp: Optional[int] = None

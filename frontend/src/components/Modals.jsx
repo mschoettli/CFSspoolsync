@@ -88,20 +88,12 @@ function getCanonicalNameForHex(value) {
 
 // ---------- Modal shell ----------
 export function Modal({ title, subtitle, onClose, children, maxWidth = 'max-w-2xl' }) {
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm overflow-y-auto"
-      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-4 bg-zinc-950/80 backdrop-blur-sm"
     >
       <div
-        className={`w-full ${maxWidth} bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl my-8`}
-        onClick={(e) => e.stopPropagation()}
+        className={`w-full ${maxWidth} bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl my-3 sm:my-6 max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col overflow-hidden`}
       >
         <div className="flex items-start justify-between p-5 border-b border-zinc-800">
           <div>
@@ -167,6 +159,8 @@ export function AddSpoolModal({
   const [bedTemp, setBedTemp]           = useState(initial.bed_temp)
   const [grossWeight, setGrossWeight]   = useState(initial.gross_weight)
   const [name, setName]                 = useState(initial.name)
+  const [grossEdited, setGrossEdited]   = useState(Boolean(editing))
+  const [autoNetWeight, setAutoNetWeight] = useState(1000)
   const [ocrBusy, setOcrBusy]           = useState(false)
   const [ocrError, setOcrError]         = useState('')
   const [ocrWarnings, setOcrWarnings]   = useState([])
@@ -193,12 +187,45 @@ export function AddSpoolModal({
     }
   }, [editing, color, cfsSnapshot?.color_hex])
 
+  const normalizeKey = (value) => String(value || '').trim().toLowerCase()
+  const median = (values) => {
+    if (!values.length) return null
+    const sorted = [...values].sort((a, b) => a - b)
+    const mid = Math.floor(sorted.length / 2)
+    if (sorted.length % 2) return sorted[mid]
+    return (sorted[mid - 1] + sorted[mid]) / 2
+  }
+
+  const manufacturerKey = normalizeKey(manufacturer)
+  const materialKey = normalizeKey(material)
   const matchingTare = tares.find(
-    (tr) =>
-      tr.manufacturer.toLowerCase() === manufacturer.toLowerCase() &&
-      tr.material.toLowerCase() === material.toLowerCase(),
+    (tr) => normalizeKey(tr.manufacturer) === manufacturerKey && normalizeKey(tr.material) === materialKey,
   )
-  const tareWeight = matchingTare?.weight ?? 0
+  const manufacturerMedian = median(
+    tares
+      .filter((tr) => normalizeKey(tr.manufacturer) === manufacturerKey)
+      .map((tr) => Number(tr.weight))
+      .filter((weight) => Number.isFinite(weight) && weight > 0),
+  )
+  const materialMedian = median(
+    tares
+      .filter((tr) => normalizeKey(tr.material) === materialKey)
+      .map((tr) => Number(tr.weight))
+      .filter((weight) => Number.isFinite(weight) && weight > 0),
+  )
+  const globalMedian = median(
+    tares
+      .map((tr) => Number(tr.weight))
+      .filter((weight) => Number.isFinite(weight) && weight > 0),
+  ) ?? 200
+  const tareWeight = Number(matchingTare?.weight ?? manufacturerMedian ?? materialMedian ?? globalMedian)
+  const tareEstimateSource = matchingTare
+    ? 'exact'
+    : manufacturerMedian != null
+      ? 'manufacturer'
+      : materialMedian != null
+        ? 'material'
+        : 'global'
   const netWeight = Math.max(0, grossWeight - tareWeight)
 
   const manufacturers = Array.from(new Set(tares.map((tr) => tr.manufacturer))).sort()
@@ -206,18 +233,27 @@ export function AddSpoolModal({
     new Set([...Object.keys(MATERIAL_PRESETS), ...tares.map((tr) => tr.material)]),
   ).sort()
 
-  const valid = manufacturer.trim() && material && color.trim() && grossWeight > 0
+  const hasColorOrHex = Boolean(color.trim() || normalizeHex(colorHex))
+  const valid = manufacturer.trim() && material && hasColorOrHex && grossWeight > 0
+
+  useEffect(() => {
+    if (editing || grossEdited) return
+    const nextGross = Math.max(1, Math.round(autoNetWeight + tareWeight))
+    setGrossWeight(nextGross)
+  }, [autoNetWeight, tareWeight, editing, grossEdited])
 
   const onColorNameChange = (nextColor) => {
     setColor(nextColor)
     const mappedHex = getHexForColorName(nextColor)
     if (mappedHex) {
       setColorHex(mappedHex)
+    } else {
+      setColorHex('')
     }
   }
 
   const onColorHexChange = (nextHex) => {
-    const normalizedHex = normalizeHex(nextHex) || nextHex
+    const normalizedHex = normalizeHex(nextHex) || ''
     setColorHex(normalizedHex)
     const mappedName = getCanonicalNameForHex(normalizedHex)
     if (mappedName) {
@@ -238,7 +274,12 @@ export function AddSpoolModal({
       if (mappedHex) setColorHex(mappedHex)
     }
     if (result.diameter_mm) setDiameter(Number(result.diameter_mm))
-    if (result.weight_g) setGrossWeight(Number(result.weight_g))
+    if (result.weight_g) {
+      const netFromLabel = Number(result.weight_g)
+      if (Number.isFinite(netFromLabel) && netFromLabel > 0) {
+        setAutoNetWeight(netFromLabel)
+      }
+    }
     if (result.nozzle_max || result.nozzle_min) {
       setNozzleTemp(Number(result.nozzle_max || result.nozzle_min))
     }
@@ -273,8 +314,8 @@ export function AddSpoolModal({
     onSave({
       manufacturer: manufacturer.trim(),
       material,
-      color: color.trim(),
-      color_hex: colorHex,
+      color: color.trim() || null,
+      color_hex: normalizeHex(colorHex),
       diameter: +diameter,
       nozzle_temp: +nozzleTemp,
       bed_temp: +bedTemp,
@@ -293,7 +334,7 @@ export function AddSpoolModal({
       subtitle={targetSlot ? `→ ${t.slot} ${targetSlot}` : undefined}
       onClose={onClose}
     >
-      <div className="p-5 space-y-5">
+      <div className="p-5 space-y-5 overflow-y-auto flex-1 min-h-0">
         {/* CFS Auto-Fill Banner */}
         {targetSlot && cfsConnected && !editing && snapPresent && snapKnown && (
           <div className="flex items-start gap-3 p-3 rounded-lg border border-cyan-900/60 bg-cyan-950/30">
@@ -422,7 +463,7 @@ export function AddSpoolModal({
                 className="input flex-1" placeholder="Jade White, Hyper Red..."
               />
               <input
-                type="color" value={colorHex}
+                type="color" value={normalizeHex(colorHex) || '#22c55e'}
                 onChange={(e) => onColorHexChange(e.target.value)}
                 className={`w-11 rounded-md border bg-zinc-800 cursor-pointer ${
                   cfsSnapshot?.color_hex ? 'border-cyan-700' : 'border-zinc-700'
@@ -463,7 +504,11 @@ export function AddSpoolModal({
           <Field label={`${t.grossWeight} (g)`} required>
             <input
               type="number" value={grossWeight}
-              onChange={(e) => setGrossWeight(+e.target.value)} className="input"
+              onChange={(e) => {
+                setGrossEdited(true)
+                setGrossWeight(+e.target.value)
+              }}
+              className="input"
             />
           </Field>
         </div>
@@ -489,7 +534,7 @@ export function AddSpoolModal({
               <div className="text-[10px] uppercase tracking-wider text-zinc-500">− {t.tare}</div>
               <div className="mt-0.5 text-lg font-semibold tabular-nums text-zinc-100">{fmt(tareWeight, 0)} g</div>
               {!matchingTare && manufacturer && (
-                <div className="text-[10px] text-amber-400 mt-1">{t.noMatchingTare}</div>
+                <div className="text-[10px] text-amber-400 mt-1">{t.noMatchingTare} · {tareEstimateSource}</div>
               )}
             </div>
             <div>
@@ -500,6 +545,11 @@ export function AddSpoolModal({
           {cfsSnapshot?.remain_pct != null && (
             <div className="mt-3 pt-3 border-t border-zinc-800 text-[10px] text-zinc-500 text-center font-mono">
               {t.initialRemainPct}: {cfsSnapshot.remain_pct}%
+            </div>
+          )}
+          {!editing && (
+            <div className="mt-2 text-[10px] text-zinc-500 text-center">
+              Gross weight is estimated by label net weight plus tare default. Manual gross entry is most accurate.
             </div>
           )}
         </div>

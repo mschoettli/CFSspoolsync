@@ -9,6 +9,11 @@ from ..schemas import SpoolCreate, SpoolOut, SpoolUpdate
 router = APIRouter(prefix="/spools", tags=["spools"])
 
 
+def _has_text_value(value: str | None) -> bool:
+    """Return True when the value contains non-whitespace characters."""
+    return bool((value or "").strip())
+
+
 @router.get("", response_model=list[SpoolOut])
 def list_spools(db: Session = Depends(get_db)):
     return db.query(Spool).order_by(Spool.manufacturer, Spool.material).all()
@@ -16,7 +21,17 @@ def list_spools(db: Session = Depends(get_db)):
 
 @router.post("", response_model=SpoolOut, status_code=201)
 def create_spool(payload: SpoolCreate, db: Session = Depends(get_db)):
-    data = payload.model_dump(exclude={"assign_to_slot"})
+    data = payload.model_dump(exclude={"assign_to_slot"}, exclude_none=True)
+    if "color" in data:
+        data["color"] = data["color"].strip()
+    if "color_hex" in data:
+        data["color_hex"] = data["color_hex"].strip().upper()
+
+    if not _has_text_value(data.get("color")) and not _has_text_value(data.get("color_hex")):
+        raise HTTPException(status_code=422, detail="Either 'color' or 'color_hex' must be provided.")
+
+    data["color"] = data.get("color", "")
+    data["color_hex"] = data.get("color_hex", "")
     spool = Spool(**data)
     db.add(spool)
     db.commit()
@@ -49,8 +64,19 @@ def update_spool(spool_id: int, payload: SpoolUpdate, db: Session = Depends(get_
     spool = db.query(Spool).get(spool_id)
     if not spool:
         raise HTTPException(404, "Spule nicht gefunden")
-    for k, v in payload.model_dump(exclude_unset=True).items():
+
+    data = payload.model_dump(exclude_unset=True)
+    if "color" in data:
+        data["color"] = (data["color"] or "").strip()
+    if "color_hex" in data:
+        data["color_hex"] = (data["color_hex"] or "").strip().upper()
+
+    for k, v in data.items():
         setattr(spool, k, v)
+
+    if not _has_text_value(spool.color) and not _has_text_value(spool.color_hex):
+        raise HTTPException(status_code=422, detail="Either 'color' or 'color_hex' must be provided.")
+
     db.commit()
     db.refresh(spool)
 

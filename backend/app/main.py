@@ -25,9 +25,15 @@ def _seed_if_empty(db: Session) -> None:
         if not db.query(CfsSlotSnapshot).get(i):
             db.add(CfsSlotSnapshot(slot_id=i, present=False, known=False))
 
-    if db.query(Tare).count() == 0:
-        for t in DEFAULT_TARES:
+    existing_tares = {
+        (row.manufacturer.strip().lower(), row.material.strip().lower())
+        for row in db.query(Tare).all()
+    }
+    for t in DEFAULT_TARES:
+        key = (t["manufacturer"].strip().lower(), t["material"].strip().lower())
+        if key not in existing_tares:
             db.add(Tare(**t))
+            existing_tares.add(key)
 
     if not db.query(CfsState).first():
         db.add(CfsState(id=1))

@@ -376,7 +376,7 @@ function SettingsModal({ t, lang, theme, onClose, onToggleLang, onToggleTheme, o
 function HistoryModal({ t, spools, onClose }) {
   return (
     <Modal title={t.historyTitle} subtitle={t.historySub} onClose={onClose} maxWidth="max-w-6xl">
-      <div className="p-5">
+      <div className="p-5 overflow-y-auto flex-1 min-h-0">
         <HistoryChart t={t} spools={spools} />
       </div>
     </Modal>

@@ -45,6 +45,8 @@ services:
     container_name: cfs-watchtower
     restart: unless-stopped
     environment:
+      # Guard against old injected Docker API values (for example 1.25).
+      DOCKER_API_VERSION: "1.44"
       WATCHTOWER_POLL_INTERVAL: 300       # 5 min
       WATCHTOWER_CLEANUP: "true"          # alte Images löschen
       WATCHTOWER_LABEL_ENABLE: "true"     # nur Container mit Label updaten

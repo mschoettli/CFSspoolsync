@@ -52,6 +52,36 @@ Recommendations:
 3. Review and correct fields before saving.
 4. Enter measured gross weight manually for highest accuracy.
 
+## Watchtower API Version Mismatch
+
+Symptoms:
+- `cfs-watchtower` restarts in a loop.
+- Logs show: `client version 1.25 is too old. Minimum supported API version is 1.44`.
+
+Why it happens:
+- An outdated `DOCKER_API_VERSION` value is injected into the watchtower runtime.
+- The Docker daemon requires a newer API version (for example `>= 1.44`).
+
+Checks:
+1. Inspect current watchtower env:
+   - `docker inspect cfs-watchtower --format '{{range .Config.Env}}{{println .}}{{end}}'`
+2. Check for old API version:
+   - `docker inspect cfs-watchtower --format '{{range .Config.Env}}{{println .}}{{end}}' | grep DOCKER_API_VERSION`
+3. Confirm restart-loop/error:
+   - `docker logs --tail 100 cfs-watchtower`
+
+Fix:
+1. Remove old `DOCKER_API_VERSION` from Portainer stack/env/endpoint injection.
+2. Recreate watchtower so it gets clean env:
+   - `docker compose pull watchtower`
+   - `docker compose up -d --force-recreate watchtower`
+3. Verify stable state:
+   - `docker ps --filter name=cfs-watchtower`
+   - `docker logs --tail 50 cfs-watchtower`
+
+Repo safeguard:
+- `docker-compose.yml` pins watchtower `DOCKER_API_VERSION` to `1.44` to avoid old injected defaults.
+
 ## Theme and UI
 
 If light/dark appearance looks wrong:

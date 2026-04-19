@@ -5,8 +5,8 @@
       <stop offset="100%" stop-color="#8B5CF6"/>
     </linearGradient>
     <radialGradient id="v05Inner" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(20 20) rotate(90) scale(9.4)">
-      <stop offset="0%" stop-color="#A5F3FC"/>
-      <stop offset="100%" stop-color="#22D3EE"/>
+      <stop offset="0%" stop-color="#6EE7B7"/>
+      <stop offset="100%" stop-color="#059668"/>
     </radialGradient>
   </defs>
 

@@ -519,8 +519,8 @@ function SpoolScopeLogo() {
             <stop offset="100%" stopColor="#8B5CF6" />
           </linearGradient>
           <radialGradient id="logoV05Inner" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(20 20) rotate(90) scale(9.4)">
-            <stop offset="0%" stopColor="#A5F3FC" />
-            <stop offset="100%" stopColor="#22D3EE" />
+            <stop offset="0%" stopColor="#6EE7B7" />
+            <stop offset="100%" stopColor="#059668" />
           </radialGradient>
         </defs>
         <circle cx="20" cy="20" r="12.4" stroke="url(#logoV05Outer)" strokeWidth="2.2" />

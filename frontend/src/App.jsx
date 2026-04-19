@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { api } from './lib/api'
 import { createLiveSocket } from './lib/ws'
-import { TRANSLATIONS } from './i18n/translations'
+import { DEFAULT_LANGUAGE, LANGUAGE_OPTIONS, TRANSLATIONS } from './i18n/translations'
 import { AddSpoolModal, TareTableModal, AssignSpoolModal, Modal } from './components/Modals'
 import { HistoryChart } from './components/HistoryChart'
 
@@ -27,10 +27,15 @@ function formatRemaining(seconds) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
 
+function resolveLanguage(value) {
+  const normalized = String(value || '').trim().toLowerCase()
+  return TRANSLATIONS[normalized] ? normalized : DEFAULT_LANGUAGE
+}
+
 export default function App() {
-  const [lang, setLang] = useState(() => localStorage.getItem('cfs_lang') || 'de')
+  const [lang, setLang] = useState(() => resolveLanguage(localStorage.getItem('cfs_lang')))
   const [theme, setTheme] = useState(() => localStorage.getItem('cfs_theme') || 'dark')
-  const t = TRANSLATIONS[lang]
+  const t = TRANSLATIONS[lang] || TRANSLATIONS[DEFAULT_LANGUAGE]
 
   const [spools, setSpools] = useState([])
   const [tares, setTares] = useState([])
@@ -227,7 +232,7 @@ export default function App() {
   const updateTare = async (id, data) => { await api.updateTare(id, data); setTares(await api.listTares()) }
   const deleteTare = async (id) => { await api.deleteTare(id); setTares(await api.listTares()) }
 
-  // CFS-Snapshot für aktuelles Add-Modal (aus slot embedded)
+  // CFS snapshot for the current add-spool modal (from embedded slot data)
   const activeSnapshot = addSpoolForSlot
     ? slots.find((s) => s.id === addSpoolForSlot)?.cfs_snapshot
     : null
@@ -282,7 +287,7 @@ export default function App() {
 
         {/* 4 Slot Panels */}
         <section>
-          <SectionHead title={t.dashboard} subtitle={`CFS ${t.slot} 1–4`} icon={<Box size={18} />} />
+          <SectionHead title={t.dashboard} subtitle={`CFS ${t.slot} 1-4`} icon={<Box size={18} />} />
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             {slots.map((slot) => (
               <SlotPanel key={slot.id} t={t} slot={slot}
@@ -378,8 +383,9 @@ export default function App() {
           t={t}
           lang={lang}
           theme={theme}
+          languageOptions={LANGUAGE_OPTIONS}
           onClose={() => setShowSettings(false)}
-          onToggleLang={() => setLang(lang === 'de' ? 'en' : 'de')}
+          onLanguageChange={(nextLang) => setLang(resolveLanguage(nextLang))}
           onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           onOpenTares={() => {
             setShowSettings(false)
@@ -509,14 +515,32 @@ function PrintJobCard({ t, printJob }) {
   )
 }
 
-function SettingsModal({ t, lang, theme, onClose, onToggleLang, onToggleTheme, onOpenTares }) {
+function SettingsModal({
+  t, lang, theme, languageOptions, onClose, onLanguageChange, onToggleTheme, onOpenTares,
+}) {
+  const currentOption = languageOptions.find((option) => option.value === lang)
+
   return (
     <Modal title={t.settings} subtitle={t.settingsSub} onClose={onClose} maxWidth="max-w-lg">
       <div className="p-5 space-y-3">
-        <button onClick={onToggleLang} className="w-full flex items-center justify-between px-3 py-2 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-sm">
-          <span>{t.language}</span>
-          <span className="font-semibold">{lang.toUpperCase()}</span>
-        </button>
+        <label className="w-full block">
+          <span className="sr-only">{t.language}</span>
+          <div className="w-full flex items-center justify-between px-3 py-2 rounded-md bg-zinc-900 border border-zinc-800 text-sm">
+            <span>{t.language}</span>
+            <span className="font-semibold">{currentOption?.short || lang.toUpperCase()}</span>
+          </div>
+          <select
+            value={lang}
+            onChange={(event) => onLanguageChange(event.target.value)}
+            className="input mt-2"
+          >
+            {languageOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <button onClick={onToggleTheme} className="w-full flex items-center justify-between px-3 py-2 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-sm">
           <span>{t.theme}</span>
           <span className="inline-flex items-center gap-1 font-semibold">
@@ -544,11 +568,10 @@ function HistoryModal({ t, spools, onClose }) {
 }
 
 /**
- * SlotPanel — zeigt drei Zustände:
- * A) Spule zugewiesen → normales Panel mit Live-Gewicht
- * B) Kein Slot-Spool aber CFS hat Spule erkannt → "Erkannte Spule"-Panel
- *    mit CTA zum Hinzufügen
- * C) Alles leer → "Leerer Slot" mit manuellem Assign/Add
+ * Slot panel renders three states:
+ * A) assigned spool with live weight,
+ * B) detected CFS spool without assignment,
+ * C) empty slot with assign/add actions.
  */
 function SlotPanel({ t, slot, onAssign, onAddNew, onEdit }) {
   const spool = slot.spool
@@ -640,7 +663,7 @@ function DetectedSlotPanel({ t, slot, snap, onAddNew }) {
             <>
               <div className="text-sm font-semibold text-amber-300 truncate">{t.unknownSpool}</div>
               <div className="text-xs text-zinc-500 truncate font-mono">
-                {t.materialCode}: {snap.material_code || '—'}
+                {t.materialCode}: {snap.material_code || '-'}
               </div>
               <div className="text-xs text-zinc-600 mt-0.5 font-mono">{snap.color_hex}</div>
             </>
@@ -648,7 +671,7 @@ function DetectedSlotPanel({ t, slot, snap, onAddNew }) {
         </div>
       </div>
 
-      {/* Remaining in % — kein Gewicht da keine Spule angelegt */}
+      {/* Remaining in % - no weight because no spool entity is assigned */}
       {snap.remain_pct != null && (
         <div className="relative space-y-1 mb-3">
           <div className="flex items-baseline justify-between">
@@ -746,7 +769,7 @@ function AssignedSlotPanel({ t, slot, spool, onEdit }) {
           <span className="text-xs text-zinc-500">g</span>
           {slot.is_printing && slot.flow > 0 && (
             <span className="ml-auto text-[10px] font-mono text-emerald-400 tabular-nums animate-pulse">
-              −{fmt(slot.flow, 2)} g/s
+              -{fmt(slot.flow, 2)} g/s
             </span>
           )}
         </div>
@@ -1004,3 +1027,4 @@ function DetailItem({ label, value }) {
     </>
   )
 }
+

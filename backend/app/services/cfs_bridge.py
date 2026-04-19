@@ -37,6 +37,11 @@ class CfsBridge:
         self._last_history_write = 0.0
         self._last_moonraker_ok_ts = 0.0
         self._last_printing_state = False
+        self._last_print_job = {
+            "active": False,
+            "title": "",
+            "remaining_seconds": None,
+        }
         self._last_active_slot: Optional[int] = None
         self._last_remain_pct: dict[int, float] = {}
         self._last_slot_weights: dict[int, float] = {}
@@ -74,7 +79,12 @@ class CfsBridge:
                 db.refresh(cfs)
 
             # ---------- 1. Moonraker / Simulator ----------
-            print_probe = {"reachable": False, "is_printing": False}
+            print_probe = {
+                "reachable": False,
+                "is_printing": False,
+                "title": "",
+                "remaining_seconds": None,
+            }
             if settings.moonraker_host:
                 parsed = await self._poll_moonraker()
                 print_probe = await self._poll_moonraker_print_state()
@@ -101,7 +111,12 @@ class CfsBridge:
                 ).first()
                 if not any_populated:
                     self._write_snapshots(db, _fake_snapshots())
-                print_probe = {"reachable": True, "is_printing": False}
+                print_probe = {
+                    "reachable": True,
+                    "is_printing": False,
+                    "title": "",
+                    "remaining_seconds": None,
+                }
 
             cfs.last_sync = datetime.utcnow()
 
@@ -112,6 +127,7 @@ class CfsBridge:
             slots = db.query(Slot).order_by(Slot.id).all()
             now_ts = datetime.utcnow().timestamp()
             is_printing = self._resolve_printing_state(print_probe, now_ts)
+            print_job = self._resolve_print_job(print_probe, is_printing, now_ts)
             active_slot = self._choose_active_slot(db, slots) if is_printing else None
             for slot in slots:
                 previous_weight = self._last_slot_weights.get(slot.id, float(slot.current_weight))
@@ -145,7 +161,7 @@ class CfsBridge:
             # ---------- 5. Broadcast ----------
             await manager.broadcast({
                 "type": "live",
-                "data": _serialize_live(cfs, slots, db),
+                "data": _serialize_live(cfs, slots, db, print_job),
             })
         finally:
             db.close()
@@ -221,13 +237,34 @@ class CfsBridge:
             async with httpx.AsyncClient(timeout=2.5) as client:
                 response = await client.get(url)
                 if response.status_code != 200:
-                    return {"reachable": False, "is_printing": False}
+                    return {
+                        "reachable": False,
+                        "is_printing": False,
+                        "title": "",
+                        "remaining_seconds": None,
+                    }
                 payload = response.json().get("result", {}).get("status", {}).get("print_stats", {})
         except (httpx.HTTPError, ValueError):
-            return {"reachable": False, "is_printing": False}
+            return {
+                "reachable": False,
+                "is_printing": False,
+                "title": "",
+                "remaining_seconds": None,
+            }
 
         state = str(payload.get("state", "")).strip().lower()
-        return {"reachable": True, "is_printing": state == "printing"}
+        print_duration = max(0.0, _to_float(payload.get("print_duration"), 0.0))
+        total_duration = _to_float(payload.get("total_duration"), -1.0)
+        remaining_seconds: Optional[int] = None
+        if total_duration > 0 and total_duration >= print_duration:
+            remaining_seconds = int(total_duration - print_duration)
+
+        return {
+            "reachable": True,
+            "is_printing": state == "printing",
+            "title": _normalize_print_title(payload.get("filename")),
+            "remaining_seconds": remaining_seconds,
+        }
 
     def _resolve_printing_state(self, probe: dict, now_ts: float) -> bool:
         """Keep the last print state for a short grace window."""
@@ -239,6 +276,28 @@ class CfsBridge:
             return self._last_printing_state
         self._last_printing_state = False
         return False
+
+    def _resolve_print_job(self, probe: dict, is_printing: bool, now_ts: float) -> dict:
+        """Keep last print metadata through moonraker grace outages."""
+        if probe.get("reachable"):
+            self._last_print_job = {
+                "active": bool(is_printing),
+                "title": str(probe.get("title", "") or ""),
+                "remaining_seconds": probe.get("remaining_seconds"),
+            }
+            return dict(self._last_print_job)
+
+        if now_ts - self._last_moonraker_ok_ts <= settings.moonraker_print_grace_s:
+            cached = dict(self._last_print_job)
+            cached["active"] = bool(is_printing)
+            return cached
+
+        self._last_print_job = {
+            "active": False,
+            "title": "",
+            "remaining_seconds": None,
+        }
+        return dict(self._last_print_job)
 
     def _detect_active_slot(self, cfs_slots: list[dict]) -> Optional[int]:
         """Infer active slot from the strongest negative remain_pct delta."""
@@ -358,6 +417,13 @@ def _safe_idx(lst, idx):
     return lst[idx]
 
 
+def _normalize_print_title(raw_filename) -> str:
+    filename = str(raw_filename or "").strip()
+    if not filename:
+        return ""
+    return filename.replace("\\", "/").split("/")[-1]
+
+
 def _fake_snapshots() -> list[dict]:
     """Demo-Snapshots für Simulator-Mode damit UI was zum Anzeigen hat."""
     return [
@@ -376,7 +442,7 @@ def _fake_snapshots() -> list[dict]:
     ]
 
 
-def _serialize_live(cfs: CfsState, slots: list, db: Session) -> dict:
+def _serialize_live(cfs: CfsState, slots: list, db: Session, print_job: dict) -> dict:
     slot_payload = []
     for s in slots:
         sp = db.query(Spool).get(s.spool_id) if s.spool_id else None
@@ -396,6 +462,11 @@ def _serialize_live(cfs: CfsState, slots: list, db: Session) -> dict:
             "humidity": round(cfs.humidity, 1),
             "connected": cfs.connected,
             "last_sync": cfs.last_sync.isoformat(),
+            "print_job": {
+                "active": bool(print_job.get("active")),
+                "title": str(print_job.get("title", "") or ""),
+                "remaining_seconds": print_job.get("remaining_seconds"),
+            },
         },
         "slots": slot_payload,
     }

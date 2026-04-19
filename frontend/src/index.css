@@ -75,6 +75,66 @@ html[data-theme='light'] .bg-zinc-950\/50 {
   background-color: #f8fafc;
 }
 
+html[data-theme='light'] .status-badge-shelf {
+  background-color: #e2e8f0;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+.spool-glow-aura {
+  position: absolute;
+  inset: -0.45rem;
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(
+      circle at center,
+      color-mix(in oklab, var(--spool-glow-color, #22c55e) 55%, transparent) 0%,
+      color-mix(in oklab, var(--spool-glow-color, #22c55e) 20%, transparent) 48%,
+      transparent 74%
+    );
+  filter: blur(10px);
+  opacity: 0.34;
+  transition: opacity 180ms ease;
+}
+
+.spool-glow-ring {
+  position: absolute;
+  inset: -0.2rem;
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 1;
+  border: 1px solid color-mix(in oklab, var(--spool-glow-color, #22c55e) 65%, transparent);
+  box-shadow:
+    0 0 10px color-mix(in oklab, var(--spool-glow-color, #22c55e) 45%, transparent),
+    0 0 18px color-mix(in oklab, var(--spool-glow-color, #22c55e) 28%, transparent);
+  opacity: 0.4;
+  transition: opacity 180ms ease;
+}
+
+.spool-glow-printing .spool-glow-aura {
+  opacity: 0.48;
+  animation: pulse 2.2s ease-in-out infinite;
+}
+
+.spool-glow-printing .spool-glow-ring {
+  opacity: 0.6;
+}
+
+html[data-theme='light'] .spool-glow-aura {
+  filter: blur(8px);
+  opacity: 0.24;
+}
+
+html[data-theme='light'] .spool-glow-ring {
+  opacity: 0.3;
+}
+
+html[data-theme='light'] .spool-glow-printing .spool-glow-aura {
+  opacity: 0.34;
+}
+
 html[data-theme='light'] ::-webkit-scrollbar-track {
   background: #eef2f7;
 }

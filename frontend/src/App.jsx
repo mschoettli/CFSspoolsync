@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
   Thermometer, Droplets, Plus, Wifi, WifiOff, Box, Scale, Settings, LineChart,
-  Edit3, Trash2, Activity, Package, ArrowRight, AlertCircle, Sun, Moon,
-  X,
+  Edit3, Trash2, Activity, Package, ArrowRight, AlertCircle, Sun, Moon, Printer,
 } from 'lucide-react'
 import { api } from './lib/api'
 import { createLiveSocket } from './lib/ws'
@@ -11,6 +10,22 @@ import { AddSpoolModal, TareTableModal, AssignSpoolModal, Modal } from './compon
 import { HistoryChart } from './components/HistoryChart'
 
 const fmt = (n, d = 0) => Number(n).toFixed(d)
+const DEFAULT_PRINT_JOB = { active: false, title: '', remaining_seconds: null }
+const DEFAULT_CFS = {
+  temperature: 25,
+  humidity: 20,
+  connected: false,
+  last_sync: new Date().toISOString(),
+  print_job: DEFAULT_PRINT_JOB,
+}
+
+function formatRemaining(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '--:--'
+  const totalMinutes = Math.floor(seconds / 60)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
 
 export default function App() {
   const [lang, setLang] = useState(() => localStorage.getItem('cfs_lang') || 'de')
@@ -20,9 +35,7 @@ export default function App() {
   const [spools, setSpools] = useState([])
   const [tares, setTares] = useState([])
   const [slots, setSlots] = useState([])
-  const [cfs, setCfs] = useState({
-    temperature: 25, humidity: 20, connected: false, last_sync: new Date().toISOString(),
-  })
+  const [cfs, setCfs] = useState(DEFAULT_CFS)
   const [wsStatus, setWsStatus] = useState('connecting')
   const [lastSyncAgo, setLastSyncAgo] = useState(0)
 
@@ -49,7 +62,11 @@ export default function App() {
       setSpools(sp)
       setTares(tr)
       setSlots(sl)
-      setCfs(cf)
+      setCfs((prev) => ({
+        ...DEFAULT_CFS,
+        ...cf,
+        print_job: cf?.print_job ?? prev?.print_job ?? DEFAULT_PRINT_JOB,
+      }))
     } catch (err) {
       console.error('Initial load failed', err)
     }
@@ -62,7 +79,11 @@ export default function App() {
     const sock = createLiveSocket(
       (msg) => {
         if (msg.type === 'live') {
-          setCfs(msg.data.cfs)
+          setCfs((prev) => ({
+            ...prev,
+            ...msg.data.cfs,
+            print_job: msg.data.cfs?.print_job ?? prev?.print_job ?? DEFAULT_PRINT_JOB,
+          }))
           setSlots(msg.data.slots)
         }
       },
@@ -127,11 +148,6 @@ export default function App() {
     await loadAll()
   }
 
-  const doUnassign = async (slotId) => {
-    await api.unassignSlot(slotId)
-    await loadAll()
-  }
-
   const createTare = async (data) => { await api.createTare(data); setTares(await api.listTares()) }
   const updateTare = async (id, data) => { await api.updateTare(id, data); setTares(await api.listTares()) }
   const deleteTare = async (id) => { await api.deleteTare(id); setTares(await api.listTares()) }
@@ -181,10 +197,11 @@ export default function App() {
           <SectionHead title={t.cfsStatus}
             subtitle={`${t.lastSync}: ${lastSyncAgo} ${t.secondsAgo}`}
             icon={<Activity size={18} />} />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
             <EnvCard icon={<Thermometer size={18} />} label={t.temperature} value={fmt(cfs.temperature, 1)} unit="°C" accent="amber" />
             <EnvCard icon={<Droplets size={18} />} label={t.humidity} value={fmt(cfs.humidity, 1)} unit="%" accent="cyan" />
             <EnvCard icon={<Package size={18} />} label={t.spoolCount} value={spools.length} unit="" accent="violet" />
+            <PrintJobCard t={t} printJob={cfs.print_job || DEFAULT_PRINT_JOB} />
           </div>
         </section>
 
@@ -195,7 +212,6 @@ export default function App() {
             {slots.map((slot) => (
               <SlotPanel key={slot.id} t={t} slot={slot}
                 onAssign={() => setAssignModalSlot(slot.id)}
-                onUnassign={() => doUnassign(slot.id)}
                 onAddNew={() => openAddSpool(slot.id)}
                 onEdit={(sp) => openEditSpool(sp)}
               />
@@ -364,6 +380,38 @@ function EnvCard({ icon, label, value, unit, accent }) {
   )
 }
 
+function PrintJobCard({ t, printJob }) {
+  const isActive = Boolean(printJob?.active)
+  const title = (printJob?.title || '').trim() || t.noActivePrintJob
+  const remaining = formatRemaining(printJob?.remaining_seconds)
+  const accentClass = isActive
+    ? ['from-emerald-500/20 to-cyan-900/0', 'text-emerald-300', 'border-emerald-900/40']
+    : ['from-zinc-500/15 to-zinc-900/0', 'text-zinc-400', 'border-zinc-800']
+
+  const [grad, txt, border] = accentClass
+  return (
+    <div className={`relative overflow-hidden rounded-xl border bg-zinc-900/40 px-4 py-3 ${border}`}>
+      <div className={`absolute inset-0 bg-gradient-to-br opacity-60 ${grad}`} />
+      <div className="relative h-full min-h-[84px] flex flex-col">
+        <div className="flex items-center justify-between gap-2">
+          <div className={`flex items-center gap-1.5 text-xs font-medium ${txt}`}>
+            <Printer size={18} />
+            <span>{t.activePrintJob}</span>
+          </div>
+          <span className="text-xs text-zinc-400 tabular-nums">
+            {t.remainingTime} {remaining}
+          </span>
+        </div>
+        <div className="flex-1 min-h-0 flex items-center justify-center">
+          <div className="text-sm font-semibold text-zinc-100 truncate max-w-full">
+            {title}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SettingsModal({ t, lang, theme, onClose, onToggleLang, onToggleTheme, onOpenTares }) {
   return (
     <Modal title={t.settings} subtitle={t.settingsSub} onClose={onClose} maxWidth="max-w-lg">
@@ -405,14 +453,13 @@ function HistoryModal({ t, spools, onClose }) {
  *    mit CTA zum Hinzufügen
  * C) Alles leer → "Leerer Slot" mit manuellem Assign/Add
  */
-function SlotPanel({ t, slot, onAssign, onUnassign, onAddNew, onEdit }) {
+function SlotPanel({ t, slot, onAssign, onAddNew, onEdit }) {
   const spool = slot.spool
   const snap = slot.cfs_snapshot
 
   // ZUSTAND A: Spule eingelegt
   if (spool) {
-    return <AssignedSlotPanel t={t} slot={slot} spool={spool}
-      onUnassign={onUnassign} onEdit={onEdit} />
+    return <AssignedSlotPanel t={t} slot={slot} spool={spool} onEdit={onEdit} />
   }
 
   // ZUSTAND B: CFS hat Spule erkannt, aber im Lager noch nicht angelegt
@@ -472,8 +519,13 @@ function DetectedSlotPanel({ t, slot, snap, onAddNew }) {
       </div>
 
       <div className="relative flex items-start gap-3 mb-3">
-        <div className="relative shrink-0">
-          <div className="w-14 h-14 rounded-full border-2 border-zinc-700 shadow-inner"
+        <div
+          className="relative shrink-0 isolate"
+          style={{ '--spool-glow-color': snap.color_hex || '#6b7280' }}
+        >
+          <div className="spool-glow-aura" />
+          <div className="spool-glow-ring" />
+          <div className="relative z-10 w-14 h-14 rounded-full border-2 border-zinc-700 shadow-inner"
             style={{ background: snap.color_hex || '#6b7280' }} />
           <div className="absolute inset-2 rounded-full border border-zinc-800/80" />
           <div className="absolute inset-[1.25rem] rounded-full bg-zinc-950/60" />
@@ -535,7 +587,7 @@ function DetectedSlotPanel({ t, slot, snap, onAddNew }) {
   )
 }
 
-function AssignedSlotPanel({ t, slot, spool, onUnassign, onEdit }) {
+function AssignedSlotPanel({ t, slot, spool, onEdit }) {
   const net = Math.max(0, slot.current_weight - spool.tare_weight)
   const pct = Math.min(100, (net / 1000) * 100)
   const low = net < 100
@@ -551,13 +603,9 @@ function AssignedSlotPanel({ t, slot, spool, onUnassign, onEdit }) {
       <div className="relative flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <div className="text-xs font-mono font-semibold text-zinc-500">{t.slot} {slot.id}</div>
-          {slot.is_printing ? (
+          {slot.is_printing && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950/70 border border-emerald-800/60 text-emerald-300 text-[10px] font-semibold uppercase tracking-wide">
               <Activity size={10} className="animate-pulse" />{t.printing}
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-500 text-[10px] font-semibold uppercase tracking-wide">
-              {t.idle}
             </span>
           )}
         </div>
@@ -572,8 +620,13 @@ function AssignedSlotPanel({ t, slot, spool, onUnassign, onEdit }) {
       </div>
 
       <div className="relative flex items-start gap-3 mb-3">
-        <div className="relative shrink-0">
-          <div className="w-14 h-14 rounded-full border-2 border-zinc-700 shadow-inner" style={{ background: spool.color_hex }} />
+        <div
+          className={`relative shrink-0 isolate ${slot.is_printing ? 'spool-glow-printing' : ''}`}
+          style={{ '--spool-glow-color': spool.color_hex || '#22c55e' }}
+        >
+          <div className="spool-glow-aura" />
+          <div className="spool-glow-ring" />
+          <div className="relative z-10 w-14 h-14 rounded-full border-2 border-zinc-700 shadow-inner" style={{ background: spool.color_hex }} />
           <div className="absolute inset-2 rounded-full border border-zinc-800/80" />
           <div className="absolute inset-[1.25rem] rounded-full bg-zinc-950/60" />
         </div>
@@ -609,18 +662,6 @@ function AssignedSlotPanel({ t, slot, spool, onUnassign, onEdit }) {
           <span>{t.grossWeight} {fmt(slot.current_weight, 0)}g</span>
           <span>{t.tare} {spool.tare_weight}g</span>
         </div>
-      </div>
-
-      <div className="relative flex gap-2">
-        <button
-          onClick={onUnassign}
-          aria-label={t.unassign}
-          title={t.unassign}
-          className="w-full inline-flex items-center justify-center sm:gap-1.5 px-2.5 py-1.5 sm:px-3 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-400 border border-zinc-800"
-        >
-          <X size={13} />
-          <span className="hidden sm:inline">{t.unassign}</span>
-        </button>
       </div>
     </div>
   )
@@ -690,7 +731,7 @@ function InventoryTable({ t, spools, slots, onEdit, onDelete }) {
                       {slotFor.is_printing && <Activity size={10} className="animate-pulse" />}
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800/70 border border-zinc-700 text-zinc-400 text-xs">
+                    <span className="status-badge-shelf inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800/70 border border-zinc-700 text-zinc-400 text-xs">
                       {t.onShelf}
                     </span>
                   )}

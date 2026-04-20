@@ -74,7 +74,7 @@ export default function App() {
   }, [isFluiddCardLayout, isFluiddView])
   const fluiddSlotGridClass = useMemo(() => {
     if (!isFluiddView) return 'grid-cols-1 md:grid-cols-2 xl:grid-cols-4'
-    return isFluiddCardLayout ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-4'
+    return isFluiddCardLayout ? 'grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-4'
   }, [isFluiddCardLayout, isFluiddView])
 
   const [lang, setLang] = useState(() => resolveLanguage(localStorage.getItem('cfs_lang')))

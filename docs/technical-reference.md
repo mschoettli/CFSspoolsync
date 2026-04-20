@@ -86,7 +86,13 @@ All endpoints are under `/api`.
 - Frontend: `frontend/src/App.jsx` and `frontend/src/components/*`
 - Persistence: SQLite at `/app/data/cfs.db` inside backend container
 
+## Frontend Embed Query Modes
+
+- `?view=fluidd`: compact mode for external embedding (slots-only)
+- `?view=fluidd&layout=card`: tighter spacing variant for dashboard cards/iframes
+
 ## Additional Docs
 
 - [Development Guide](development.md)
+- [Fluidd Dashboard Embed](fluidd-dashboard-embed.md)
 - [Troubleshooting Guide](troubleshooting.md)

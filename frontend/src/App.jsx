@@ -58,10 +58,24 @@ function resolveLanguage(value) {
 }
 
 export default function App() {
-  const isFluiddView = useMemo(() => {
-    if (typeof window === 'undefined') return false
-    return new URLSearchParams(window.location.search).get('view')?.toLowerCase() === 'fluidd'
+  const searchParams = useMemo(() => {
+    if (typeof window === 'undefined') return new URLSearchParams('')
+    return new URLSearchParams(window.location.search)
   }, [])
+  const isFluiddView = useMemo(() => {
+    return searchParams.get('view')?.toLowerCase() === 'fluidd'
+  }, [searchParams])
+  const isFluiddCardLayout = useMemo(() => {
+    return isFluiddView && searchParams.get('layout')?.toLowerCase() === 'card'
+  }, [isFluiddView, searchParams])
+  const fluiddMainClass = useMemo(() => {
+    if (!isFluiddView) return 'max-w-7xl mx-auto px-5 py-6 space-y-8'
+    return isFluiddCardLayout ? 'w-full px-2 py-2 space-y-3' : 'w-full px-3 sm:px-4 py-3'
+  }, [isFluiddCardLayout, isFluiddView])
+  const fluiddSlotGridClass = useMemo(() => {
+    if (!isFluiddView) return 'grid-cols-1 md:grid-cols-2 xl:grid-cols-4'
+    return isFluiddCardLayout ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-4'
+  }, [isFluiddCardLayout, isFluiddView])
 
   const [lang, setLang] = useState(() => resolveLanguage(localStorage.getItem('cfs_lang')))
   const [theme, setTheme] = useState(() => localStorage.getItem('cfs_theme') || 'dark')
@@ -86,7 +100,6 @@ export default function App() {
   const [selectedSpool, setSelectedSpool] = useState(null)
   const [libraryBusy, setLibraryBusy] = useState(false)
   const libraryImportInputRef = useRef(null)
-
   useEffect(() => { localStorage.setItem('cfs_lang', lang) }, [lang])
   useEffect(() => {
     localStorage.setItem('cfs_theme', theme)
@@ -339,7 +352,7 @@ export default function App() {
     : null
 
   return (
-    <div className={`min-h-screen ${theme === 'light' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-950 text-zinc-100'}`}>
+    <div className={`${isFluiddView ? 'min-h-0' : 'min-h-screen'} ${theme === 'light' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-950 text-zinc-100'}`}>
       {!isFluiddView && (
       <header className="sticky top-0 z-20 backdrop-blur bg-zinc-950/80 border-b border-zinc-800">
         <div className="max-w-7xl mx-auto px-5 py-3 flex items-center justify-between gap-4">
@@ -374,7 +387,7 @@ export default function App() {
       </header>
       )}
 
-      <main className={isFluiddView ? 'w-full px-3 sm:px-4 py-3' : 'max-w-7xl mx-auto px-5 py-6 space-y-8'}>
+      <main className={fluiddMainClass}>
         {/* CFS Environment + KPIs */}
         {!isFluiddView && (
         <section>
@@ -393,7 +406,7 @@ export default function App() {
         {/* 4 Slot Panels */}
         <section>
           {!isFluiddView && <SectionHead title={t.dashboard} subtitle={`CFS ${t.slot} 1-4`} icon={<Box size={18} />} />}
-          <div className={`grid gap-4 ${isFluiddView ? 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-4' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-4'}`}>
+          <div className={`grid gap-4 ${fluiddSlotGridClass}`}>
             {orderedSlots.map((slot) => (
               <SlotPanel key={slot.id} t={t} slot={slot}
                 onAssign={() => setAssignModalSlot(slot.id)}

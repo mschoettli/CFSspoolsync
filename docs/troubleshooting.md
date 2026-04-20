@@ -55,6 +55,31 @@ Recommendations:
 3. Review and correct fields before saving.
 4. Enter measured gross weight manually for highest accuracy.
 
+## Fluidd Dashboard Embed (MIME or WebSocket Errors)
+
+Symptoms:
+- Browser console shows `Failed to load module script` with MIME `text/html`.
+- Browser console shows repeated WebSocket failures for `/ws`.
+
+Why it happens:
+- CFS is opened from an old `/cfs/` path or a mismatched proxy path.
+- WebSocket upgrade headers are missing on the CFS proxy endpoint.
+
+Checks:
+1. Open the direct compact URL:
+   - `http://<fluidd-host>:4409/?view=fluidd`
+2. Verify JS asset resolves with `200` and JavaScript MIME:
+   - `curl -I http://<fluidd-host>:4409/assets/<asset-name>.js`
+3. Verify websocket proxy path exists on port `4409`:
+   - `location /ws` with `Upgrade`/`Connection` headers.
+
+Fix:
+1. Use a dedicated CFS proxy port (`4409`) rather than `/cfs/` subpath.
+2. Add websocket proxy headers for `/ws`.
+3. Clear browser cache/site data after proxy changes.
+4. Optionally redirect old bookmarks:
+   - `/cfs/` -> `http://$host:4409/?view=fluidd...`
+
 ## Watchtower API Version Mismatch
 
 Symptoms:

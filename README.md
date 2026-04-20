@@ -46,6 +46,25 @@ docker compose up -d
 Open:
 - `http://<host>:8088` (or your configured `HTTP_PORT`)
 
+## Fluidd Embed Mode
+
+Use the existing app with the query parameter:
+- `http://<host>:8088/?view=fluidd`
+
+Behavior in this mode:
+- Renders only the 4 slot panels (slot 1-4), including empty slots
+- Hides header, KPI cards, inventory section, and footer
+- Keeps slot actions and related modals available
+
+If embedded in an iframe, ensure your reverse proxy does not block framing via
+`X-Frame-Options` or restrictive `Content-Security-Policy` `frame-ancestors` rules.
+
+## Fluidd Dashboard Integration
+
+For end-user setup with a Fluidd dashboard card (CFS Slots), follow:
+- [Fluidd User Integration Guide](docs/fluidd-user-integration.md)
+- [After Docker Re-Deploy](docs/fluidd-user-integration.md#after-docker-re-deploy-what-to-repeat)
+
 ## RFID / NFC Tags for CFS
 
 The Creality CFS reads NFC/RFID spool tags and exposes their data (for example detected spool metadata and remaining amount) to the app through Moonraker/telemetry.
@@ -71,6 +90,8 @@ Notes:
 
 - [Technical Reference](docs/technical-reference.md)
 - [Development Guide](docs/development.md)
+- [Fluidd Dashboard Embed](docs/fluidd-dashboard-embed.md)
+- [Fluidd User Integration Guide](docs/fluidd-user-integration.md)
 - [Troubleshooting Guide](docs/troubleshooting.md)
 
 ## License

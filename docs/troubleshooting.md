@@ -80,6 +80,58 @@ Fix:
 4. Optionally redirect old bookmarks:
    - `/cfs/` -> `http://$host:4409/?view=fluidd...`
 
+Related guide:
+- [Fluidd User Integration Guide](fluidd-user-integration.md)
+
+## Fluidd Deploy: Empty Web Root
+
+Symptoms:
+- `http://<fluidd-host>:4408` returns `403`.
+- `/usr/share/fluidd` is empty or missing `assets`.
+
+Checks:
+1. `ls -lah /usr/share/fluidd`
+2. `ls -lah /usr/share/fluidd/assets`
+
+Fix:
+1. Re-copy built files to host.
+2. Deploy from the correct source path:
+   - `cp -a /tmp/fluidd-new/* /usr/share/fluidd/`
+3. Reapply permissions and reload Nginx.
+
+## Fluidd Deploy: Permission Denied / Redirect Cycle
+
+Symptoms:
+- Nginx logs show `Permission denied`.
+- Nginx logs show `rewrite or internal redirection cycle`.
+- Browser may show `500` for `/favicon.ico`.
+
+Checks:
+1. `tail -n 100 /var/log/nginx/fluidd-error.log`
+2. `ls -ld /usr /usr/share /usr/share/fluidd`
+
+Fix:
+1. `chown -R root:root /usr/share/fluidd`
+2. `find /usr/share/fluidd -type d -exec chmod 755 {} \;`
+3. `find /usr/share/fluidd -type f -exec chmod 644 {} \;`
+4. `nginx -t && nginx -s reload`
+
+## Fluidd Deploy: Stale Hashed Asset URLs
+
+Symptoms:
+- Browser console shows module MIME errors for old asset hashes.
+- `curl -I /` is `200`, but old `/assets/<hash>.js` fails.
+
+Why it happens:
+- Browser cache and service worker still reference previous build hashes.
+
+Fix:
+1. Unregister service worker.
+2. Clear site data.
+3. Hard reload (`Ctrl+F5`).
+4. Re-validate with:
+   - `curl -I http://<fluidd-host>:4408/assets/<actual-hash>.js`
+
 ## Watchtower API Version Mismatch
 
 Symptoms:

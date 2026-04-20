@@ -58,6 +58,11 @@ function resolveLanguage(value) {
 }
 
 export default function App() {
+  const isFluiddView = useMemo(() => {
+    if (typeof window === 'undefined') return false
+    return new URLSearchParams(window.location.search).get('view')?.toLowerCase() === 'fluidd'
+  }, [])
+
   const [lang, setLang] = useState(() => resolveLanguage(localStorage.getItem('cfs_lang')))
   const [theme, setTheme] = useState(() => localStorage.getItem('cfs_theme') || 'dark')
   const t = TRANSLATIONS[lang] || TRANSLATIONS[DEFAULT_LANGUAGE]
@@ -210,6 +215,18 @@ export default function App() {
     () => inventoryEntries.find((entry) => entry.spool.id === selectedSpool) ?? null,
     [inventoryEntries, selectedSpool],
   )
+  const orderedSlots = useMemo(() => {
+    const byId = new Map(slots.map((slot) => [slot.id, slot]))
+    return [1, 2, 3, 4].map((id) => byId.get(id) ?? {
+      id,
+      spool_id: null,
+      spool: null,
+      current_weight: 0,
+      is_printing: false,
+      flow: 0,
+      cfs_snapshot: null,
+    })
+  }, [slots])
 
   // ---------- Actions ----------
   const openAddSpool = (slotId = null) => {
@@ -318,11 +335,12 @@ export default function App() {
 
   // CFS snapshot for the current add-spool modal (from embedded slot data)
   const activeSnapshot = addSpoolForSlot
-    ? slots.find((s) => s.id === addSpoolForSlot)?.cfs_snapshot
+    ? orderedSlots.find((s) => s.id === addSpoolForSlot)?.cfs_snapshot
     : null
 
   return (
     <div className={`min-h-screen ${theme === 'light' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-950 text-zinc-100'}`}>
+      {!isFluiddView && (
       <header className="sticky top-0 z-20 backdrop-blur bg-zinc-950/80 border-b border-zinc-800">
         <div className="max-w-7xl mx-auto px-5 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -354,9 +372,11 @@ export default function App() {
           </div>
         </div>
       </header>
+      )}
 
-      <main className="max-w-7xl mx-auto px-5 py-6 space-y-8">
+      <main className={isFluiddView ? 'w-full px-3 sm:px-4 py-3' : 'max-w-7xl mx-auto px-5 py-6 space-y-8'}>
         {/* CFS Environment + KPIs */}
+        {!isFluiddView && (
         <section>
           <SectionHead title={t.cfsStatus}
             subtitle={`${t.lastSync}: ${formatSyncAge(lastSyncAgo, lang)}`}
@@ -368,12 +388,13 @@ export default function App() {
             <PrintJobCard t={t} printJob={cfs.print_job || DEFAULT_PRINT_JOB} />
           </div>
         </section>
+        )}
 
         {/* 4 Slot Panels */}
         <section>
-          <SectionHead title={t.dashboard} subtitle={`CFS ${t.slot} 1-4`} icon={<Box size={18} />} />
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            {slots.map((slot) => (
+          {!isFluiddView && <SectionHead title={t.dashboard} subtitle={`CFS ${t.slot} 1-4`} icon={<Box size={18} />} />}
+          <div className={`grid gap-4 ${isFluiddView ? 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-4' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-4'}`}>
+            {orderedSlots.map((slot) => (
               <SlotPanel key={slot.id} t={t} slot={slot}
                 onAssign={() => setAssignModalSlot(slot.id)}
                 onAddNew={() => openAddSpool(slot.id)}
@@ -384,6 +405,7 @@ export default function App() {
         </section>
 
         {/* Inventory */}
+        {!isFluiddView && (
         <section>
           <div className="flex items-center justify-between mb-3">
             <SectionHead title={t.inventory} subtitle={`${spools.length} ${t.spoolCount.toLowerCase()}`} icon={<Package size={18} />} compact />
@@ -428,9 +450,12 @@ export default function App() {
           )}
         </section>
 
+        )}
+        {!isFluiddView && (
         <footer className="text-center text-xs text-zinc-600 pt-6 pb-2">
           CFSspoolsync · <a href="https://github.com/mschoettli/CFSspoolsync" className="hover:text-zinc-400">github.com/mschoettli/CFSspoolsync</a>
         </footer>
+        )}
       </main>
 
       {showAddSpool && (

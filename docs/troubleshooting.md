@@ -18,6 +18,9 @@ Fix on the K2:
 3. Tap the slot refresh arrow above the slot.
 4. Wait for the next backend poll cycle.
 
+<img width="465" height="265" alt="k2_cfs_spool" src="https://github.com/user-attachments/assets/9c26dfe3-c9ac-44d1-bdcf-f393fde96b70" />
+
+
 Then refresh the browser if needed.
 
 ## Moonraker Reachability

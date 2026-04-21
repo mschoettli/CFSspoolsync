@@ -56,7 +56,7 @@ Expected: `agents` contains `cfssync` (or your configured `CFS_AGENT_NAME`).
 ## Extension Methods
 
 Call via Moonraker:
-- `POST /server/extensions/request`
+- `POST /server/extensions/request?agent=<agent>&method=<method>&...`
 
 Available methods:
 - `cfssync.slots.list`
@@ -75,41 +75,31 @@ Available methods:
 List slots:
 
 ```bash
-curl.exe -s -X POST "http://192.168.0.1:7125/server/extensions/request" \
-  -H "Content-Type: application/json" \
-  -d "{\"agent\":\"cfssync\",\"method\":\"cfssync.slots.list\",\"arguments\":{}}"
+curl.exe -s -X POST "http://192.168.0.1:7125/server/extensions/request?agent=cfssync&method=cfssync.slots.list"
 ```
 
 Assign spool:
 
 ```bash
-curl.exe -s -X POST "http://192.168.0.1:7125/server/extensions/request" \
-  -H "Content-Type: application/json" \
-  -d "{\"agent\":\"cfssync\",\"method\":\"cfssync.slot.assign\",\"arguments\":{\"slot_id\":1,\"spool_id\":12}}"
+curl.exe -s -X POST "http://192.168.0.1:7125/server/extensions/request?agent=cfssync&method=cfssync.slot.assign&slot_id=1&spool_id=12"
 ```
 
 Query history:
 
 ```bash
-curl.exe -s -X POST "http://192.168.0.1:7125/server/extensions/request" \
-  -H "Content-Type: application/json" \
-  -d "{\"agent\":\"cfssync\",\"method\":\"cfssync.history.query\",\"arguments\":{\"days\":7}}"
+curl.exe -s -X POST "http://192.168.0.1:7125/server/extensions/request?agent=cfssync&method=cfssync.history.query&days=7"
 ```
 
 Read settings:
 
 ```bash
-curl.exe -s -X POST "http://192.168.0.1:7125/server/extensions/request" \
-  -H "Content-Type: application/json" \
-  -d "{\"agent\":\"cfssync\",\"method\":\"cfssync.settings.get\",\"arguments\":{}}"
+curl.exe -s -X POST "http://192.168.0.1:7125/server/extensions/request?agent=cfssync&method=cfssync.settings.get"
 ```
 
 Set settings:
 
 ```bash
-curl.exe -s -X POST "http://192.168.0.1:7125/server/extensions/request" \
-  -H "Content-Type: application/json" \
-  -d "{\"agent\":\"cfssync\",\"method\":\"cfssync.settings.set\",\"arguments\":{\"language\":\"en\",\"theme\":\"dark\"}}"
+curl.exe -s -X POST "http://192.168.0.1:7125/server/extensions/request?agent=cfssync&method=cfssync.settings.set&language=en&theme=dark"
 ```
 
 ## Live Events
@@ -133,6 +123,7 @@ Event payload:
 ## Optional Dashboard UI Addon
 
 If you still want a dedicated dashboard card inside Fluidd, keep using:
+- [Fluidd Quick Install](fluidd-quick-install.md)
 - [Fluidd Dashboard Embed](fluidd-dashboard-embed.md)
 - [Fluidd User Integration Guide](fluidd-user-integration.md)
 

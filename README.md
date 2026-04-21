@@ -69,6 +69,7 @@ If embedded in an iframe, ensure your reverse proxy does not block framing via
 ## Fluidd Dashboard Integration
 
 Optional UI addon if you want a dedicated Fluidd dashboard card:
+- [Fluidd Quick Install (No Local Build)](docs/fluidd-quick-install.md)
 - [Fluidd User Integration Guide](docs/fluidd-user-integration.md)
 - [After Docker Re-Deploy](docs/fluidd-user-integration.md#after-docker-re-deploy-what-to-repeat)
 
@@ -98,6 +99,7 @@ Notes:
 - [Technical Reference](docs/technical-reference.md)
 - [Development Guide](docs/development.md)
 - [Moonraker Agent Integration Guide](docs/moonraker-agent-integration.md)
+- [Fluidd Quick Install](docs/fluidd-quick-install.md)
 - [Fluidd Dashboard Embed](docs/fluidd-dashboard-embed.md)
 - [Fluidd User Integration Guide](docs/fluidd-user-integration.md)
 - [Troubleshooting Guide](docs/troubleshooting.md)

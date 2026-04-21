@@ -48,7 +48,7 @@ Agent container name:
 Confirm Moonraker sees the agent:
 
 ```bash
-curl -s http://192.168.0.1:7125/server/extensions/list
+curl.exe -s "http://192.168.0.1:7125/server/extensions/list"
 ```
 
 Expected: `agents` contains `cfssync` (or your configured `CFS_AGENT_NAME`).
@@ -75,41 +75,41 @@ Available methods:
 List slots:
 
 ```bash
-curl -s -X POST http://192.168.0.1:7125/server/extensions/request \
+curl.exe -s -X POST "http://192.168.0.1:7125/server/extensions/request" \
   -H "Content-Type: application/json" \
-  -d '{"agent":"cfssync","method":"cfssync.slots.list","arguments":{}}'
+  -d "{\"agent\":\"cfssync\",\"method\":\"cfssync.slots.list\",\"arguments\":{}}"
 ```
 
 Assign spool:
 
 ```bash
-curl -s -X POST http://192.168.0.1:7125/server/extensions/request \
+curl.exe -s -X POST "http://192.168.0.1:7125/server/extensions/request" \
   -H "Content-Type: application/json" \
-  -d '{"agent":"cfssync","method":"cfssync.slot.assign","arguments":{"slot_id":1,"spool_id":12}}'
+  -d "{\"agent\":\"cfssync\",\"method\":\"cfssync.slot.assign\",\"arguments\":{\"slot_id\":1,\"spool_id\":12}}"
 ```
 
 Query history:
 
 ```bash
-curl -s -X POST http://192.168.0.1:7125/server/extensions/request \
+curl.exe -s -X POST "http://192.168.0.1:7125/server/extensions/request" \
   -H "Content-Type: application/json" \
-  -d '{"agent":"cfssync","method":"cfssync.history.query","arguments":{"days":7}}'
+  -d "{\"agent\":\"cfssync\",\"method\":\"cfssync.history.query\",\"arguments\":{\"days\":7}}"
 ```
 
 Read settings:
 
 ```bash
-curl -s -X POST http://192.168.0.1:7125/server/extensions/request \
+curl.exe -s -X POST "http://192.168.0.1:7125/server/extensions/request" \
   -H "Content-Type: application/json" \
-  -d '{"agent":"cfssync","method":"cfssync.settings.get","arguments":{}}'
+  -d "{\"agent\":\"cfssync\",\"method\":\"cfssync.settings.get\",\"arguments\":{}}"
 ```
 
 Set settings:
 
 ```bash
-curl -s -X POST http://192.168.0.1:7125/server/extensions/request \
+curl.exe -s -X POST "http://192.168.0.1:7125/server/extensions/request" \
   -H "Content-Type: application/json" \
-  -d '{"agent":"cfssync","method":"cfssync.settings.set","arguments":{"language":"en","theme":"dark"}}'
+  -d "{\"agent\":\"cfssync\",\"method\":\"cfssync.settings.set\",\"arguments\":{\"language\":\"en\",\"theme\":\"dark\"}}"
 ```
 
 ## Live Events

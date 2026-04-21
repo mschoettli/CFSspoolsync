@@ -68,81 +68,8 @@ If embedded in an iframe, ensure your reverse proxy does not block framing via
 
 ## Fluidd Dashboard Integration (Automated Script)
 
-Use the Windows automation script to set up patched Fluidd without manual copy/paste deployment steps.
-
-Script:
-- `scripts/build_and_deploy_fluidd_cfs.ps1`
-
-What the script does:
-1. Clones the patched Fluidd repository if it is missing.
-2. Checks out a fixed ref (`cfs-dashboard-embed-v1` by default).
-3. Builds Fluidd (`npm ci`, `npm run build`).
-4. If clone/build is not possible, it automatically falls back to the prebuilt release artifact.
-5. Uploads `dist` to the target host.
-6. Runs the remote deploy helper to:
-   - backup current `/usr/share/fluidd`
-   - replace files with the new build
-   - fix ownership/permissions
-   - validate and reload nginx
-
-### Prerequisites
-
-- Windows PowerShell.
-- Local tools in `PATH`: `git.exe`, `npm.cmd`, `ssh.exe`, `scp.exe`.
-- SSH access to the Fluidd host as a user with permission to write `/usr/share/fluidd` and reload nginx (default: `root`).
-- CFS reverse proxy on port `4409` already configured on the Fluidd host (if you use the embedded card iframe).
-
-### One-command usage
-
-Run from the CFSspoolsync repository root:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build_and_deploy_fluidd_cfs.ps1 `
-  -TargetHost "192.168.0.1"
-```
-
-### Parameters (exact behavior)
-
-- `-TargetHost` (required):
-  - Hostname or IP of the Fluidd/nginx machine.
-- `-User` (default: `root`):
-  - SSH user used for upload and remote deploy commands.
-- `-WorkspaceDir` (default: `$env:USERPROFILE\Documents\CodingProjects`):
-  - Local parent directory where auto-cloned patched Fluidd is stored.
-- `-FluiddPath` (default: `<WorkspaceDir>\fluidd-cfs-auto`):
-  - Local patched Fluidd checkout path. If missing, the repo is cloned automatically.
-- `-RepoUrl` (default: `https://github.com/mschoettli/fluidd.git`):
-  - Patched Fluidd repository URL.
-- `-RepoRef` (default: `cfs-dashboard-embed-v1`):
-  - Git branch/tag/commit to checkout before build.
-- `-PrebuiltAssetUrl`:
-  - Release artifact URL used as automatic fallback when repo clone/build fails.
-- `-UpdateRepo` (switch):
-  - Runs `git fetch --all --tags --prune` before checkout.
-- `-SkipBuild` (switch):
-  - Skips `npm` build steps and deploys existing local `dist`.
-- `-RemoteSourceDir` (default: `/tmp/fluidd-new`):
-  - Temporary upload location on target host.
-- `-RemoteDeployScript` (default: `/tmp/deploy_fluidd_patch.sh`):
-  - Remote path of the deploy helper script.
-
-### Typical variants
-
-Refresh remote build from latest ref:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build_and_deploy_fluidd_cfs.ps1 `
-  -TargetHost "192.168.0.1" `
-  -UpdateRepo
-```
-
-Deploy an already built checkout:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build_and_deploy_fluidd_cfs.ps1 `
-  -TargetHost "192.168.0.1" `
-  -SkipBuild
-```
+Use the dedicated script guide:
+- [Fluidd Automation Script Guide](docs/fluidd-automation-script.md)
 
 ## RFID / NFC Tags for CFS
 
@@ -170,7 +97,7 @@ Notes:
 - [Technical Reference](docs/technical-reference.md)
 - [Development Guide](docs/development.md)
 - [Moonraker Agent Integration Guide](docs/moonraker-agent-integration.md)
-- [Fluidd User Integration Guide](docs/fluidd-user-integration.md)
+- [Fluidd Automation Script Guide](docs/fluidd-automation-script.md)
 - [Troubleshooting Guide](docs/troubleshooting.md)
 
 ## License

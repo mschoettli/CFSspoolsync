@@ -6,6 +6,7 @@ on:
     tags: ['v*']
     paths:
       - 'backend/**'
+      - 'backend/agent/**'
       - 'frontend/**'
       - '.github/workflows/docker-build.yml'
   pull_request:
@@ -34,6 +35,9 @@ jobs:
           - service: frontend
             context: ./frontend
             image: cfsspoolsync-frontend
+          - service: agent
+            context: ./backend/agent
+            image: cfsspoolsync-agent
 
     steps:
       - name: Checkout

@@ -46,7 +46,14 @@ docker compose up -d
 Open:
 - `http://<host>:8088` (or your configured `HTTP_PORT`)
 
-## Fluidd Embed Mode
+## Moonraker Agent Integration (Primary)
+
+The primary integration path is the built-in Moonraker extension agent:
+- [Moonraker Agent Integration Guide](docs/moonraker-agent-integration.md)
+
+This avoids a mandatory Fluidd fork and exposes CFS methods through Moonraker extensions.
+
+## Fluidd Embed Mode (Optional)
 
 Use the existing app with the query parameter:
 - `http://<host>:8088/?view=fluidd`
@@ -61,7 +68,7 @@ If embedded in an iframe, ensure your reverse proxy does not block framing via
 
 ## Fluidd Dashboard Integration
 
-For end-user setup with a Fluidd dashboard card (CFS Slots), follow:
+Optional UI addon if you want a dedicated Fluidd dashboard card:
 - [Fluidd User Integration Guide](docs/fluidd-user-integration.md)
 - [After Docker Re-Deploy](docs/fluidd-user-integration.md#after-docker-re-deploy-what-to-repeat)
 
@@ -90,6 +97,7 @@ Notes:
 
 - [Technical Reference](docs/technical-reference.md)
 - [Development Guide](docs/development.md)
+- [Moonraker Agent Integration Guide](docs/moonraker-agent-integration.md)
 - [Fluidd Dashboard Embed](docs/fluidd-dashboard-embed.md)
 - [Fluidd User Integration Guide](docs/fluidd-user-integration.md)
 - [Troubleshooting Guide](docs/troubleshooting.md)

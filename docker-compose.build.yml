@@ -24,3 +24,11 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
 
+  cfs-moonraker-agent:
+    build:
+      context: ./backend/agent
+      dockerfile: Dockerfile
+    image: cfsspoolsync-agent:local
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+

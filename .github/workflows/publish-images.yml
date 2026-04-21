@@ -63,3 +63,21 @@ jobs:
           tags: ${{ steps.meta_frontend.outputs.tags }}
           labels: ${{ steps.meta_frontend.outputs.labels }}
           provenance: false
+
+      - name: Extract agent metadata
+        id: meta_agent
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/cfsspoolsync-agent
+          tags: |
+            type=raw,value=main
+            type=sha
+
+      - name: Build and push agent
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend/agent
+          push: true
+          tags: ${{ steps.meta_agent.outputs.tags }}
+          labels: ${{ steps.meta_agent.outputs.labels }}
+          provenance: false

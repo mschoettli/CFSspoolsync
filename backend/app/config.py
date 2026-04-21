@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # API
     api_prefix: str = "/api"
     cors_origins: str = "*"
+    ui_language: str = "en"
+    ui_theme: str = "dark"
+    settings_admin_token: str = ""
 
     # Simulator
     simulator_enabled: bool = True  # automatically enabled when moonraker_host is empty

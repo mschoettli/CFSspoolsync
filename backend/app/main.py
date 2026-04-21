@@ -13,6 +13,7 @@ from .routes import library as library_routes
 from .routes import ocr as ocr_routes
 from .routes import slots as slot_routes
 from .routes import spools as spool_routes
+from .routes import settings as settings_routes
 from .routes import tares as tare_routes
 from .seed import DEFAULT_TARES
 from .services.cfs_bridge import bridge
@@ -99,6 +100,7 @@ app.include_router(slot_routes.router, prefix=prefix)
 app.include_router(slot_routes.cfs_slots_router, prefix=prefix)
 app.include_router(history_routes.router, prefix=prefix)
 app.include_router(history_routes.cfs_router, prefix=prefix)
+app.include_router(settings_routes.router, prefix=prefix)
 app.include_router(ocr_routes.router, prefix=prefix)
 app.include_router(library_routes.router, prefix=prefix)
 

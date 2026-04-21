@@ -83,6 +83,26 @@ Fix:
 Related guide:
 - [Fluidd User Integration Guide](fluidd-user-integration.md)
 
+## Moonraker Agent Integration
+
+Symptoms:
+- `GET /server/extensions/list` does not show `cfssync`.
+- Extension request returns agent not found or backend errors.
+
+Checks:
+1. Verify container is running:
+   - `docker ps --filter name=cfs-moonraker-agent`
+2. Verify logs:
+   - `docker logs --tail 100 cfs-moonraker-agent`
+3. Verify Moonraker websocket URL and API key in `.env`:
+   - `MOONRAKER_WS_URL`
+   - `MOONRAKER_API_KEY`
+4. Verify backend bridge URL:
+   - `CFS_BACKEND_URL` should resolve from agent container.
+
+Related guide:
+- [Moonraker Agent Integration Guide](moonraker-agent-integration.md)
+
 ## Fluidd Deploy: Empty Web Root
 
 Symptoms:

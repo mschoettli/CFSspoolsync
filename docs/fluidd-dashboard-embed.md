@@ -1,5 +1,8 @@
 # Fluidd Dashboard Embed
 
+This integration is optional. The recommended primary integration path is now:
+- [Moonraker Agent Integration](moonraker-agent-integration.md)
+
 This document describes how to show CFSspoolsync directly inside the Fluidd dashboard with a small Fluidd customization.
 
 ## Overview

@@ -101,3 +101,12 @@ class HistoryEntry(Base):
     temperature = Column(Float, nullable=True)
     humidity = Column(Float, nullable=True)
 
+
+class AppSetting(Base):
+    """Simple key/value store for UI and integration settings."""
+    __tablename__ = "app_settings"
+
+    key = Column(String(120), primary_key=True)
+    value = Column(String(2000), nullable=False, default="")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+

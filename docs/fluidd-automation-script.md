@@ -8,12 +8,13 @@ Script file:
 ## Purpose
 
 The script performs a full end-to-end deployment of patched Fluidd to the target host:
-1. Clone patched Fluidd repository if missing.
+1. Clone Fluidd repository if missing.
 2. Checkout the configured ref.
-3. Build with `npm ci` and `npm run build`.
-4. Fallback to prebuilt release artifact if clone/build fails.
-5. Upload build files to the remote host.
-6. Run remote deploy helper:
+3. Apply CFS dashboard patch set automatically.
+4. Build with `npm ci` and `npm run build`.
+5. Fallback to prebuilt release artifact if clone/build fails.
+6. Upload build files to the remote host.
+7. Run remote deploy helper:
    - backup current `/usr/share/fluidd`
    - replace files
    - fix ownership and permissions
@@ -50,10 +51,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build_and_deploy_fluidd_cfs.p
   - Parent directory for auto-managed local checkout and fallback files.
 - `-FluiddPath` (default: `<WorkspaceDir>\fluidd-cfs-auto`)
   - Local checkout path.
-- `-RepoUrl` (default: `https://github.com/mschoettli/fluidd.git`)
-  - Patched Fluidd repository URL.
-- `-RepoRef` (default: `cfs-dashboard-embed-v1`)
+- `-RepoUrl` (default: `https://github.com/fluidd-core/fluidd.git`)
+  - Fluidd repository URL.
+- `-RepoRef` (default: `v1.36.4`)
   - Branch, tag, or commit to deploy.
+- `-ApplyCfsPatch` (switch, default enabled)
+  - Applies CFS widget/dashboard/layout patch set before build.
 - `-PrebuiltAssetUrl` (default: CFSspoolsync release artifact for `cfs-dashboard-embed-v1`)
   - Download URL used when repository clone/build path is unavailable.
 - `-UpdateRepo` (switch)

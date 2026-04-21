@@ -5,8 +5,9 @@ param(
     [string]$User = "root",
     [string]$WorkspaceDir = "$env:USERPROFILE\Documents\CodingProjects",
     [string]$FluiddPath = "",
-    [string]$RepoUrl = "https://github.com/mschoettli/fluidd.git",
-    [string]$RepoRef = "cfs-dashboard-embed-v1",
+    [string]$RepoUrl = "https://github.com/fluidd-core/fluidd.git",
+    [string]$RepoRef = "v1.36.4",
+    [switch]$ApplyCfsPatch = $true,
     [string]$PrebuiltAssetUrl = "https://github.com/mschoettli/CFSspoolsync/releases/download/cfs-dashboard-embed-v1/fluidd-cfs-ui-dist.tar.gz",
     [switch]$UpdateRepo,
     [string]$RemoteSourceDir = "/tmp/fluidd-new",
@@ -53,6 +54,83 @@ function Resolve-DistPath {
     return $null
 }
 
+function Apply-CfsPatchToFluidd {
+    param([Parameter(Mandatory = $true)][string]$RepoPath)
+
+    $widgetDir = Join-Path -Path $RepoPath -ChildPath "src/components/widgets"
+    $widgetPath = Join-Path -Path $widgetDir -ChildPath "CfsEmbed.vue"
+    $dashboardPath = Join-Path -Path $RepoPath -ChildPath "src/views/Dashboard.vue"
+    $layoutStatePath = Join-Path -Path $RepoPath -ChildPath "src/store/layout/state.ts"
+
+    if (-not (Test-Path -Path $widgetDir -PathType Container)) {
+        throw "Widget directory not found: $widgetDir"
+    }
+    if (-not (Test-Path -Path $dashboardPath -PathType Leaf)) {
+        throw "Dashboard file not found: $dashboardPath"
+    }
+    if (-not (Test-Path -Path $layoutStatePath -PathType Leaf)) {
+        throw "Layout state file not found: $layoutStatePath"
+    }
+
+    $widgetContent = @'
+<template>
+  <v-card class="fill-height cfs-embed-card">
+    <v-card-title class="py-2">CFS Slots</v-card-title>
+    <v-card-text class="pa-0 cfs-embed-body">
+      <iframe
+        :src="src"
+        class="cfs-embed-frame"
+        loading="lazy"
+      />
+    </v-card-text>
+  </v-card>
+</template>
+
+<script lang="ts">
+import Vue from 'vue'
+
+export default Vue.extend({
+  name: 'CfsEmbed',
+  data: () => ({
+    src: `${window.location.protocol}//${window.location.hostname}:4409/?view=fluidd&layout=card`,
+  }),
+})
+</script>
+
+<style scoped>
+.cfs-embed-card {
+  min-height: 760px;
+}
+
+.cfs-embed-body {
+  height: calc(760px - 48px);
+}
+
+.cfs-embed-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+</style>
+'@
+    Set-Content -Path $widgetPath -Value $widgetContent -Encoding utf8
+
+    $dashboard = Get-Content -Path $dashboardPath -Raw
+    if ($dashboard -notmatch "import CfsEmbed from '@/components/widgets/CfsEmbed\.vue'") {
+        $dashboard = $dashboard -replace "(import AfcCard from '@/components/widgets/afc/AfcCard\.vue'\r?\n)", "`$1import CfsEmbed from '@/components/widgets/CfsEmbed.vue'`r`n"
+    }
+    if ($dashboard -notmatch "(?m)^\s*CfsEmbed\s*,?\s*$") {
+        $dashboard = $dashboard -replace "(AfcCard\s*,?\r?\n)", "`$1    CfsEmbed,`r`n"
+    }
+    Set-Content -Path $dashboardPath -Value $dashboard -Encoding utf8
+
+    $layoutState = Get-Content -Path $layoutStatePath -Raw
+    if ($layoutState -notmatch "id:\s*'cfs-embed'") {
+        $layoutState = $layoutState -replace "(container1:\s*\[\r?\n)", "`$1      { id: 'cfs-embed', enabled: true },`r`n"
+    }
+    Set-Content -Path $layoutStatePath -Value $layoutState -Encoding utf8
+}
+
 Assert-Command -Name "scp.exe"
 Assert-Command -Name "ssh.exe"
 Assert-Command -Name "npm.cmd"
@@ -79,7 +157,7 @@ $repoPrepared = $false
 try {
     $fluiddRepoExists = Test-Path -Path (Join-Path $FluiddPath ".git") -PathType Container
     if (-not $fluiddRepoExists) {
-        Write-Host "Cloning patched Fluidd repo: $RepoUrl"
+        Write-Host "Cloning Fluidd repo: $RepoUrl"
         Invoke-Checked -FilePath "git.exe" -Arguments @("clone", $RepoUrl, $FluiddPath)
     }
 
@@ -92,6 +170,11 @@ try {
         }
         Invoke-Checked -FilePath "git.exe" -Arguments @("checkout", $RepoRef)
         $repoPrepared = $true
+
+        if ($ApplyCfsPatch) {
+            Write-Host "Applying CFS patch set..."
+            Apply-CfsPatchToFluidd -RepoPath $resolvedFluiddPath
+        }
     }
     finally {
         Pop-Location

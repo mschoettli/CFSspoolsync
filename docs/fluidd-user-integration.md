@@ -200,6 +200,41 @@ nginx -t
 nginx -s reload
 ```
 
+## Optional: One-Command Windows Automation
+
+Use the helper script in this repo to clone/update patched Fluidd, build it, and deploy automatically.
+
+From this repository root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_and_deploy_fluidd_cfs.ps1 `
+  -TargetHost "192.168.0.1"
+```
+
+What it does:
+1. Clones patched Fluidd from `https://github.com/mschoettli/fluidd.git` (if missing).
+2. Checks out `cfs-dashboard-embed-v1`.
+3. Runs `npm ci` and `npm run build`.
+4. Uploads `dist` to the host under `/tmp/fluidd-new/dist`.
+5. Uploads and runs `scripts/deploy_fluidd_patch.sh`.
+6. Deploys to `/usr/share/fluidd`, fixes permissions, and reloads Nginx.
+
+Optional:
+- Force refresh repo before checkout:
+  - add `-UpdateRepo`
+- Use custom local checkout path:
+  - add `-FluiddPath "C:\path\to\patched-fluidd"`
+- Use custom branch/tag:
+  - add `-RepoRef "your-branch-or-tag"`
+
+If you already built `dist`, skip build:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_and_deploy_fluidd_cfs.ps1 `
+  -TargetHost "192.168.0.1" `
+  -SkipBuild
+```
+
 ## Step 5: Enable the Dashboard Card
 
 Open Fluidd:
@@ -302,3 +337,82 @@ Fix:
 
 - [Fluidd Dashboard Embed (technical)](fluidd-dashboard-embed.md)
 - [Troubleshooting Guide](troubleshooting.md)
+
+## Remove Fluidd UI Integration (Keep Moonraker Agent)
+
+Use this when you want to remove the Fluidd dashboard card/custom web patch, but keep API integration through Moonraker extensions.
+
+### 1) Remove card from dashboard layout
+
+In Fluidd:
+1. Open `Dashboard`.
+2. Enter `Layout/Edit` mode.
+3. Remove `CFS Slots`.
+4. Save layout.
+
+### 2) Restore original Fluidd web root
+
+On the Fluidd host:
+
+```bash
+ls -1dt /root/fluidd-backup-* | head -n 5
+```
+
+Pick one timestamp and restore it:
+
+```bash
+rm -rf /usr/share/fluidd/*
+cp -a /root/fluidd-backup-<your-timestamp>/. /usr/share/fluidd/
+chown -R root:root /usr/share/fluidd
+find /usr/share/fluidd -type d -exec chmod 755 {} \;
+find /usr/share/fluidd -type f -exec chmod 644 {} \;
+nginx -t
+nginx -s reload
+```
+
+Important:
+- Replace `<your-timestamp>` with a real folder name from `ls -1dt`.
+- Do not copy the literal placeholder string.
+
+### 3) Optional: remove CFS UI proxy on `:4409`
+
+If you do not want iframe UI embed anymore:
+1. Edit Nginx config.
+2. Remove the `server { listen 4409; ... }` block.
+3. Reload:
+
+```bash
+nginx -t
+nginx -s reload
+```
+
+### 4) Optional: remove temporary UI deployment artifacts
+
+```bash
+rm -rf /tmp/fluidd-new
+rm -f /tmp/fluidd-cfs-ui.tar.gz
+```
+
+### 5) Validation
+
+From PowerShell:
+
+```powershell
+curl.exe -I "http://192.168.0.1:4408/"
+```
+
+Expected:
+- `HTTP/1.1 200 OK`
+- No `CFS Slots` card in dashboard.
+
+If you removed `:4409`, this should fail/not respond:
+- `http://192.168.0.1:4409`
+
+Agent still active check:
+
+```powershell
+curl.exe -s "http://192.168.0.1:7125/server/extensions/list"
+```
+
+Expected:
+- `cfssync` still listed in `agents`.

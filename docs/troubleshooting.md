@@ -119,6 +119,9 @@ Fix:
    - `cp -a /tmp/fluidd-new/* /usr/share/fluidd/`
 3. Reapply permissions and reload Nginx.
 
+If you intentionally want to remove the custom Fluidd UI patch and return to stock Fluidd:
+- [Remove Fluidd UI Integration (Keep Agent)](fluidd-user-integration.md#remove-fluidd-ui-integration-keep-moonraker-agent)
+
 ## Fluidd Deploy: Permission Denied / Redirect Cycle
 
 Symptoms:

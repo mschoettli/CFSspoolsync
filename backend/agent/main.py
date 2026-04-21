@@ -157,11 +157,17 @@ class MoonrakerAgent:
                     "api_key": self.settings.moonraker_api_key or None,
                 },
             )
-            await self._rpc_call(
-                ws,
-                "connection.register_remote_method",
-                {"method_name": "cfssync_refresh"},
-            )
+            try:
+                await self._rpc_call(
+                    ws,
+                    "connection.register_remote_method",
+                    {"method_name": "cfssync_refresh"},
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Remote method registration not available on this Moonraker: %s",
+                    exc,
+                )
             logger.info("Identified as agent '%s'", self.settings.cfs_agent_name)
 
             await self._publish_snapshot(ws, force=True)

@@ -45,7 +45,7 @@ services:
     depends_on:
       - backend
     environment:
-      MOONRAKER_WS_URL: ${MOONRAKER_WS_URL:-ws://192.168.0.1:7125/websocket}
+      MOONRAKER_WS_URL: ${MOONRAKER_WS_URL:?MOONRAKER_WS_URL is required}
       MOONRAKER_API_KEY: ${MOONRAKER_API_KEY:-}
       CFS_BACKEND_URL: ${CFS_BACKEND_URL:-http://backend:8000}
       CFS_REQUEST_TIMEOUT: ${CFS_REQUEST_TIMEOUT:-10}

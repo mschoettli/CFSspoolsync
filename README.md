@@ -74,7 +74,11 @@ Notes:
 
 ## Documentation
 
-- [Documentation Index](docs/README.md)
+- [Moonraker Agent Integration Guide](docs/moonraker-agent-integration.md)
+- [Fluidd Automation Script Guide](docs/fluidd-automation-script.md)
+- [Troubleshooting Guide](docs/troubleshooting.md)
+- [Technical Reference](docs/technical-reference.md)
+- [Development Guide](docs/development.md)
 
 ## License
 

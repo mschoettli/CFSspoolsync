@@ -12,6 +12,10 @@ param(
     [switch]$UpdateRepo,
     [string]$RemoteSourceDir = "/tmp/fluidd-new",
     [string]$RemoteDeployScript = "/tmp/deploy_fluidd_patch.sh",
+    [string]$CfsHost = "",
+    [int]$CfsPort = 8088,
+    [int]$ProxyPort = 4409,
+    [switch]$ConfigureProxy,
     [switch]$SkipBuild
 )
 
@@ -55,7 +59,10 @@ function Resolve-DistPath {
 }
 
 function Apply-CfsPatchToFluidd {
-    param([Parameter(Mandatory = $true)][string]$RepoPath)
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoPath,
+        [Parameter(Mandatory = $true)][int]$EmbedPort
+    )
 
     $widgetDir = Join-Path -Path $RepoPath -ChildPath "src/components/widgets"
     $widgetPath = Join-Path -Path $widgetDir -ChildPath "CfsEmbed.vue"
@@ -92,7 +99,7 @@ import Vue from 'vue'
 export default Vue.extend({
   name: 'CfsEmbed',
   data: () => ({
-    src: `${window.location.protocol}//${window.location.hostname}:4409/?view=fluidd&layout=card`,
+    src: `${window.location.protocol}//${window.location.hostname}:EMBED_PORT/?view=fluidd&layout=card`,
   }),
 })
 </script>
@@ -113,6 +120,7 @@ export default Vue.extend({
 }
 </style>
 '@
+    $widgetContent = $widgetContent.Replace("EMBED_PORT", $EmbedPort.ToString())
     Set-Content -Path $widgetPath -Value $widgetContent -Encoding utf8
 
     $dashboard = Get-Content -Path $dashboardPath -Raw
@@ -176,7 +184,7 @@ try {
 
         if ($ApplyCfsPatch) {
             Write-Host "Applying CFS patch set..."
-            Apply-CfsPatchToFluidd -RepoPath $resolvedFluiddPath
+            Apply-CfsPatchToFluidd -RepoPath $resolvedFluiddPath -EmbedPort $ProxyPort
         }
     }
     finally {
@@ -250,6 +258,100 @@ Invoke-Checked -FilePath "ssh.exe" -Arguments @(
     "chmod +x $RemoteDeployScript && $RemoteDeployScript $RemoteSourceDir/dist"
 )
 
+if ($ConfigureProxy) {
+    if ([string]::IsNullOrWhiteSpace($CfsHost)) {
+        throw "When -ConfigureProxy is used, -CfsHost is required."
+    }
+
+    $proxySetupScriptPath = Join-Path -Path $env:TEMP -ChildPath "cfs_proxy_setup.sh"
+    $proxySetupScript = @'
+#!/bin/sh
+set -eu
+
+NGINX_CONF="/etc/nginx/nginx.conf"
+TMP_BASE="/tmp/nginx_conf_cfs_proxy"
+TMP_CLEAN="${TMP_BASE}.clean"
+TMP_NEW="${TMP_BASE}.new"
+BLOCK_FILE="${TMP_BASE}.block"
+
+cat > "$BLOCK_FILE" <<'EOF'
+    # >>> CFS_PROXY_AUTOGEN >>>
+    server {
+        listen PROXY_PORT;
+        server_name _;
+
+        location / {
+            proxy_pass http://CFS_HOST:CFS_PORT/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /ws {
+            proxy_pass http://CFS_HOST:CFS_PORT/ws;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+        }
+    }
+    # <<< CFS_PROXY_AUTOGEN <<<
+EOF
+
+sed -i "s/PROXY_PORT/PROXY_PORT_VALUE/g; s/CFS_HOST/CFS_HOST_VALUE/g; s/CFS_PORT/CFS_PORT_VALUE/g" "$BLOCK_FILE"
+
+awk '
+BEGIN { skip=0 }
+/# >>> CFS_PROXY_AUTOGEN >>>/ { skip=1; next }
+/# <<< CFS_PROXY_AUTOGEN <<</ { skip=0; next }
+skip==0 { print }
+' "$NGINX_CONF" > "$TMP_CLEAN"
+
+awk -v blockfile="$BLOCK_FILE" '
+{ lines[NR] = $0 }
+END {
+  last = 0
+  for (i = NR; i >= 1; i--) {
+    if (lines[i] ~ /^[[:space:]]*}[[:space:]]*$/) {
+      last = i
+      break
+    }
+  }
+  if (last == 0) {
+    for (i = 1; i <= NR; i++) print lines[i]
+    exit 1
+  }
+  for (i = 1; i < last; i++) print lines[i]
+  while ((getline line < blockfile) > 0) print line
+  close(blockfile)
+  for (i = last; i <= NR; i++) print lines[i]
+}
+' "$TMP_CLEAN" > "$TMP_NEW"
+
+cp "$NGINX_CONF" "$NGINX_CONF.bak.$(date +%Y%m%d-%H%M%S)"
+mv "$TMP_NEW" "$NGINX_CONF"
+rm -f "$TMP_CLEAN" "$BLOCK_FILE"
+
+nginx -t
+nginx -s reload
+'@
+    $proxySetupScript = $proxySetupScript.Replace("PROXY_PORT_VALUE", $ProxyPort.ToString())
+    $proxySetupScript = $proxySetupScript.Replace("CFS_HOST_VALUE", $CfsHost)
+    $proxySetupScript = $proxySetupScript.Replace("CFS_PORT_VALUE", $CfsPort.ToString())
+    Set-Content -Path $proxySetupScriptPath -Value $proxySetupScript -Encoding ascii
+
+    Write-Host "Configuring nginx proxy on target host ($ProxyPort -> $CfsHost`:$CfsPort)..."
+    Invoke-Checked -FilePath "scp.exe" -Arguments @($proxySetupScriptPath, "$remote`:/tmp/cfs_proxy_setup.sh")
+    Invoke-Checked -FilePath "ssh.exe" -Arguments @(
+        $remote,
+        "sed -i 's/\r$//' /tmp/cfs_proxy_setup.sh && chmod +x /tmp/cfs_proxy_setup.sh && /tmp/cfs_proxy_setup.sh"
+    )
+}
+
 Write-Host ""
 Write-Host "Done."
 if ($repoPrepared) {
@@ -260,4 +362,10 @@ else {
 }
 Write-Host "Validate from PowerShell:"
 Write-Host "  curl.exe -I ""http://$TargetHost`:4408/"""
+if ($ConfigureProxy) {
+    Write-Host "  curl.exe -I ""http://$TargetHost`:$ProxyPort/?view=fluidd&layout=card"""
+}
+elseif (-not [string]::IsNullOrWhiteSpace($CfsHost)) {
+    Write-Host "  curl.exe -I ""http://$CfsHost`:$CfsPort/?view=fluidd&layout=card"""
+}
 Write-Host "  curl.exe -s ""http://$TargetHost`:7125/server/extensions/list"""

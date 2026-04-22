@@ -76,6 +76,7 @@ Notes:
 
 - [Moonraker Agent Integration Guide](docs/moonraker-agent-integration.md)
 - [Fluidd Automation Script Guide](docs/fluidd-automation-script.md)
+- [Non-Docker Installation (Linux)](docs/non-docker-install.md)
 - [Troubleshooting Guide](docs/troubleshooting.md)
 - [Technical Reference](docs/technical-reference.md)
 - [Development Guide](docs/development.md)

@@ -4,4 +4,5 @@
 - [Development Guide](development.md)
 - [Moonraker Agent Integration Guide](moonraker-agent-integration.md)
 - [Fluidd Automation Script Guide](fluidd-automation-script.md)
+- [Non-Docker Installation (Linux)](non-docker-install.md)
 - [Troubleshooting Guide](troubleshooting.md)

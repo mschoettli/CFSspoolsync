@@ -203,7 +203,10 @@ function Field({ label, children, required, hint }) {
 // Temperaturen automatisch. Bei unbekanntem Code: Warnbanner, Farbe wenn
 // vorhanden, Rest leer zum manuellen ErgÃ¤nzen.
 export function AddSpoolModal({
-  t, lang = 'de', tares, editing, targetSlot, cfsSnapshot, cfsConnected,
+  t, lang = 'de', temperatureUnitSymbol = '°C',
+  toDisplayTemperature = (value) => Number(value),
+  toStorageTemperature = (value) => Number(value),
+  tares, editing, targetSlot, cfsSnapshot, cfsConnected,
   onClose, onSave, onOpenTares,
 }) {
   const grossEstimateHintByLang = {
@@ -259,6 +262,12 @@ export function AddSpoolModal({
   const [ocrWarnings, setOcrWarnings]   = useState([])
   const [ocrRawText, setOcrRawText]     = useState('')
   const fileInputRef = useRef(null)
+  const nozzleTempDisplay = Number.isFinite(Number(nozzleTemp))
+    ? fmt(toDisplayTemperature(nozzleTemp), 0)
+    : ''
+  const bedTempDisplay = Number.isFinite(Number(bedTemp))
+    ? fmt(toDisplayTemperature(bedTemp), 0)
+    : ''
 
   // Material preset triggert Temperaturen (nur bei Neuanlage ohne RFID)
   useEffect(() => {
@@ -585,17 +594,17 @@ export function AddSpoolModal({
             </select>
           </Field>
 
-          <Field label={`${t.nozzleTemp} (°C)`}>
+          <Field label={`${t.nozzleTemp} (${temperatureUnitSymbol})`}>
             <input
-              type="number" value={nozzleTemp}
-              onChange={(e) => setNozzleTemp(+e.target.value)} className="input"
+              type="number" value={nozzleTempDisplay}
+              onChange={(e) => setNozzleTemp(toStorageTemperature(e.target.value))} className="input"
             />
           </Field>
 
-          <Field label={`${t.bedTemp} (°C)`}>
+          <Field label={`${t.bedTemp} (${temperatureUnitSymbol})`}>
             <input
-              type="number" value={bedTemp}
-              onChange={(e) => setBedTemp(+e.target.value)} className="input"
+              type="number" value={bedTempDisplay}
+              onChange={(e) => setBedTemp(toStorageTemperature(e.target.value))} className="input"
             />
           </Field>
 
@@ -625,10 +634,10 @@ export function AddSpoolModal({
               <Scale size={15} className="text-zinc-400" />
               <span className="text-sm font-medium text-zinc-200">{t.tare}</span>
             </div>
-            <button onClick={onOpenTares}
-              className="text-xs text-emerald-400 hover:text-emerald-300 font-medium underline-offset-2 hover:underline">
-              {t.editTareLink} ->
-            </button>
+              <button onClick={onOpenTares}
+                className="text-xs text-emerald-400 hover:text-emerald-300 font-medium underline-offset-2 hover:underline">
+                {t.editTareLink} {'->'}
+              </button>
           </div>
           <div className="mt-3 grid grid-cols-3 gap-3 text-center">
             <div>

@@ -11,6 +11,7 @@ import { HistoryChart } from './components/HistoryChart'
 
 const fmt = (n, d = 0) => Number(n).toFixed(d)
 const DEFAULT_PRINT_JOB = { active: false, title: '', remaining_seconds: null }
+const DEFAULT_TEMP_UNIT_PREFERENCE = 'auto'
 const DEFAULT_CFS = {
   temperature: 25,
   humidity: 20,
@@ -57,6 +58,24 @@ function resolveLanguage(value) {
   return TRANSLATIONS[normalized] ? normalized : DEFAULT_LANGUAGE
 }
 
+function resolveTemperatureUnit(preference, cfsState) {
+  const pref = String(preference || '').trim().toLowerCase()
+  if (pref === 'c' || pref === 'f') return pref
+
+  const unitCandidates = [
+    cfsState?.temperature_unit,
+    cfsState?.temp_unit,
+    cfsState?.units?.temperature,
+  ]
+  for (const candidate of unitCandidates) {
+    const normalized = String(candidate || '').trim().toLowerCase()
+    if (normalized === 'f' || normalized === 'fahrenheit') return 'f'
+    if (normalized === 'c' || normalized === 'celsius') return 'c'
+  }
+  if (cfsState?.is_fahrenheit === true) return 'f'
+  return 'c'
+}
+
 export default function App() {
   const searchParams = useMemo(() => {
     if (typeof window === 'undefined') return new URLSearchParams('')
@@ -79,6 +98,9 @@ export default function App() {
 
   const [lang, setLang] = useState(() => resolveLanguage(localStorage.getItem('cfs_lang')))
   const [theme, setTheme] = useState(() => localStorage.getItem('cfs_theme') || 'dark')
+  const [tempUnitPreference, setTempUnitPreference] = useState(
+    () => (localStorage.getItem('cfs_temp_unit') || DEFAULT_TEMP_UNIT_PREFERENCE).toLowerCase(),
+  )
   const t = TRANSLATIONS[lang] || TRANSLATIONS[DEFAULT_LANGUAGE]
 
   const [spools, setSpools] = useState([])
@@ -105,6 +127,9 @@ export default function App() {
     localStorage.setItem('cfs_theme', theme)
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
+  useEffect(() => {
+    localStorage.setItem('cfs_temp_unit', tempUnitPreference)
+  }, [tempUnitPreference])
 
   // ---------- Initial load ----------
   const loadAll = useCallback(async () => {
@@ -153,6 +178,28 @@ export default function App() {
     }, 1000)
     return () => clearInterval(iv)
   }, [cfs.last_sync])
+
+  const temperatureUnit = useMemo(
+    () => resolveTemperatureUnit(tempUnitPreference, cfs),
+    [tempUnitPreference, cfs],
+  )
+  const temperatureUnitSymbol = temperatureUnit === 'f' ? '°F' : '°C'
+  const toDisplayTemperature = useCallback(
+    (value) => {
+      const numeric = Number(value)
+      if (!Number.isFinite(numeric)) return numeric
+      return temperatureUnit === 'f' ? (numeric * 9) / 5 + 32 : numeric
+    },
+    [temperatureUnit],
+  )
+  const toStorageTemperature = useCallback(
+    (value) => {
+      const numeric = Number(value)
+      if (!Number.isFinite(numeric)) return numeric
+      return temperatureUnit === 'f' ? ((numeric - 32) * 5) / 9 : numeric
+    },
+    [temperatureUnit],
+  )
 
   // ---------- Derived ----------
   const slotBySpoolId = useMemo(() => {
@@ -395,7 +442,13 @@ export default function App() {
             subtitle={`${t.lastSync}: ${formatSyncAge(lastSyncAgo, lang)}`}
             icon={<Activity size={18} />} />
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-            <EnvCard icon={<Thermometer size={18} />} label={t.temperature} value={fmt(cfs.temperature, 1)} unit="°C" accent="amber" />
+            <EnvCard
+              icon={<Thermometer size={18} />}
+              label={t.temperature}
+              value={fmt(toDisplayTemperature(cfs.temperature), 1)}
+              unit={temperatureUnitSymbol}
+              accent="amber"
+            />
             <EnvCard icon={<Droplets size={18} />} label={t.humidity} value={fmt(cfs.humidity, 1)} unit="%" accent="cyan" />
             <EnvCard icon={<Package size={18} />} label={t.spoolCount} value={spools.length} unit="" accent="violet" />
             <PrintJobCard t={t} printJob={cfs.print_job || DEFAULT_PRINT_JOB} />
@@ -409,6 +462,8 @@ export default function App() {
           <div className={`grid gap-4 ${fluiddSlotGridClass}`}>
             {orderedSlots.map((slot) => (
               <SlotPanel key={slot.id} t={t} slot={slot}
+                temperatureUnitSymbol={temperatureUnitSymbol}
+                toDisplayTemperature={toDisplayTemperature}
                 onAssign={() => setAssignModalSlot(slot.id)}
                 onAddNew={() => openAddSpool(slot.id)}
                 onEdit={(sp) => openEditSpool(sp)}
@@ -453,6 +508,8 @@ export default function App() {
             <InventoryList
               t={t}
               entries={sortedInventoryEntries}
+              temperatureUnitSymbol={temperatureUnitSymbol}
+              toDisplayTemperature={toDisplayTemperature}
               activeFilter={activeFilter}
               setActiveFilter={setActiveFilter}
               sortMode={sortMode}
@@ -475,6 +532,9 @@ export default function App() {
         <AddSpoolModal
           t={t}
           lang={lang}
+          temperatureUnitSymbol={temperatureUnitSymbol}
+          toDisplayTemperature={toDisplayTemperature}
+          toStorageTemperature={toStorageTemperature}
           tares={tares}
           editing={editingSpool}
           targetSlot={addSpoolForSlot}
@@ -506,12 +566,17 @@ export default function App() {
           t={t}
           lang={lang}
           theme={theme}
+          tempUnitPreference={tempUnitPreference}
           libraryBusy={libraryBusy}
           libraryImportInputRef={libraryImportInputRef}
           languageOptions={LANGUAGE_OPTIONS}
           onClose={() => setShowSettings(false)}
           onLanguageChange={(nextLang) => setLang(resolveLanguage(nextLang))}
           onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          onTemperatureUnitPreferenceChange={(nextValue) => {
+            const next = String(nextValue || '').toLowerCase()
+            setTempUnitPreference(next === 'c' || next === 'f' || next === 'auto' ? next : 'auto')
+          }}
           onExportLibrary={exportLibrary}
           onTriggerImportLibrary={triggerImportLibrary}
           onImportLibrary={importLibrary}
@@ -534,6 +599,8 @@ export default function App() {
         <InventoryDetailModal
           t={t}
           entry={selectedInventoryEntry}
+          temperatureUnitSymbol={temperatureUnitSymbol}
+          toDisplayTemperature={toDisplayTemperature}
           onClose={() => setSelectedSpool(null)}
           onEdit={(spool) => {
             setSelectedSpool(null)
@@ -669,8 +736,9 @@ function PrintJobCard({ t, printJob }) {
 }
 
 function SettingsModal({
-  t, lang, theme, languageOptions, libraryBusy, libraryImportInputRef,
+  t, lang, theme, tempUnitPreference, languageOptions, libraryBusy, libraryImportInputRef,
   onClose, onLanguageChange, onToggleTheme, onOpenTares,
+  onTemperatureUnitPreferenceChange,
   onExportLibrary, onTriggerImportLibrary, onImportLibrary,
 }) {
   const currentOption = languageOptions.find((option) => option.value === lang)
@@ -703,6 +771,21 @@ function SettingsModal({
             {theme === 'dark' ? t.darkMode : t.lightMode}
           </span>
         </button>
+        <label className="w-full block">
+          <span className="sr-only">{t.temperatureUnit || 'Temperature unit'}</span>
+          <div className="w-full flex items-center justify-between px-3 py-2 rounded-md bg-zinc-900 border border-zinc-800 text-sm">
+            <span>{t.temperatureUnit || 'Temperature unit'}</span>
+          </div>
+          <select
+            value={tempUnitPreference}
+            onChange={(event) => onTemperatureUnitPreferenceChange(event.target.value)}
+            className="input mt-2"
+          >
+            <option value="auto">{t.temperatureUnitAuto || 'Auto (Printer)'}</option>
+            <option value="c">{t.temperatureUnitCelsius || 'Celsius (°C)'}</option>
+            <option value="f">{t.temperatureUnitFahrenheit || 'Fahrenheit (°F)'}</option>
+          </select>
+        </label>
         <button onClick={onOpenTares} className="w-full flex items-center justify-between px-3 py-2 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-sm">
           <span>{t.tareTableTitle}</span>
           <span className="text-emerald-400">{t.open}</span>
@@ -753,13 +836,22 @@ function HistoryModal({ t, spools, onClose }) {
  * B) detected CFS spool without assignment,
  * C) empty slot with assign/add actions.
  */
-function SlotPanel({ t, slot, onAssign, onAddNew, onEdit }) {
+function SlotPanel({ t, slot, temperatureUnitSymbol, toDisplayTemperature, onAssign, onAddNew, onEdit }) {
   const spool = slot.spool
   const snap = slot.cfs_snapshot
 
   // ZUSTAND A: Spule eingelegt
   if (spool) {
-    return <AssignedSlotPanel t={t} slot={slot} spool={spool} onEdit={onEdit} />
+    return (
+      <AssignedSlotPanel
+        t={t}
+        slot={slot}
+        spool={spool}
+        temperatureUnitSymbol={temperatureUnitSymbol}
+        toDisplayTemperature={toDisplayTemperature}
+        onEdit={onEdit}
+      />
+    )
   }
 
   // ZUSTAND B: CFS hat Spule erkannt, aber im Lager noch nicht angelegt
@@ -887,7 +979,7 @@ function DetectedSlotPanel({ t, slot, snap, onAddNew }) {
   )
 }
 
-function AssignedSlotPanel({ t, slot, spool, onEdit }) {
+function AssignedSlotPanel({ t, slot, spool, temperatureUnitSymbol, toDisplayTemperature, onEdit }) {
   const net = Math.max(0, slot.current_weight - spool.tare_weight)
   const pct = Math.min(100, (net / 1000) * 100)
   const low = net < 100
@@ -933,7 +1025,13 @@ function AssignedSlotPanel({ t, slot, spool, onEdit }) {
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-zinc-100 truncate">{spool.manufacturer}</div>
           <div className="text-xs text-zinc-400 truncate">{spool.material} · {spool.color}</div>
-          <div className="text-xs text-zinc-600 mt-0.5">{spool.nozzle_temp}° / {spool.bed_temp}° · {spool.diameter}mm</div>
+          <div className="text-xs text-zinc-600 mt-0.5">
+            {fmt(toDisplayTemperature(spool.nozzle_temp), 0)}{temperatureUnitSymbol}
+            {' / '}
+            {fmt(toDisplayTemperature(spool.bed_temp), 0)}{temperatureUnitSymbol}
+            {' · '}
+            {spool.diameter}mm
+          </div>
         </div>
       </div>
 
@@ -967,7 +1065,7 @@ function AssignedSlotPanel({ t, slot, spool, onEdit }) {
   )
 }
 
-function InventoryTable({ t, spools, slots, onEdit, onDelete }) {
+function InventoryTable({ t, spools, slots, temperatureUnitSymbol = '°C', toDisplayTemperature = (value) => Number(value), onEdit, onDelete }) {
   const sortedSpools = spools
     .map((spool, index) => {
       const slotFor = slots.find((s) => s.spool_id === spool.id)
@@ -1023,7 +1121,11 @@ function InventoryTable({ t, spools, slots, onEdit, onDelete }) {
                     <div className="h-full bg-gradient-to-r from-emerald-500 to-cyan-400" style={{ width: `${pct}%` }} />
                   </div>
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums text-zinc-400">{sp.nozzle_temp}° / {sp.bed_temp}°</td>
+                <td className="px-4 py-3 text-right tabular-nums text-zinc-400">
+                  {fmt(toDisplayTemperature(sp.nozzle_temp), 0)}{temperatureUnitSymbol}
+                  {' / '}
+                  {fmt(toDisplayTemperature(sp.bed_temp), 0)}{temperatureUnitSymbol}
+                </td>
                 <td className="px-4 py-3">
                   {slotFor ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-950/60 border border-cyan-800/60 text-cyan-300 text-xs">
@@ -1066,7 +1168,7 @@ function InventoryTable({ t, spools, slots, onEdit, onDelete }) {
 }
 
 function InventoryList({
-  t, entries, activeFilter, setActiveFilter, sortMode, setSortMode, counts, onSelect,
+  t, entries, temperatureUnitSymbol, toDisplayTemperature, activeFilter, setActiveFilter, sortMode, setSortMode, counts, onSelect,
 }) {
   const filters = [
     { key: 'all', label: t.filterAll, count: counts.all },
@@ -1126,7 +1228,11 @@ function InventoryList({
                 {entry.spool.material} · {entry.spool.color || entry.spool.color_hex}
               </div>
               <div className="text-xs text-zinc-500 mt-1 truncate">
-                {entry.spool.nozzle_temp}° / {entry.spool.bed_temp}° · {entry.spool.diameter}mm
+                {fmt(toDisplayTemperature(entry.spool.nozzle_temp), 0)}{temperatureUnitSymbol}
+                {' / '}
+                {fmt(toDisplayTemperature(entry.spool.bed_temp), 0)}{temperatureUnitSymbol}
+                {' · '}
+                {entry.spool.diameter}mm
               </div>
               <div className="fill-bar mt-2">
                 <div
@@ -1150,7 +1256,7 @@ function InventoryList({
   )
 }
 
-function InventoryDetailModal({ t, entry, onClose, onEdit, onDelete }) {
+function InventoryDetailModal({ t, entry, temperatureUnitSymbol, toDisplayTemperature, onClose, onEdit, onDelete }) {
   const { spool, slotFor, netNow } = entry
 
   return (
@@ -1164,7 +1270,10 @@ function InventoryDetailModal({ t, entry, onClose, onEdit, onDelete }) {
           <DetailItem label={t.remaining} value={`${fmt(netNow, 1)} g`} />
           <DetailItem label={t.grossWeight} value={`${fmt(spool.gross_weight, 1)} g`} />
           <DetailItem label={t.tare} value={`${fmt(spool.tare_weight, 1)} g`} />
-          <DetailItem label={`${t.nozzle}/${t.bed}`} value={`${spool.nozzle_temp}° / ${spool.bed_temp}°`} />
+          <DetailItem
+            label={`${t.nozzle}/${t.bed}`}
+            value={`${fmt(toDisplayTemperature(spool.nozzle_temp), 0)}${temperatureUnitSymbol} / ${fmt(toDisplayTemperature(spool.bed_temp), 0)}${temperatureUnitSymbol}`}
+          />
           <DetailItem label={t.status} value={slotFor ? `${t.inSlot} ${slotFor.id}` : t.onShelf} />
           {spool.name && <DetailItem label={t.nameOpt} value={spool.name} />}
         </dl>

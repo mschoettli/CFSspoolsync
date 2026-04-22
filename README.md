@@ -51,26 +51,6 @@ Open:
 The primary integration path is the built-in Moonraker extension agent:
 - [Moonraker Agent Integration Guide](docs/moonraker-agent-integration.md)
 
-This avoids a mandatory Fluidd fork and exposes CFS methods through Moonraker extensions.
-
-## Fluidd Embed Mode (Optional)
-
-Use the existing app with the query parameter:
-- `http://<host>:8088/?view=fluidd`
-
-Behavior in this mode:
-- Renders only the 4 slot panels (slot 1-4), including empty slots
-- Hides header, KPI cards, inventory section, and footer
-- Keeps slot actions and related modals available
-
-If embedded in an iframe, ensure your reverse proxy does not block framing via
-`X-Frame-Options` or restrictive `Content-Security-Policy` `frame-ancestors` rules.
-
-## Fluidd Dashboard Integration (Automated Script)
-
-Use the dedicated script guide:
-- [Fluidd Automation Script Guide](docs/fluidd-automation-script.md)
-
 ## RFID / NFC Tags for CFS
 
 The Creality CFS reads NFC/RFID spool tags and exposes their data (for example detected spool metadata and remaining amount) to the app through Moonraker/telemetry.
@@ -94,11 +74,7 @@ Notes:
 
 ## Documentation
 
-- [Technical Reference](docs/technical-reference.md)
-- [Development Guide](docs/development.md)
-- [Moonraker Agent Integration Guide](docs/moonraker-agent-integration.md)
-- [Fluidd Automation Script Guide](docs/fluidd-automation-script.md)
-- [Troubleshooting Guide](docs/troubleshooting.md)
+- [Documentation Index](docs/README.md)
 
 ## License
 

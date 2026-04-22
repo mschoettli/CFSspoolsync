@@ -122,9 +122,7 @@ Event payload:
 
 ## Optional Dashboard UI Addon
 
-If you still want a dedicated dashboard card inside Fluidd, keep using:
-- [Fluidd Quick Install](fluidd-quick-install.md)
-- [Fluidd Dashboard Embed](fluidd-dashboard-embed.md)
-- [Fluidd User Integration Guide](fluidd-user-integration.md)
+If you still want a dedicated dashboard card UI, use:
+- [Fluidd Automation Script Guide](fluidd-automation-script.md)
 
-That path is optional and no longer required for core integration.
+This path is optional and not required for core integration.

@@ -8,7 +8,7 @@ param(
     [string]$RepoUrl = "https://github.com/fluidd-core/fluidd.git",
     [string]$RepoRef = "v1.36.4",
     [switch]$ApplyCfsPatch = $true,
-    [string]$PrebuiltAssetUrl = "https://github.com/mschoettli/CFSspoolsync/releases/download/cfs-dashboard-embed-v1/fluidd-cfs-ui-dist.tar.gz",
+    [string]$PrebuiltAssetUrl = "",
     [switch]$UpdateRepo,
     [string]$RemoteSourceDir = "/tmp/fluidd-new",
     [string]$RemoteDeployScript = "/tmp/deploy_fluidd_patch.sh",
@@ -120,7 +120,9 @@ export default Vue.extend({
         $dashboard = $dashboard -replace "(import AfcCard from '@/components/widgets/afc/AfcCard\.vue'\r?\n)", "`$1import CfsEmbed from '@/components/widgets/CfsEmbed.vue'`r`n"
     }
     if ($dashboard -notmatch "(?m)^\s*CfsEmbed\s*,?\s*$") {
-        $dashboard = $dashboard -replace "(AfcCard\s*,?\r?\n)", "`$1    CfsEmbed,`r`n"
+        # Ensure AfcCard has a comma, then append CfsEmbed on the next line.
+        $dashboard = $dashboard -replace "(?m)^(\s*AfcCard)\s*$", "`$1,"
+        $dashboard = $dashboard -replace "(?m)^(\s*AfcCard,)\s*$", "`$1`r`n    CfsEmbed,"
     }
     Set-Content -Path $dashboardPath -Value $dashboard -Encoding utf8
 
@@ -135,7 +137,6 @@ Assert-Command -Name "scp.exe"
 Assert-Command -Name "ssh.exe"
 Assert-Command -Name "npm.cmd"
 Assert-Command -Name "git.exe"
-Assert-Command -Name "tar.exe"
 
 $localDeployScript = Join-Path -Path $PSScriptRoot -ChildPath "deploy_fluidd_patch.sh"
 
@@ -169,6 +170,8 @@ try {
             Invoke-Checked -FilePath "git.exe" -Arguments @("fetch", "--all", "--tags", "--prune")
         }
         Invoke-Checked -FilePath "git.exe" -Arguments @("checkout", $RepoRef)
+        Invoke-Checked -FilePath "git.exe" -Arguments @("reset", "--hard", "HEAD")
+        Invoke-Checked -FilePath "git.exe" -Arguments @("clean", "-fd")
         $repoPrepared = $true
 
         if ($ApplyCfsPatch) {
@@ -202,21 +205,31 @@ catch {
 }
 
 if (-not $distPath) {
+    if ([string]::IsNullOrWhiteSpace($PrebuiltAssetUrl)) {
+        throw "Build failed and no prebuilt fallback URL is configured. Fix build errors or pass -PrebuiltAssetUrl <url>."
+    }
+
+    Assert-Command -Name "tar.exe"
     Write-Host "Falling back to prebuilt Fluidd CFS artifact..."
     $prebuiltRoot = Join-Path -Path $WorkspaceDir -ChildPath "fluidd-cfs-prebuilt"
     $archivePath = Join-Path -Path $WorkspaceDir -ChildPath "fluidd-cfs-ui-dist.tar.gz"
 
-    if (Test-Path -Path $prebuiltRoot) {
-        Remove-Item -Recurse -Force $prebuiltRoot
+    try {
+        if (Test-Path -Path $prebuiltRoot) {
+            Remove-Item -Recurse -Force $prebuiltRoot
+        }
+        New-Item -ItemType Directory -Path $prebuiltRoot | Out-Null
+
+        Invoke-WebRequest -Uri $PrebuiltAssetUrl -OutFile $archivePath
+        Invoke-Checked -FilePath "tar.exe" -Arguments @("-xzf", $archivePath, "-C", $prebuiltRoot)
+
+        $distPath = Resolve-DistPath -RootPath $prebuiltRoot
+        if (-not $distPath) {
+            throw "Prebuilt artifact does not contain a valid dist structure."
+        }
     }
-    New-Item -ItemType Directory -Path $prebuiltRoot | Out-Null
-
-    Invoke-WebRequest -Uri $PrebuiltAssetUrl -OutFile $archivePath
-    Invoke-Checked -FilePath "tar.exe" -Arguments @("-xzf", $archivePath, "-C", $prebuiltRoot)
-
-    $distPath = Resolve-DistPath -RootPath $prebuiltRoot
-    if (-not $distPath) {
-        throw "Prebuilt artifact does not contain a valid dist structure."
+    catch {
+        throw "Fallback download/extract failed ($PrebuiltAssetUrl). Original build error path also failed."
     }
 }
 

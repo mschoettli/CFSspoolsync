@@ -94,5 +94,5 @@ All endpoints are under `/api`.
 ## Additional Docs
 
 - [Development Guide](development.md)
-- [Fluidd Dashboard Embed](fluidd-dashboard-embed.md)
+- [Fluidd Automation Script Guide](fluidd-automation-script.md)
 - [Troubleshooting Guide](troubleshooting.md)

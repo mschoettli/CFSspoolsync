@@ -81,7 +81,7 @@ Fix:
    - `/cfs/` -> `http://$host:4409/?view=fluidd...`
 
 Related guide:
-- [Fluidd User Integration Guide](fluidd-user-integration.md)
+- [Fluidd Automation Script Guide](fluidd-automation-script.md)
 
 ## Moonraker Agent Integration
 
@@ -120,7 +120,9 @@ Fix:
 3. Reapply permissions and reload Nginx.
 
 If you intentionally want to remove the custom Fluidd UI patch and return to stock Fluidd:
-- [Remove Fluidd UI Integration (Keep Agent)](fluidd-user-integration.md#remove-fluidd-ui-integration-keep-moonraker-agent)
+1. Restore stock files in `/usr/share/fluidd`.
+2. Remove temporary deploy assets (`/tmp/fluidd-new`, downloaded archives).
+3. Reload nginx and validate `http://<fluidd-host>:4408/` returns `200`.
 
 ## Fluidd Deploy: Permission Denied / Redirect Cycle
 

@@ -12,7 +12,7 @@ The script performs a full end-to-end deployment of patched Fluidd to the target
 2. Checkout the configured ref.
 3. Apply CFS dashboard patch set automatically.
 4. Build with `npm ci` and `npm run build`.
-5. Fallback to prebuilt release artifact if clone/build fails.
+5. Optional fallback to prebuilt release artifact if clone/build fails and a fallback URL is provided.
 6. Upload build files to the remote host.
 7. Run remote deploy helper:
    - backup current `/usr/share/fluidd`
@@ -57,8 +57,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build_and_deploy_fluidd_cfs.p
   - Branch, tag, or commit to deploy.
 - `-ApplyCfsPatch` (switch, default enabled)
   - Applies CFS widget/dashboard/layout patch set before build.
-- `-PrebuiltAssetUrl` (default: CFSspoolsync release artifact for `cfs-dashboard-embed-v1`)
-  - Download URL used when repository clone/build path is unavailable.
+- `-PrebuiltAssetUrl` (default: empty)
+  - Optional download URL used when repository clone/build path is unavailable.
+  - If empty and build fails, the script stops with a clear error.
 - `-UpdateRepo` (switch)
   - Runs `git fetch --all --tags --prune` before checkout.
 - `-SkipBuild` (switch)

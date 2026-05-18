@@ -106,6 +106,7 @@ export default function App() {
   const [spools, setSpools] = useState([])
   const [tares, setTares] = useState([])
   const [slots, setSlots] = useState([])
+  const [silentNetBySlot, setSilentNetBySlot] = useState({})
   const [cfs, setCfs] = useState(DEFAULT_CFS)
   const [wsStatus, setWsStatus] = useState('connecting')
   const [lastSyncAgo, setLastSyncAgo] = useState(0)
@@ -169,6 +170,41 @@ export default function App() {
     )
     return () => sock.close()
   }, [])
+
+  // ---------- Silent 10s refresh (printing slot grams only) ----------
+  useEffect(() => {
+    const hasPrintingSlot = slots.some((slot) => slot.is_printing)
+    if (!hasPrintingSlot) {
+      setSilentNetBySlot({})
+      return undefined
+    }
+
+    let active = true
+
+    const refreshPrintingSlotNet = async () => {
+      try {
+        const liveSlots = await api.listSlots()
+        if (!active || !Array.isArray(liveSlots)) return
+
+        const tareBySpoolId = new Map(spools.map((spool) => [spool.id, Number(spool.tare_weight) || 0]))
+        const next = {}
+        liveSlots.forEach((slot) => {
+          if (!slot?.is_printing || slot?.spool_id == null) return
+          const tare = tareBySpoolId.get(slot.spool_id) ?? 0
+          next[slot.id] = Math.max(0, Number(slot.current_weight) - tare)
+        })
+        setSilentNetBySlot(next)
+      } catch {
+        // intentionally silent: websocket stays primary
+      }
+    }
+
+    const timer = setInterval(refreshPrintingSlotNet, 10000)
+    return () => {
+      active = false
+      clearInterval(timer)
+    }
+  }, [slots, spools])
 
   // ---------- Sync counter ----------
   useEffect(() => {
@@ -462,6 +498,7 @@ export default function App() {
           <div className={`grid gap-4 ${fluiddSlotGridClass}`}>
             {orderedSlots.map((slot) => (
               <SlotPanel key={slot.id} t={t} slot={slot}
+                silentNetOverride={silentNetBySlot[slot.id]}
                 temperatureUnitSymbol={temperatureUnitSymbol}
                 toDisplayTemperature={toDisplayTemperature}
                 onAssign={() => setAssignModalSlot(slot.id)}
@@ -836,7 +873,7 @@ function HistoryModal({ t, spools, onClose }) {
  * B) detected CFS spool without assignment,
  * C) empty slot with assign/add actions.
  */
-function SlotPanel({ t, slot, temperatureUnitSymbol, toDisplayTemperature, onAssign, onAddNew, onEdit }) {
+function SlotPanel({ t, slot, silentNetOverride, temperatureUnitSymbol, toDisplayTemperature, onAssign, onAddNew, onEdit }) {
   const spool = slot.spool
   const snap = slot.cfs_snapshot
 
@@ -845,11 +882,12 @@ function SlotPanel({ t, slot, temperatureUnitSymbol, toDisplayTemperature, onAss
     return (
       <AssignedSlotPanel
         t={t}
-        slot={slot}
-        spool={spool}
-        temperatureUnitSymbol={temperatureUnitSymbol}
-        toDisplayTemperature={toDisplayTemperature}
-        onEdit={onEdit}
+      slot={slot}
+      spool={spool}
+      silentNetOverride={silentNetOverride}
+      temperatureUnitSymbol={temperatureUnitSymbol}
+      toDisplayTemperature={toDisplayTemperature}
+      onEdit={onEdit}
       />
     )
   }
@@ -979,8 +1017,9 @@ function DetectedSlotPanel({ t, slot, snap, onAddNew }) {
   )
 }
 
-function AssignedSlotPanel({ t, slot, spool, temperatureUnitSymbol, toDisplayTemperature, onEdit }) {
-  const net = Math.max(0, slot.current_weight - spool.tare_weight)
+function AssignedSlotPanel({ t, slot, spool, silentNetOverride, temperatureUnitSymbol, toDisplayTemperature, onEdit }) {
+  const computedNet = Math.max(0, slot.current_weight - spool.tare_weight)
+  const net = Number.isFinite(Number(silentNetOverride)) ? Number(silentNetOverride) : computedNet
   const pct = Math.min(100, (net / 1000) * 100)
   const low = net < 100
 

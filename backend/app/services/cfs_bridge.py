@@ -192,21 +192,24 @@ class CfsBridge:
         temp = _to_float(t1.get("temperature"), 25.0)
         hum = _to_float(t1.get("dry_and_humidity"), 20.0)
 
-        materials = t1.get("material_type") or []
-        colors = t1.get("color_value") or []
-        remains = t1.get("remain_len") or []
+        materials = _to_list(t1.get("material_type"))
+        colors = _to_list(t1.get("color_value"))
+        remains = _to_list(t1.get("remain_len"))
 
         slots = []
         for idx in range(4):
             slot_id = idx + 1
-            mat_code = _safe_idx(materials, idx) or ""
-            color_raw = _safe_idx(colors, idx) or ""
-            remain_str = _safe_idx(remains, idx) or "-1"
-            remain_pct = _to_float(remain_str, -1.0)
+            mat_code = str(_safe_idx(materials, idx) or "").strip()
+            color_raw = str(_safe_idx(colors, idx) or "").strip()
+            remain_raw = _safe_idx(remains, idx)
+            remain_pct = _to_float(remain_raw, -1.0)
 
             mat_info = lookup_material(mat_code)
-            has_rfid = mat_info is not None or (mat_code and mat_code != "-1")
-            present = remain_pct >= 0
+            has_rfid = mat_info is not None or (mat_code and mat_code not in ("-1", "0", "None"))
+            has_color = bool(color_raw and color_raw not in ("-1", "0", "None"))
+            # Some firmware variants report -1 for remain_len even when a spool is present.
+            # Treat slot as present if any strong RFID signal is available.
+            present = (remain_pct >= 0) or has_rfid or has_color
 
             slots.append({
                 "slot_id": slot_id,
@@ -217,7 +220,7 @@ class CfsBridge:
                 "nozzle_temp": (mat_info or {}).get("nozzle"),
                 "bed_temp": (mat_info or {}).get("bed"),
                 "color_hex": parse_color(color_raw) if color_raw else None,
-                "remain_pct": remain_pct if present else None,
+                "remain_pct": remain_pct if remain_pct >= 0 else None,
                 "known": mat_info is not None,
             })
 
@@ -415,6 +418,29 @@ def _safe_idx(lst, idx):
     if not isinstance(lst, list) or idx >= len(lst):
         return None
     return lst[idx]
+
+
+def _to_list(value):
+    """Normalize telemetry values that may arrive as list, tuple, dict or CSV-like string."""
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    if isinstance(value, dict):
+        # Typical fallback: {"0": "...", "1": "..."} or {"A": "...", ...}
+        out = []
+        for key in ("0", "1", "2", "3", 0, 1, 2, 3, "A", "B", "C", "D", "a", "b", "c", "d"):
+            if key in value:
+                out.append(value[key])
+        return out
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        if "," in text:
+            return [part.strip() for part in text.split(",")]
+        return [text]
+    return []
 
 
 def _normalize_print_title(raw_filename) -> str:

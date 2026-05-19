@@ -383,7 +383,8 @@ export default function App() {
       await loadAll()
       setSyncStatusSlot(updated)
     } catch (err) {
-      alert(`${t.errorLoading}: ${err.message}`)
+      const message = err?.message || (t.syncError || 'RFID sync failed')
+      setSyncStatusSlot((prev) => (prev ? { ...prev, sync_status: 'red', sync_reason: message } : prev))
     } finally {
       setSyncStatusBusy(false)
     }
@@ -1152,20 +1153,18 @@ function SyncStatusModal({ t, slot, busy, onClose, onRefresh }) {
     <Modal title={title} onClose={onClose} maxWidth="max-w-md">
       <div className="p-5 space-y-4">
         {isGreen ? (
-          <>
-            <p className="text-sm text-zinc-300">{t.syncHealthy || 'RFID sync healthy.'}</p>
-            <button
-              type="button"
-              onClick={onRefresh}
-              disabled={busy}
-              className="w-full px-3 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-sm font-semibold disabled:opacity-50"
-            >
-              {t.refreshFromRfid || 'Refresh from CFS RFID'}
-            </button>
-          </>
+          <p className="text-sm text-zinc-300">{t.syncHealthy || 'RFID sync healthy.'}</p>
         ) : (
           <p className="text-sm text-red-300">{slot.sync_reason || t.syncError || 'RFID sync failed'}</p>
         )}
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={busy}
+          className="w-full px-3 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-sm font-semibold disabled:opacity-50"
+        >
+          {t.refreshFromRfid || 'Refresh from CFS RFID'}
+        </button>
       </div>
     </Modal>
   )

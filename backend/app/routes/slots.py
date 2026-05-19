@@ -15,8 +15,17 @@ def _attach_snapshot(slot: Slot, db: Session) -> Slot:
     cfs_state = db.query(CfsState).first()
     connected = bool(cfs_state and cfs_state.connected)
     slot.cfs_snapshot = snap  # type: ignore[attr-defined]
-    slot.sync_status = "green" if connected else "red"  # type: ignore[attr-defined]
-    slot.sync_reason = None if connected else "CFS disconnected"  # type: ignore[attr-defined]
+    if not connected:
+        status = "red"
+        reason = "CFS disconnected"
+    elif slot.spool_id and (snap is None or not snap.present):
+        status = "red"
+        reason = "No RFID detected in slot"
+    else:
+        status = "green"
+        reason = None
+    slot.sync_status = status  # type: ignore[attr-defined]
+    slot.sync_reason = reason  # type: ignore[attr-defined]
     return slot
 
 

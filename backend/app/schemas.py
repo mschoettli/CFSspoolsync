@@ -101,6 +101,8 @@ class SlotOut(BaseModel):
     current_weight: float
     is_printing: bool
     flow: float
+    sync_status: str = "red"
+    sync_reason: Optional[str] = None
     spool: Optional[SpoolOut] = None
     cfs_snapshot: Optional[CfsSnapshotOut] = None
     model_config = ConfigDict(from_attributes=True)

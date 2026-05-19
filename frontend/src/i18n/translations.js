@@ -129,6 +129,10 @@ export const TRANSLATIONS = {
     rfidRead: 'RFID gelesen',
     rfidMissing: 'Kein RFID',
     initialRemainPct: 'Initial-Prozent',
+    syncStatusTitle: 'RFID Sync',
+    syncHealthy: 'RFID-Synchronisierung ist in Ordnung.',
+    syncError: 'RFID-Synchronisierung fehlgeschlagen.',
+    refreshFromRfid: 'Von CFS RFID aktualisieren',
   },
   en: {
     appTitle: 'CFSspoolsync',
@@ -247,6 +251,10 @@ export const TRANSLATIONS = {
     rfidRead: 'RFID read',
     rfidMissing: 'No RFID',
     initialRemainPct: 'Initial percent',
+    syncStatusTitle: 'RFID Sync',
+    syncHealthy: 'RFID sync healthy.',
+    syncError: 'RFID sync failed.',
+    refreshFromRfid: 'Refresh from CFS RFID',
   },
   fr: {
     appTitle: 'CFSspoolsync',

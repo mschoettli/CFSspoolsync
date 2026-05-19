@@ -121,6 +121,7 @@ class CfsBridge:
             cfs.last_sync = datetime.utcnow()
 
             # ---------- 2. Update slot weights live ----------
+            self._sync_assigned_spools_from_rfid(db)
             self._update_slot_weights(db)
 
             # ---------- 3. Automatic print status + live flow ----------
@@ -363,6 +364,34 @@ class CfsBridge:
             snap.color_hex = slot_data["color_hex"]
             snap.remain_pct = slot_data["remain_pct"]
             snap.updated_at = datetime.utcnow()
+
+    def _sync_assigned_spools_from_rfid(self, db: Session) -> None:
+        """Force assigned spool metadata to follow RFID snapshot on every tick."""
+        slots = db.query(Slot).order_by(Slot.id).all()
+        for slot in slots:
+            if not slot.spool_id:
+                continue
+            snap = db.query(CfsSlotSnapshot).get(slot.id)
+            spool = db.query(Spool).get(slot.spool_id)
+            if snap is None or spool is None or not snap.present:
+                continue
+
+            if snap.manufacturer:
+                spool.manufacturer = snap.manufacturer
+            if snap.material:
+                spool.material = snap.material
+            else:
+                code = (snap.material_code or "").strip()
+                spool.material = f"Unknown ({code})" if code else "Unknown"
+                spool.manufacturer = spool.manufacturer or "Creality"
+
+            if snap.color_hex:
+                spool.color_hex = snap.color_hex
+                spool.color = snap.color_hex
+            if snap.nozzle_temp is not None:
+                spool.nozzle_temp = int(snap.nozzle_temp)
+            if snap.bed_temp is not None:
+                spool.bed_temp = int(snap.bed_temp)
 
     def _update_slot_weights(self, db: Session) -> None:
         """

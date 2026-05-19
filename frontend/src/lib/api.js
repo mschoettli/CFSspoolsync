@@ -37,6 +37,7 @@ export const api = {
       body: JSON.stringify({ spool_id: spoolId }),
     }),
   unassignSlot: (slotId) => request(`/slots/${slotId}/unassign`, { method: 'POST' }),
+  refreshSlotRfid: (slotId) => request(`/slots/${slotId}/refresh-rfid`, { method: 'POST' }),
   // CFS + History
   getCfs: () => request('/cfs'),
   getCfsSlots: () => request('/cfs/slots'),

@@ -28,6 +28,7 @@ from ..database import SessionLocal
 from ..models import CfsSlotSnapshot, CfsState, HistoryEntry, Slot, Spool
 from ..ws import manager
 from .material_codes import lookup_material, parse_color
+from .conversion import grams_from_mm
 
 
 class CfsBridge:
@@ -41,11 +42,14 @@ class CfsBridge:
             "active": False,
             "title": "",
             "remaining_seconds": None,
+            "total_seconds": None,
         }
         self._last_active_slot: Optional[int] = None
         self._last_remain_pct: dict[int, float] = {}
-        self._last_slot_weights: dict[int, float] = {}
         self._last_active_signal_ts: float = 0.0
+        self._last_filament_used_raw: Optional[float] = None
+        self._last_cycle_was_printing: bool = False
+        self._last_cycle_active_slot: Optional[int] = None
 
     async def start(self) -> None:
         self._stop = False
@@ -68,7 +72,7 @@ class CfsBridge:
                 await self._tick()
             except Exception as exc:  # noqa: BLE001
                 print(f"[cfs-bridge] tick error: {exc}", flush=True)
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(max(1.0, float(settings.consumption_tick_s)))
 
     async def _tick(self) -> None:
         db: Session = SessionLocal()
@@ -85,6 +89,7 @@ class CfsBridge:
                 "is_printing": False,
                 "title": "",
                 "remaining_seconds": None,
+                "total_seconds": None,
             }
             if settings.moonraker_host:
                 parsed = await self._poll_moonraker()
@@ -117,15 +122,12 @@ class CfsBridge:
                     "is_printing": False,
                     "title": "",
                     "remaining_seconds": None,
+                    "total_seconds": None,
                 }
 
             cfs.last_sync = datetime.utcnow()
 
-            # ---------- 2. Update slot weights live ----------
-            self._sync_assigned_spools_from_rfid(db)
-            self._update_slot_weights(db)
-
-            # ---------- 3. Automatic print status + live flow ----------
+            # ---------- 2. Resolve print state ----------
             slots = db.query(Slot).order_by(Slot.id).all()
             now_ts = datetime.utcnow().timestamp()
             is_printing = self._resolve_printing_state(print_probe, now_ts)
@@ -135,15 +137,22 @@ class CfsBridge:
                 is_printing = True
             print_job = self._resolve_print_job(print_probe, is_printing, now_ts)
             active_slot = self._choose_active_slot(db, slots) if is_printing else None
+
+            # ---------- 3. Update slot weights live ----------
+            self._sync_assigned_spools_from_rfid(db)
+            self._update_slot_weights(db, skip_slot_id=active_slot if is_printing else None)
+            consumed_g = self._apply_live_consumption_from_print_stats(db, slots, print_probe, is_printing, active_slot)
+
+            if self._last_cycle_was_printing and not is_printing:
+                self._persist_finished_print_weight(db, slots)
+
             for slot in slots:
-                previous_weight = self._last_slot_weights.get(slot.id, float(slot.current_weight))
-                current_weight = float(slot.current_weight)
-                consumed_per_second = max(0.0, previous_weight - current_weight)
                 slot.is_printing = bool(active_slot and slot.id == active_slot)
-                slot.flow = round(consumed_per_second, 2) if slot.is_printing else 0.0
-                self._last_slot_weights[slot.id] = current_weight
+                slot.flow = round(consumed_g / max(1.0, float(settings.consumption_tick_s)), 3) if slot.is_printing else 0.0
 
             db.commit()
+            self._last_cycle_was_printing = bool(is_printing)
+            self._last_cycle_active_slot = active_slot
 
             # ---------- 4. History (every 60s) ----------
             if now_ts - self._last_history_write >= 60:
@@ -240,7 +249,7 @@ class CfsBridge:
         """Read global Klipper print state from Moonraker."""
         url = (
             f"http://{settings.moonraker_host}:{settings.moonraker_port}"
-            f"/printer/objects/query?print_stats"
+            f"/printer/objects/query?print_stats&virtual_sdcard"
         )
         try:
             async with httpx.AsyncClient(timeout=2.5) as client:
@@ -251,21 +260,30 @@ class CfsBridge:
                         "is_printing": False,
                         "title": "",
                         "remaining_seconds": None,
+                        "total_seconds": None,
                     }
-                payload = response.json().get("result", {}).get("status", {}).get("print_stats", {})
+                status = response.json().get("result", {}).get("status", {})
+                payload = status.get("print_stats", {})
+                virtual_sd = status.get("virtual_sdcard", {})
         except (httpx.HTTPError, ValueError):
             return {
                 "reachable": False,
                 "is_printing": False,
                 "title": "",
                 "remaining_seconds": None,
+                "total_seconds": None,
             }
 
         state = str(payload.get("state", "")).strip().lower()
         print_duration = max(0.0, _to_float(payload.get("print_duration"), 0.0))
         total_duration = _to_float(payload.get("total_duration"), -1.0)
+        progress = _to_float(virtual_sd.get("progress"), -1.0)
+        if total_duration <= 0 and progress > 0 and progress <= 1:
+            total_duration = print_duration / progress
         remaining_seconds: Optional[int] = None
+        total_seconds: Optional[int] = None
         if total_duration > 0 and total_duration >= print_duration:
+            total_seconds = int(total_duration)
             remaining_seconds = int(total_duration - print_duration)
 
         return {
@@ -273,6 +291,8 @@ class CfsBridge:
             "is_printing": state == "printing",
             "title": _normalize_print_title(payload.get("filename")),
             "remaining_seconds": remaining_seconds,
+            "total_seconds": total_seconds,
+            "filament_used_raw": _to_float(payload.get("filament_used"), 0.0),
         }
 
     def _resolve_printing_state(self, probe: dict, now_ts: float) -> bool:
@@ -293,6 +313,7 @@ class CfsBridge:
                 "active": bool(is_printing),
                 "title": str(probe.get("title", "") or ""),
                 "remaining_seconds": probe.get("remaining_seconds"),
+                "total_seconds": probe.get("total_seconds"),
             }
             return dict(self._last_print_job)
 
@@ -305,6 +326,7 @@ class CfsBridge:
             "active": False,
             "title": "",
             "remaining_seconds": None,
+            "total_seconds": None,
         }
         return dict(self._last_print_job)
 
@@ -410,7 +432,7 @@ class CfsBridge:
             if snap.bed_temp is not None:
                 spool.bed_temp = int(snap.bed_temp)
 
-    def _update_slot_weights(self, db: Session) -> None:
+    def _update_slot_weights(self, db: Session, skip_slot_id: Optional[int] = None) -> None:
         """
         Aktualisiert `current_weight` pro Slot basierend auf CFS-RFID-Restwert.
 
@@ -426,6 +448,8 @@ class CfsBridge:
         """
         slots = db.query(Slot).order_by(Slot.id).all()
         for slot in slots:
+            if skip_slot_id and slot.id == skip_slot_id:
+                continue
             if not slot.spool_id:
                 continue
             snap = db.query(CfsSlotSnapshot).get(slot.id)
@@ -446,6 +470,66 @@ class CfsBridge:
             ratio = max(0.0, min(1.0, ratio))
             net_now = net_initial * ratio
             slot.current_weight = round(sp.tare_weight + net_now, 2)
+
+    def _apply_live_consumption_from_print_stats(
+        self,
+        db: Session,
+        slots: list[Slot],
+        print_probe: dict,
+        is_printing: bool,
+        active_slot_id: Optional[int],
+    ) -> float:
+        raw_now = print_probe.get("filament_used_raw")
+        if raw_now is None:
+            return 0.0
+        raw_now = max(0.0, _to_float(raw_now, 0.0))
+
+        if self._last_filament_used_raw is None:
+            self._last_filament_used_raw = raw_now
+            return 0.0
+
+        delta_mm = raw_now - self._last_filament_used_raw
+        self._last_filament_used_raw = raw_now
+
+        if delta_mm <= 0:
+            return 0.0
+        if not is_printing:
+            return 0.0
+
+        max_delta_mm = max(0.0, float(settings.consumption_max_delta_mm))
+        if max_delta_mm > 0:
+            delta_mm = min(delta_mm, max_delta_mm)
+
+        if not active_slot_id:
+            return 0.0
+
+        slot = next((item for item in slots if item.id == active_slot_id), None)
+        if slot is None or not slot.spool_id:
+            return 0.0
+        spool = db.query(Spool).get(slot.spool_id)
+        if spool is None:
+            return 0.0
+
+        diameter = _to_float(getattr(spool, "diameter", None), float(settings.default_filament_diameter_mm))
+        density = float(settings.default_filament_density)
+        consumed_g = grams_from_mm(delta_mm, diameter, density)
+        if consumed_g <= 0:
+            return 0.0
+
+        slot.current_weight = round(max(0.0, float(slot.current_weight) - consumed_g), 2)
+        return consumed_g
+
+    def _persist_finished_print_weight(self, db: Session, slots: list[Slot]) -> None:
+        finished_slot_id = self._last_cycle_active_slot
+        if not finished_slot_id:
+            return
+        slot = next((item for item in slots if item.id == finished_slot_id), None)
+        if slot is None or not slot.spool_id:
+            return
+        spool = db.query(Spool).get(slot.spool_id)
+        if spool is None:
+            return
+        spool.gross_weight = round(max(float(spool.tare_weight), float(slot.current_weight)), 2)
 
 
 # ---------- Helpers ----------
@@ -538,6 +622,7 @@ def _serialize_live(cfs: CfsState, slots: list, db: Session, print_job: dict) ->
                 "active": bool(print_job.get("active")),
                 "title": str(print_job.get("title", "") or ""),
                 "remaining_seconds": print_job.get("remaining_seconds"),
+                "total_seconds": print_job.get("total_seconds"),
             },
         },
         "slots": slot_payload,

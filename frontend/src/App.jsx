@@ -10,7 +10,7 @@ import { AddSpoolModal, TareTableModal, AssignSpoolModal, Modal } from './compon
 import { HistoryChart } from './components/HistoryChart'
 
 const fmt = (n, d = 0) => Number(n).toFixed(d)
-const DEFAULT_PRINT_JOB = { active: false, title: '', remaining_seconds: null }
+const DEFAULT_PRINT_JOB = { active: false, title: '', remaining_seconds: null, total_seconds: null }
 const DEFAULT_TEMP_UNIT_PREFERENCE = 'auto'
 const DEFAULT_CFS = {
   temperature: 25,
@@ -26,6 +26,14 @@ function formatRemaining(seconds) {
   const hours = Math.floor(totalMinutes / 60)
   const minutes = totalMinutes % 60
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
+
+function shortenPrintTitle(rawTitle, maxLen = 34) {
+  const title = String(rawTitle || '').trim()
+  if (!title) return ''
+  const withoutExt = title.replace(/\.[^./\\]{1,8}$/u, '')
+  if (withoutExt.length <= maxLen) return withoutExt
+  return `${withoutExt.slice(0, Math.max(1, maxLen - 1))}…`
 }
 
 function formatSyncAge(seconds, lang) {
@@ -106,7 +114,6 @@ export default function App() {
   const [spools, setSpools] = useState([])
   const [tares, setTares] = useState([])
   const [slots, setSlots] = useState([])
-  const [silentNetBySlot, setSilentNetBySlot] = useState({})
   const [cfs, setCfs] = useState(DEFAULT_CFS)
   const [wsStatus, setWsStatus] = useState('connecting')
   const [lastSyncAgo, setLastSyncAgo] = useState(0)
@@ -170,41 +177,6 @@ export default function App() {
     )
     return () => sock.close()
   }, [])
-
-  // ---------- Silent 10s refresh (printing slot grams only) ----------
-  useEffect(() => {
-    const hasPrintingSlot = slots.some((slot) => slot.is_printing)
-    if (!hasPrintingSlot) {
-      setSilentNetBySlot({})
-      return undefined
-    }
-
-    let active = true
-
-    const refreshPrintingSlotNet = async () => {
-      try {
-        const liveSlots = await api.listSlots()
-        if (!active || !Array.isArray(liveSlots)) return
-
-        const tareBySpoolId = new Map(spools.map((spool) => [spool.id, Number(spool.tare_weight) || 0]))
-        const next = {}
-        liveSlots.forEach((slot) => {
-          if (!slot?.is_printing || slot?.spool_id == null) return
-          const tare = tareBySpoolId.get(slot.spool_id) ?? 0
-          next[slot.id] = Math.max(0, Number(slot.current_weight) - tare)
-        })
-        setSilentNetBySlot(next)
-      } catch {
-        // intentionally silent: websocket stays primary
-      }
-    }
-
-    const timer = setInterval(refreshPrintingSlotNet, 10000)
-    return () => {
-      active = false
-      clearInterval(timer)
-    }
-  }, [slots, spools])
 
   // ---------- Sync counter ----------
   useEffect(() => {
@@ -498,7 +470,6 @@ export default function App() {
           <div className={`grid gap-4 ${fluiddSlotGridClass}`}>
             {orderedSlots.map((slot) => (
               <SlotPanel key={slot.id} t={t} slot={slot}
-                silentNetOverride={silentNetBySlot[slot.id]}
                 temperatureUnitSymbol={temperatureUnitSymbol}
                 toDisplayTemperature={toDisplayTemperature}
                 onAssign={() => setAssignModalSlot(slot.id)}
@@ -742,8 +713,9 @@ function EnvCard({ icon, label, value, unit, accent }) {
 
 function PrintJobCard({ t, printJob }) {
   const isActive = Boolean(printJob?.active)
-  const title = (printJob?.title || '').trim() || t.noActivePrintJob
+  const title = shortenPrintTitle((printJob?.title || '').trim()) || t.noActivePrintJob
   const remaining = formatRemaining(printJob?.remaining_seconds)
+  const total = formatRemaining(printJob?.total_seconds)
   const accentClass = isActive
     ? ['from-lime-500/20 via-emerald-500/10 to-transparent', 'text-lime-300', 'border-lime-900/50', 'text-lime-100', 'bg-lime-500/80']
     : ['from-emerald-500/16 via-teal-500/8 to-transparent', 'text-emerald-300', 'border-emerald-900/50', 'text-emerald-100', 'bg-emerald-500/70']
@@ -762,6 +734,9 @@ function PrintJobCard({ t, printJob }) {
           <span className="text-xs text-zinc-400 tabular-nums">
             {t.remainingTime} {remaining}
           </span>
+        </div>
+        <div className="mt-1 text-[11px] text-zinc-500 tabular-nums">
+          {(t.totalRuntime || 'Gesamtlaufzeit')} {total}
         </div>
         <div className="flex-1 min-h-0 flex items-center justify-center">
           <div className={`text-sm font-semibold truncate max-w-full ${titleClass}`}>
@@ -875,7 +850,7 @@ function HistoryModal({ t, spools, onClose }) {
  * C) empty slot with assign/add actions.
  */
 function SlotPanel({
-  t, slot, silentNetOverride, temperatureUnitSymbol, toDisplayTemperature, onAssign, onAddNew, onEdit,
+  t, slot, temperatureUnitSymbol, toDisplayTemperature, onAssign, onAddNew, onEdit,
 }) {
   const spool = slot.spool
   const snap = slot.cfs_snapshot
@@ -887,7 +862,6 @@ function SlotPanel({
         t={t}
         slot={slot}
         spool={spool}
-        silentNetOverride={silentNetOverride}
         temperatureUnitSymbol={temperatureUnitSymbol}
         toDisplayTemperature={toDisplayTemperature}
         onEdit={onEdit}
@@ -1004,12 +978,13 @@ function DetectedSlotPanel({ t, slot, snap, onAddNew }) {
 }
 
 function AssignedSlotPanel({
-  t, slot, spool, silentNetOverride, temperatureUnitSymbol, toDisplayTemperature, onEdit,
+  t, slot, spool, temperatureUnitSymbol, toDisplayTemperature, onEdit,
 }) {
   const computedNet = Math.max(0, slot.current_weight - spool.tare_weight)
-  const net = Number.isFinite(Number(silentNetOverride)) ? Number(silentNetOverride) : computedNet
+  const net = computedNet
   const pct = Math.min(100, (net / 1000) * 100)
   const low = net < 100
+  const printingHint = t.printingHint || 'Wenn der Druck fertig ist, wird der letzte g-Stand ins Lager geschrieben.'
 
   return (
     <div className={`relative rounded-xl border bg-zinc-900/50 p-4 overflow-hidden transition-colors ${
@@ -1023,7 +998,10 @@ function AssignedSlotPanel({
         <div className="flex items-center gap-2">
           <div className="text-xs font-mono font-semibold text-zinc-500">{t.slot} {slot.id}</div>
           {slot.is_printing && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950/70 border border-emerald-800/60 text-emerald-300 text-[10px] font-semibold uppercase tracking-wide">
+            <span
+              title={printingHint}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950/70 border border-emerald-800/60 text-emerald-300 text-[10px] font-semibold uppercase tracking-wide"
+            >
               <Activity size={10} className="animate-pulse" />{t.printing}
             </span>
           )}

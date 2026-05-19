@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     moonraker_port: int = 80
     moonraker_poll_interval: float = 2.0  # seconds
     moonraker_print_grace_s: float = 10.0
+    consumption_tick_s: float = 5.0
+    default_filament_diameter_mm: float = 1.75
+    default_filament_density: float = 1.24
+    consumption_max_delta_mm: float = 5000.0
 
     # API
     api_prefix: str = "/api"

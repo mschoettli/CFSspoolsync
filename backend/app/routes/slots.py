@@ -31,12 +31,16 @@ def _attach_snapshot(slot: Slot, db: Session) -> Slot:
     cfs_state = db.query(CfsState).first()
     connected = bool(cfs_state and cfs_state.connected)
     slot.cfs_snapshot = snap  # type: ignore[attr-defined]
-    if not connected:
-        status = "red"
-        reason = "CFS disconnected"
-    elif slot.spool_id and not _snapshot_has_rfid_signal(snap):
+    has_signal = _snapshot_has_rfid_signal(snap)
+    if slot.spool_id and not has_signal:
         status = "red"
         reason = "No RFID detected in slot"
+    elif slot.spool_id and has_signal:
+        status = "green"
+        reason = None
+    elif not connected:
+        status = "red"
+        reason = "CFS disconnected"
     else:
         status = "green"
         reason = None
@@ -168,7 +172,8 @@ def refresh_slot_rfid(slot_id: int, db: Session = Depends(get_db)):
     if spool is None or snap is None:
         raise HTTPException(404, "RFID Snapshot oder Spule nicht gefunden")
     if not _snapshot_has_rfid_signal(snap):
-        raise HTTPException(400, "Kein RFID im Slot erkannt")
+        # Keep UX retry-friendly: no hard API error if RFID signal is currently weak.
+        return _attach_snapshot(slot, db)
 
     _apply_snapshot_to_spool(spool, snap)
     db.commit()

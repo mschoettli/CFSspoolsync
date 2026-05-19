@@ -45,6 +45,7 @@ class CfsBridge:
         self._last_active_slot: Optional[int] = None
         self._last_remain_pct: dict[int, float] = {}
         self._last_slot_weights: dict[int, float] = {}
+        self._last_active_signal_ts: float = 0.0
 
     async def start(self) -> None:
         self._stop = False
@@ -128,6 +129,10 @@ class CfsBridge:
             slots = db.query(Slot).order_by(Slot.id).all()
             now_ts = datetime.utcnow().timestamp()
             is_printing = self._resolve_printing_state(print_probe, now_ts)
+            if not is_printing and self._last_active_slot and (now_ts - self._last_active_signal_ts <= 30):
+                # Moonraker print_stats can occasionally flap. Keep "printing" alive shortly
+                # when we still receive strong CFS slot activity signals.
+                is_printing = True
             print_job = self._resolve_print_job(print_probe, is_printing, now_ts)
             active_slot = self._choose_active_slot(db, slots) if is_printing else None
             for slot in slots:
@@ -321,6 +326,7 @@ class CfsBridge:
         if deltas:
             most_negative = min(deltas, key=lambda item: item[0])
             if most_negative[0] < -0.01:
+                self._last_active_signal_ts = datetime.utcnow().timestamp()
                 return most_negative[1]
         return self._last_active_slot
 

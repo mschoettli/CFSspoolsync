@@ -36,31 +36,6 @@ function shortenPrintTitle(rawTitle, maxLen = 34) {
   return `${withoutExt.slice(0, Math.max(1, maxLen - 1))}…`
 }
 
-function formatSyncAge(seconds, lang) {
-  const value = Math.max(0, Number(seconds) || 0)
-  const units = {
-    de: { sec: 'Sek.', min: 'Min.', hour: 'Std.', day: 'Tg.' },
-    en: { sec: 'sec', min: 'min', hour: 'h', day: 'd' },
-    fr: { sec: 's', min: 'min', hour: 'h', day: 'j' },
-    it: { sec: 's', min: 'min', hour: 'h', day: 'g' },
-    es: { sec: 's', min: 'min', hour: 'h', day: 'd' },
-    pt: { sec: 's', min: 'min', hour: 'h', day: 'd' },
-    nl: { sec: 'sec', min: 'min', hour: 'u', day: 'd' },
-    pl: { sec: 'sek', min: 'min', hour: 'godz.', day: 'dni' },
-  }
-  const unit = units[lang] || units.de
-  if (value < 60) return `${value} ${unit.sec}`
-  if (value < 3600) return `${Math.floor(value / 60)} ${unit.min}`
-  if (value < 86400) {
-    const hours = Math.floor(value / 3600)
-    const minutes = Math.floor((value % 3600) / 60)
-    return minutes > 0 ? `${hours} ${unit.hour} ${minutes} ${unit.min}` : `${hours} ${unit.hour}`
-  }
-  const days = Math.floor(value / 86400)
-  const hours = Math.floor((value % 86400) / 3600)
-  return hours > 0 ? `${days} ${unit.day} ${hours} ${unit.hour}` : `${days} ${unit.day}`
-}
-
 function resolveLanguage(value) {
   const normalized = String(value || '').trim().toLowerCase()
   return TRANSLATIONS[normalized] ? normalized : DEFAULT_LANGUAGE
@@ -116,7 +91,6 @@ export default function App() {
   const [slots, setSlots] = useState([])
   const [cfs, setCfs] = useState(DEFAULT_CFS)
   const [wsStatus, setWsStatus] = useState('connecting')
-  const [lastSyncAgo, setLastSyncAgo] = useState(0)
 
   const [showAddSpool, setShowAddSpool] = useState(false)
   const [showTareTable, setShowTareTable] = useState(false)
@@ -126,7 +100,6 @@ export default function App() {
   const [addSpoolForSlot, setAddSpoolForSlot] = useState(null)
   const [editingSpool, setEditingSpool] = useState(null)
   const [activeFilter, setActiveFilter] = useState('all')
-  const [sortMode, setSortMode] = useState('newest')
   const [selectedSpool, setSelectedSpool] = useState(null)
   const [libraryBusy, setLibraryBusy] = useState(false)
   const libraryImportInputRef = useRef(null)
@@ -177,15 +150,6 @@ export default function App() {
     )
     return () => sock.close()
   }, [])
-
-  // ---------- Sync counter ----------
-  useEffect(() => {
-    const iv = setInterval(() => {
-      const since = Math.floor((Date.now() - new Date(cfs.last_sync).getTime()) / 1000)
-      setLastSyncAgo(Math.max(0, since))
-    }, 1000)
-    return () => clearInterval(iv)
-  }, [cfs.last_sync])
 
   const temperatureUnit = useMemo(
     () => resolveTemperatureUnit(tempUnitPreference, cfs),
@@ -260,24 +224,37 @@ export default function App() {
     return inventoryEntries
   }, [activeFilter, inventoryEntries])
 
-  const sortedInventoryEntries = useMemo(() => {
-    const normalize = (value) => (value || '').toString().toLowerCase()
-    return [...filteredInventoryEntries].sort((a, b) => {
-      if (a.slotFor && b.slotFor) return a.slotFor.id - b.slotFor.id
-      if (a.slotFor) return -1
-      if (b.slotFor) return 1
-
-      if (sortMode === 'remainingAsc') return a.netNow - b.netNow
-      if (sortMode === 'remainingDesc') return b.netNow - a.netNow
-      if (sortMode === 'material') return normalize(a.spool.material).localeCompare(normalize(b.spool.material))
-      if (sortMode === 'manufacturer') return normalize(a.spool.manufacturer).localeCompare(normalize(b.spool.manufacturer))
-
-      if (a.timestamp != null && b.timestamp != null) return b.timestamp - a.timestamp
-      if (a.timestamp != null) return -1
-      if (b.timestamp != null) return 1
-      return b.index - a.index
+  const groupedInventoryEntries = useMemo(() => {
+    const normalizeMaterial = (value) => {
+      const text = (value || '').toString().trim()
+      return text ? text : 'Unknown'
+    }
+    const byMaterial = new Map()
+    filteredInventoryEntries.forEach((entry) => {
+      const material = normalizeMaterial(entry.spool.material)
+      if (!byMaterial.has(material)) byMaterial.set(material, [])
+      byMaterial.get(material).push(entry)
     })
-  }, [filteredInventoryEntries, sortMode])
+
+    const materialOrder = [...byMaterial.keys()].sort((a, b) => {
+      const aUnknown = a.toLowerCase() === 'unknown'
+      const bUnknown = b.toLowerCase() === 'unknown'
+      if (aUnknown && !bUnknown) return 1
+      if (!aUnknown && bUnknown) return -1
+      return a.toLowerCase().localeCompare(b.toLowerCase())
+    })
+
+    return materialOrder.map((material) => {
+      const entries = [...(byMaterial.get(material) || [])].sort((a, b) => {
+        if (a.slotFor && b.slotFor) return a.slotFor.id - b.slotFor.id
+        if (a.slotFor) return -1
+        if (b.slotFor) return 1
+        return b.netNow - a.netNow
+      })
+      const totalNet = entries.reduce((sum, entry) => sum + entry.netNow, 0)
+      return { material, entries, count: entries.length, totalNet }
+    })
+  }, [filteredInventoryEntries])
 
   const selectedInventoryEntry = useMemo(
     () => inventoryEntries.find((entry) => entry.spool.id === selectedSpool) ?? null,
@@ -446,9 +423,7 @@ export default function App() {
         {/* CFS Environment + KPIs */}
         {!isFluiddView && (
         <section>
-          <SectionHead title={t.cfsStatus}
-            subtitle={`${t.lastSync}: ${formatSyncAge(lastSyncAgo, lang)}`}
-            icon={<Activity size={18} />} />
+          <SectionHead title={t.cfsStatus} icon={<Activity size={18} />} />
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
             <EnvCard
               icon={<Thermometer size={18} />}
@@ -515,13 +490,11 @@ export default function App() {
           ) : (
             <InventoryList
               t={t}
-              entries={sortedInventoryEntries}
+              groups={groupedInventoryEntries}
               temperatureUnitSymbol={temperatureUnitSymbol}
               toDisplayTemperature={toDisplayTemperature}
               activeFilter={activeFilter}
               setActiveFilter={setActiveFilter}
-              sortMode={sortMode}
-              setSortMode={setSortMode}
               counts={inventoryCounts}
               onSelect={setSelectedSpool}
             />
@@ -1173,7 +1146,7 @@ function InventoryTable({ t, spools, slots, temperatureUnitSymbol = '°C', toDis
 }
 
 function InventoryList({
-  t, entries, temperatureUnitSymbol, toDisplayTemperature, activeFilter, setActiveFilter, sortMode, setSortMode, counts, onSelect,
+  t, groups, temperatureUnitSymbol, toDisplayTemperature, activeFilter, setActiveFilter, counts, onSelect,
 }) {
   const filters = [
     { key: 'all', label: t.filterAll, count: counts.all },
@@ -1196,66 +1169,56 @@ function InventoryList({
             <span className="chip-count">{filter.count}</span>
           </button>
         ))}
-        <div className="ml-auto w-full sm:w-auto">
-          <label className="sr-only" htmlFor="inventory-sort">{t.sortBy}</label>
-          <select
-            id="inventory-sort"
-            value={sortMode}
-            onChange={(event) => setSortMode(event.target.value)}
-            className="input text-sm w-full sm:w-56"
-          >
-            <option value="newest">{t.sortNewest}</option>
-            <option value="remainingDesc">{t.sortRemainingDesc}</option>
-            <option value="remainingAsc">{t.sortRemainingAsc}</option>
-            <option value="material">{t.sortMaterial}</option>
-            <option value="manufacturer">{t.sortManufacturer}</option>
-          </select>
-        </div>
       </div>
 
-      <div className="spool-list">
-        {entries.map((entry) => (
-          <button
-            key={entry.spool.id}
-            type="button"
-            onClick={() => onSelect(entry.spool.id)}
-            className="spool-row"
-          >
-            <div
-              className="w-9 h-9 rounded-full border border-zinc-700 shadow-inner shrink-0"
-              style={{ background: entry.spool.color_hex || '#6b7280' }}
-            />
-            <div className="min-w-0">
-              <div className="font-semibold text-zinc-100 truncate">
-                {entry.spool.manufacturer}
-              </div>
-              <div className="text-sm text-zinc-400 truncate">
-                {entry.spool.material} · {entry.spool.color || entry.spool.color_hex}
-              </div>
-              <div className="text-xs text-zinc-500 mt-1 truncate">
-                {fmt(toDisplayTemperature(entry.spool.nozzle_temp), 0)}{temperatureUnitSymbol}
-                {' / '}
-                {fmt(toDisplayTemperature(entry.spool.bed_temp), 0)}{temperatureUnitSymbol}
-                {' · '}
-                {entry.spool.diameter}mm
-              </div>
-              <div className="fill-bar mt-2">
-                <div
-                  className={`h-full ${entry.isLow ? 'fill-bar--low' : ''}`}
-                  style={{ width: `${entry.percent}%` }}
-                />
-              </div>
+      <div className="space-y-4">
+        {groups.map((group) => (
+          <section key={group.material} className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <div className="text-xs font-semibold uppercase tracking-wider text-cyan-300">{group.material}</div>
+              <div className="text-xs text-zinc-500 tabular-nums">{group.count} · {fmt(group.totalNet, 0)} g</div>
             </div>
-            <div className="spool-meta">
-              <div className="text-base font-semibold tabular-nums text-zinc-100">
-                {fmt(entry.netNow, 0)} g
-              </div>
-              <span className={entry.slotFor ? 'slot-pill' : 'status-pill'}>
-                {entry.slotFor ? `${t.inSlot} ${entry.slotFor.id}` : t.onShelf}
-              </span>
+            <div className="spool-list">
+              {group.entries.map((entry) => (
+                <button
+                  key={entry.spool.id}
+                  type="button"
+                  onClick={() => onSelect(entry.spool.id)}
+                  className="spool-row"
+                >
+                  <div
+                    className="w-9 h-9 rounded-full border border-zinc-700 shadow-inner shrink-0"
+                    style={{ background: entry.spool.color_hex || '#6b7280' }}
+                  />
+                  <div className="min-w-0">
+                    <div className="font-semibold text-zinc-100 truncate">{entry.spool.manufacturer}</div>
+                    <div className="text-sm text-zinc-400 truncate">{entry.spool.material} · {entry.spool.color || entry.spool.color_hex}</div>
+                    <div className="text-xs text-zinc-500 mt-1 truncate">
+                      {fmt(toDisplayTemperature(entry.spool.nozzle_temp), 0)}{temperatureUnitSymbol}
+                      {' / '}
+                      {fmt(toDisplayTemperature(entry.spool.bed_temp), 0)}{temperatureUnitSymbol}
+                      {' · '}
+                      {entry.spool.diameter}mm
+                    </div>
+                    <div className="fill-bar mt-2">
+                      <div
+                        className={`h-full ${entry.isLow ? 'fill-bar--low' : ''}`}
+                        style={{ width: `${entry.percent}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="spool-meta">
+                    <div className="text-base font-semibold tabular-nums text-zinc-100">{fmt(entry.netNow, 0)} g</div>
+                    <span className={entry.slotFor ? 'slot-pill' : 'status-pill'}>
+                      {entry.slotFor ? `${t.inSlot} ${entry.slotFor.id}` : t.onShelf}
+                    </span>
+                  </div>
+                </button>
+              ))}
             </div>
-          </button>
+          </section>
         ))}
+        {groups.length === 0 && <div className="text-sm text-zinc-500 px-1 py-2">{t.noSpools}</div>}
       </div>
     </div>
   )

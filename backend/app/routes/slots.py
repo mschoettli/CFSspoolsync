@@ -20,6 +20,39 @@ def _attach_snapshot(slot: Slot, db: Session) -> Slot:
     return slot
 
 
+def _sanitize_spool_for_slot(spool: Spool) -> bool:
+    """Keep nested spool payload in SlotOut schema-safe."""
+    changed = False
+    if not (spool.manufacturer or "").strip():
+        spool.manufacturer = (spool.material or "Unknown").strip() or "Unknown"
+        changed = True
+    if not (spool.material or "").strip():
+        spool.material = "Unknown"
+        changed = True
+    if not (spool.color or "").strip():
+        spool.color = "Unknown"
+        changed = True
+    if not (spool.color_hex or "").strip():
+        spool.color_hex = "#22c55e"
+        changed = True
+    if spool.gross_weight is None or float(spool.gross_weight) <= 0:
+        spool.gross_weight = max(1.0, float(spool.tare_weight or 0.0) + 1.0)
+        changed = True
+    if spool.tare_weight is None or float(spool.tare_weight) < 0:
+        spool.tare_weight = 0
+        changed = True
+    if spool.diameter is None or float(spool.diameter) < 1.0 or float(spool.diameter) > 4.0:
+        spool.diameter = 1.75
+        changed = True
+    if spool.nozzle_temp is None or int(spool.nozzle_temp) < 150 or int(spool.nozzle_temp) > 350:
+        spool.nozzle_temp = 210
+        changed = True
+    if spool.bed_temp is None or int(spool.bed_temp) < 0 or int(spool.bed_temp) > 150:
+        spool.bed_temp = 60
+        changed = True
+    return changed
+
+
 def _apply_snapshot_to_spool(spool: Spool, snap: CfsSlotSnapshot) -> None:
     """Overwrite spool metadata with RFID snapshot values."""
     if snap.manufacturer:
@@ -42,6 +75,12 @@ def _apply_snapshot_to_spool(spool: Spool, snap: CfsSlotSnapshot) -> None:
 @router.get("", response_model=list[SlotOut])
 def list_slots(db: Session = Depends(get_db)):
     slots = db.query(Slot).order_by(Slot.id).all()
+    changed = False
+    for slot in slots:
+        if slot.spool and _sanitize_spool_for_slot(slot.spool):
+            changed = True
+    if changed:
+        db.commit()
     return [_attach_snapshot(s, db) for s in slots]
 
 

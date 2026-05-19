@@ -14,9 +14,56 @@ def _has_text_value(value: str | None) -> bool:
     return bool((value or "").strip())
 
 
+def _sanitize_spool(spool: Spool) -> bool:
+    """Force legacy rows into API-safe values expected by SpoolOut."""
+    changed = False
+
+    if not _has_text_value(spool.manufacturer):
+        spool.manufacturer = (spool.material or "Unknown").strip() or "Unknown"
+        changed = True
+    if not _has_text_value(spool.material):
+        spool.material = "Unknown"
+        changed = True
+    if not _has_text_value(spool.color):
+        spool.color = "Unknown"
+        changed = True
+    if not _has_text_value(spool.color_hex):
+        spool.color_hex = "#22c55e"
+        changed = True
+    if spool.diameter is None or float(spool.diameter) < 1.0 or float(spool.diameter) > 4.0:
+        spool.diameter = 1.75
+        changed = True
+    if spool.nozzle_temp is None or int(spool.nozzle_temp) < 150 or int(spool.nozzle_temp) > 350:
+        spool.nozzle_temp = 210
+        changed = True
+    if spool.bed_temp is None or int(spool.bed_temp) < 0 or int(spool.bed_temp) > 150:
+        spool.bed_temp = 60
+        changed = True
+    if spool.tare_weight is None or float(spool.tare_weight) < 0:
+        spool.tare_weight = 0
+        changed = True
+    if spool.gross_weight is None or float(spool.gross_weight) <= 0:
+        spool.gross_weight = max(1.0, float(spool.tare_weight or 0.0) + 1.0)
+        changed = True
+    if spool.initial_remain_pct is not None and (
+        float(spool.initial_remain_pct) < 0 or float(spool.initial_remain_pct) > 100
+    ):
+        spool.initial_remain_pct = None
+        changed = True
+
+    return changed
+
+
 @router.get("", response_model=list[SpoolOut])
 def list_spools(db: Session = Depends(get_db)):
-    return db.query(Spool).order_by(Spool.manufacturer, Spool.material).all()
+    spools = db.query(Spool).order_by(Spool.manufacturer, Spool.material).all()
+    changed = False
+    for spool in spools:
+        if _sanitize_spool(spool):
+            changed = True
+    if changed:
+        db.commit()
+    return spools
 
 
 @router.post("", response_model=SpoolOut, status_code=201)
@@ -56,6 +103,9 @@ def get_spool(spool_id: int, db: Session = Depends(get_db)):
     spool = db.query(Spool).get(spool_id)
     if not spool:
         raise HTTPException(404, "Spule nicht gefunden")
+    if _sanitize_spool(spool):
+        db.commit()
+        db.refresh(spool)
     return spool
 
 
@@ -76,6 +126,7 @@ def update_spool(spool_id: int, payload: SpoolUpdate, db: Session = Depends(get_
 
     if not _has_text_value(spool.color) and not _has_text_value(spool.color_hex):
         raise HTTPException(status_code=422, detail="Either 'color' or 'color_hex' must be provided.")
+    _sanitize_spool(spool)
 
     db.commit()
     db.refresh(spool)

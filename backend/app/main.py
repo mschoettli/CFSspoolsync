@@ -71,10 +71,70 @@ def _migrate_add_columns() -> None:
     if "spools" not in inspector.get_table_names():
         return
     cols = {c["name"] for c in inspector.get_columns("spools")}
-    if "initial_remain_pct" not in cols:
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE spools ADD COLUMN initial_remain_pct FLOAT"))
-            print("[migration] added spools.initial_remain_pct", flush=True)
+
+    add_columns = [
+        ("manufacturer", "VARCHAR(100) DEFAULT ''"),
+        ("color_hex", "VARCHAR(16) DEFAULT '#22c55e'"),
+        ("nozzle_temp", "INTEGER DEFAULT 210"),
+        ("bed_temp", "INTEGER DEFAULT 60"),
+        ("gross_weight", "FLOAT DEFAULT 0"),
+        ("tare_weight", "FLOAT DEFAULT 0"),
+        ("name", "VARCHAR(200) DEFAULT ''"),
+        ("initial_remain_pct", "FLOAT"),
+    ]
+
+    with engine.begin() as conn:
+        for col_name, col_type in add_columns:
+            if col_name in cols:
+                continue
+            conn.execute(text(f"ALTER TABLE spools ADD COLUMN {col_name} {col_type}"))
+            print(f"[migration] added spools.{col_name}", flush=True)
+
+        # Legacy v3 -> v2 value mapping
+        if "brand" in cols:
+            conn.execute(
+                text(
+                    """
+                    UPDATE spools
+                    SET manufacturer = COALESCE(NULLIF(TRIM(manufacturer), ''), brand, '')
+                    """
+                )
+            )
+        conn.execute(
+            text(
+                """
+                UPDATE spools
+                SET color_hex = COALESCE(NULLIF(TRIM(color_hex), ''), '#22c55e')
+                """
+            )
+        )
+
+        if "remaining_weight" in cols:
+            conn.execute(
+                text(
+                    """
+                    UPDATE spools
+                    SET gross_weight = CASE
+                        WHEN gross_weight IS NULL OR gross_weight <= 0
+                            THEN COALESCE(remaining_weight, gross_weight, 0)
+                        ELSE gross_weight
+                    END
+                    """
+                )
+            )
+        elif "initial_weight" in cols:
+            conn.execute(
+                text(
+                    """
+                    UPDATE spools
+                    SET gross_weight = CASE
+                        WHEN gross_weight IS NULL OR gross_weight <= 0
+                            THEN COALESCE(initial_weight, gross_weight, 0)
+                        ELSE gross_weight
+                    END
+                    """
+                )
+            )
 
 
 app = FastAPI(

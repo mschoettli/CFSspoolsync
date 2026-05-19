@@ -121,8 +121,6 @@ export default function App() {
   const [activeFilter, setActiveFilter] = useState('all')
   const [sortMode, setSortMode] = useState('newest')
   const [selectedSpool, setSelectedSpool] = useState(null)
-  const [syncStatusSlot, setSyncStatusSlot] = useState(null)
-  const [syncStatusBusy, setSyncStatusBusy] = useState(false)
   const [libraryBusy, setLibraryBusy] = useState(false)
   const libraryImportInputRef = useRef(null)
   useEffect(() => { localStorage.setItem('cfs_lang', lang) }, [lang])
@@ -323,8 +321,6 @@ export default function App() {
       is_printing: false,
       flow: 0,
       cfs_snapshot: null,
-      sync_status: 'red',
-      sync_reason: 'CFS disconnected',
     })
   }, [slots])
 
@@ -370,24 +366,6 @@ export default function App() {
     await api.assignSpool(slotId, spoolId)
     setAssignModalSlot(null)
     await loadAll()
-  }
-
-  const openSyncStatus = (slot) => {
-    setSyncStatusSlot(slot)
-  }
-
-  const refreshSlotFromRfid = async (slotId) => {
-    try {
-      setSyncStatusBusy(true)
-      const updated = await api.refreshSlotRfid(slotId)
-      await loadAll()
-      setSyncStatusSlot(updated)
-    } catch (err) {
-      const message = err?.message || (t.syncError || 'RFID sync failed')
-      setSyncStatusSlot((prev) => (prev ? { ...prev, sync_status: 'red', sync_reason: message } : prev))
-    } finally {
-      setSyncStatusBusy(false)
-    }
   }
 
   const createTare = async (data) => { await api.createTare(data); setTares(await api.listTares()) }
@@ -526,7 +504,6 @@ export default function App() {
                 onAssign={() => setAssignModalSlot(slot.id)}
                 onAddNew={() => openAddSpool(slot.id)}
                 onEdit={(sp) => openEditSpool(sp)}
-                onSyncStatusClick={() => openSyncStatus(slot)}
               />
             ))}
           </div>
@@ -670,15 +647,6 @@ export default function App() {
         />
       )}
 
-      {syncStatusSlot && (
-        <SyncStatusModal
-          t={t}
-          slot={syncStatusSlot}
-          busy={syncStatusBusy}
-          onClose={() => setSyncStatusSlot(null)}
-          onRefresh={() => refreshSlotFromRfid(syncStatusSlot.id)}
-        />
-      )}
     </div>
   )
 }
@@ -907,7 +875,7 @@ function HistoryModal({ t, spools, onClose }) {
  * C) empty slot with assign/add actions.
  */
 function SlotPanel({
-  t, slot, silentNetOverride, temperatureUnitSymbol, toDisplayTemperature, onAssign, onAddNew, onEdit, onSyncStatusClick,
+  t, slot, silentNetOverride, temperatureUnitSymbol, toDisplayTemperature, onAssign, onAddNew, onEdit,
 }) {
   const spool = slot.spool
   const snap = slot.cfs_snapshot
@@ -923,27 +891,25 @@ function SlotPanel({
         temperatureUnitSymbol={temperatureUnitSymbol}
         toDisplayTemperature={toDisplayTemperature}
         onEdit={onEdit}
-        onSyncStatusClick={onSyncStatusClick}
       />
     )
   }
 
   // ZUSTAND B: CFS hat Spule erkannt, aber im Lager noch nicht angelegt
   if (snap && snap.present) {
-    return <DetectedSlotPanel t={t} slot={slot} snap={snap} onAddNew={onAddNew} onSyncStatusClick={onSyncStatusClick} />
+    return <DetectedSlotPanel t={t} slot={slot} snap={snap} onAddNew={onAddNew} />
   }
 
   // ZUSTAND C: Slot komplett leer
-  return <EmptySlotPanel t={t} slot={slot} onAssign={onAssign} onAddNew={onAddNew} onSyncStatusClick={onSyncStatusClick} />
+  return <EmptySlotPanel t={t} slot={slot} onAssign={onAssign} onAddNew={onAddNew} />
 }
 
-function EmptySlotPanel({ t, slot, onAssign, onAddNew, onSyncStatusClick }) {
+function EmptySlotPanel({ t, slot, onAssign, onAddNew }) {
   return (
     <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 p-4 flex flex-col">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="text-xs font-mono font-semibold text-zinc-500">{t.slot} {slot.id}</div>
-          <SlotSyncIndicator slot={slot} t={t} onClick={onSyncStatusClick} />
         </div>
         <div className="text-xs px-2 py-0.5 rounded-full bg-zinc-800/70 text-zinc-500 border border-zinc-800">{t.empty}</div>
       </div>
@@ -974,7 +940,7 @@ function EmptySlotPanel({ t, slot, onAssign, onAddNew, onSyncStatusClick }) {
   )
 }
 
-function DetectedSlotPanel({ t, slot, snap, onAddNew, onSyncStatusClick }) {
+function DetectedSlotPanel({ t, slot, snap, onAddNew }) {
 
   return (
     <div className="relative rounded-xl border bg-zinc-900/50 p-4 overflow-hidden border-zinc-800">
@@ -982,7 +948,6 @@ function DetectedSlotPanel({ t, slot, snap, onAddNew, onSyncStatusClick }) {
       <div className="relative flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <div className="text-xs font-mono font-semibold text-zinc-500">{t.slot} {slot.id}</div>
-          <SlotSyncIndicator slot={slot} t={t} onClick={onSyncStatusClick} />
         </div>
       </div>
 
@@ -1039,7 +1004,7 @@ function DetectedSlotPanel({ t, slot, snap, onAddNew, onSyncStatusClick }) {
 }
 
 function AssignedSlotPanel({
-  t, slot, spool, silentNetOverride, temperatureUnitSymbol, toDisplayTemperature, onEdit, onSyncStatusClick,
+  t, slot, spool, silentNetOverride, temperatureUnitSymbol, toDisplayTemperature, onEdit,
 }) {
   const computedNet = Math.max(0, slot.current_weight - spool.tare_weight)
   const net = Number.isFinite(Number(silentNetOverride)) ? Number(silentNetOverride) : computedNet
@@ -1057,7 +1022,6 @@ function AssignedSlotPanel({
       <div className="relative flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <div className="text-xs font-mono font-semibold text-zinc-500">{t.slot} {slot.id}</div>
-          <SlotSyncIndicator slot={slot} t={t} onClick={onSyncStatusClick} />
           {slot.is_printing && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950/70 border border-emerald-800/60 text-emerald-300 text-[10px] font-semibold uppercase tracking-wide">
               <Activity size={10} className="animate-pulse" />{t.printing}
@@ -1125,48 +1089,6 @@ function AssignedSlotPanel({
         </div>
       </div>
     </div>
-  )
-}
-
-function SlotSyncIndicator({ slot, t, onClick }) {
-  const isGreen = slot.sync_status === 'green'
-  const label = isGreen ? (t.syncHealthy || 'RFID sync healthy') : (slot.sync_reason || t.syncError || 'RFID sync failed')
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className={`h-5 w-5 rounded-full border flex items-center justify-center ${
-        isGreen ? 'border-emerald-600/70 bg-emerald-950/70' : 'border-red-600/70 bg-red-950/70'
-      }`}
-    >
-      <span className={`h-2.5 w-2.5 rounded-full ${isGreen ? 'bg-emerald-400' : 'bg-red-400'}`} />
-    </button>
-  )
-}
-
-function SyncStatusModal({ t, slot, busy, onClose, onRefresh }) {
-  const isGreen = slot.sync_status === 'green'
-  const title = `${t.slot} ${slot.id} · ${t.syncStatusTitle || 'RFID Sync'}`
-  return (
-    <Modal title={title} onClose={onClose} maxWidth="max-w-md">
-      <div className="p-5 space-y-4">
-        {isGreen ? (
-          <p className="text-sm text-zinc-300">{t.syncHealthy || 'RFID sync healthy.'}</p>
-        ) : (
-          <p className="text-sm text-red-300">{slot.sync_reason || t.syncError || 'RFID sync failed'}</p>
-        )}
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={busy}
-          className="w-full px-3 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-sm font-semibold disabled:opacity-50"
-        >
-          {t.refreshFromRfid || 'Refresh from CFS RFID'}
-        </button>
-      </div>
-    </Modal>
   )
 }
 
@@ -1421,4 +1343,5 @@ function DetailItem({ label, value }) {
     </>
   )
 }
+
 

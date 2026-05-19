@@ -341,6 +341,17 @@ class CfsBridge:
         if len(present_with_spool) == 1:
             self._last_active_slot = present_with_spool[0]
             return self._last_active_slot
+        if len(candidate_ids) == 1:
+            self._last_active_slot = next(iter(candidate_ids))
+            return self._last_active_slot
+        if present_with_spool:
+            # Firmware can expose multiple "present" slots while only one prints.
+            # Keep UI responsive by picking a deterministic fallback.
+            self._last_active_slot = sorted(present_with_spool)[0]
+            return self._last_active_slot
+        if candidate_ids:
+            self._last_active_slot = sorted(candidate_ids)[0]
+            return self._last_active_slot
         return None
 
     # ---------- DB helpers ----------

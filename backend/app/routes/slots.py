@@ -9,6 +9,22 @@ from ..schemas import CfsSnapshotOut, SlotAssign, SlotOut
 router = APIRouter(prefix="/slots", tags=["slots"])
 
 
+def _snapshot_has_rfid_signal(snap: CfsSlotSnapshot | None) -> bool:
+    if snap is None:
+        return False
+    if snap.present:
+        return True
+    if snap.remain_pct is not None:
+        return True
+    if (snap.material_code or "").strip() not in ("", "-1", "0", "None"):
+        return True
+    if (snap.color_hex or "").strip() not in ("", "#6b7280"):
+        return True
+    if (snap.manufacturer or "").strip() or (snap.material or "").strip():
+        return True
+    return False
+
+
 def _attach_snapshot(slot: Slot, db: Session) -> Slot:
     """Attach CFS snapshot and sync status fields to slot ORM instance."""
     snap = db.query(CfsSlotSnapshot).get(slot.id)
@@ -18,7 +34,7 @@ def _attach_snapshot(slot: Slot, db: Session) -> Slot:
     if not connected:
         status = "red"
         reason = "CFS disconnected"
-    elif slot.spool_id and (snap is None or not snap.present):
+    elif slot.spool_id and not _snapshot_has_rfid_signal(snap):
         status = "red"
         reason = "No RFID detected in slot"
     else:
@@ -117,7 +133,7 @@ def assign_spool(slot_id: int, payload: SlotAssign, db: Session = Depends(get_db
     snap = db.query(CfsSlotSnapshot).get(slot_id)
     if snap and snap.remain_pct is not None and spool.initial_remain_pct is None:
         spool.initial_remain_pct = snap.remain_pct
-    if snap and snap.present:
+    if _snapshot_has_rfid_signal(snap):
         _apply_snapshot_to_spool(spool, snap)
 
     db.commit()
@@ -151,7 +167,7 @@ def refresh_slot_rfid(slot_id: int, db: Session = Depends(get_db)):
     snap = db.query(CfsSlotSnapshot).get(slot_id)
     if spool is None or snap is None:
         raise HTTPException(404, "RFID Snapshot oder Spule nicht gefunden")
-    if not snap.present:
+    if not _snapshot_has_rfid_signal(snap):
         raise HTTPException(400, "Kein RFID im Slot erkannt")
 
     _apply_snapshot_to_spool(spool, snap)

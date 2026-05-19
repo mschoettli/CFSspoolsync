@@ -99,6 +99,7 @@ class SlotOut(BaseModel):
     id: int
     spool_id: Optional[int]
     current_weight: float
+    weight_mode: str = "cfs_live"
     is_printing: bool
     flow: float
     sync_status: str = "red"
@@ -110,6 +111,10 @@ class SlotOut(BaseModel):
 
 class SlotAssign(BaseModel):
     spool_id: int
+
+
+class SlotAdoptAmount(BaseModel):
+    amount_g: float = Field(..., ge=0)
 
 
 # ---------- CFS ----------

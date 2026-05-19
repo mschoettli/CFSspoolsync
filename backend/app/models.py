@@ -48,6 +48,7 @@ class Slot(Base):
     id = Column(Integer, primary_key=True)
     spool_id = Column(Integer, ForeignKey("spools.id", ondelete="SET NULL"), nullable=True)
     current_weight = Column(Float, nullable=False, default=0)
+    weight_mode = Column(String(24), nullable=False, default="cfs_live")
     is_printing = Column(Boolean, nullable=False, default=False)
     flow = Column(Float, nullable=False, default=0)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

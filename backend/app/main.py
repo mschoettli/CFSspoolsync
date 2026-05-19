@@ -71,6 +71,7 @@ def _migrate_add_columns() -> None:
     if "spools" not in inspector.get_table_names():
         return
     cols = {c["name"] for c in inspector.get_columns("spools")}
+    slot_cols = {c["name"] for c in inspector.get_columns("slots")} if "slots" in inspector.get_table_names() else set()
 
     add_columns = [
         ("manufacturer", "VARCHAR(100) DEFAULT ''"),
@@ -89,6 +90,11 @@ def _migrate_add_columns() -> None:
                 continue
             conn.execute(text(f"ALTER TABLE spools ADD COLUMN {col_name} {col_type}"))
             print(f"[migration] added spools.{col_name}", flush=True)
+
+        if "slots" in inspector.get_table_names() and "weight_mode" not in slot_cols:
+            conn.execute(text("ALTER TABLE slots ADD COLUMN weight_mode VARCHAR(24) DEFAULT 'cfs_live'"))
+            print("[migration] added slots.weight_mode", flush=True)
+            conn.execute(text("UPDATE slots SET weight_mode = COALESCE(NULLIF(TRIM(weight_mode), ''), 'cfs_live')"))
 
         # Legacy v3 -> v2 value mapping
         if "brand" in cols:

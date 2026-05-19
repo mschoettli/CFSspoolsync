@@ -282,7 +282,8 @@ export default function App() {
 
   const openEditSpool = (spool) => {
     setEditingSpool(spool)
-    setAddSpoolForSlot(null)
+    const slotFor = slotBySpoolId.get(spool.id)
+    setAddSpoolForSlot(slotFor?.id ?? null)
     setShowAddSpool(true)
   }
 
@@ -314,6 +315,11 @@ export default function App() {
   const doAssignSpool = async (slotId, spoolId) => {
     await api.assignSpool(slotId, spoolId)
     setAssignModalSlot(null)
+    await loadAll()
+  }
+
+  const adoptAmountForSlot = async (slotId, amountG) => {
+    await api.adoptSlotAmount(slotId, amountG)
     await loadAll()
   }
 
@@ -523,6 +529,7 @@ export default function App() {
           cfsConnected={cfs.connected}
           onClose={() => { setShowAddSpool(false); setAddSpoolForSlot(null); setEditingSpool(null) }}
           onSave={saveSpool}
+          onAdoptAmount={adoptAmountForSlot}
           onOpenTares={() => setShowTareTable(true)}
         />
       )}

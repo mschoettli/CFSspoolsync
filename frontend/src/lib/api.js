@@ -38,6 +38,11 @@ export const api = {
     }),
   unassignSlot: (slotId) => request(`/slots/${slotId}/unassign`, { method: 'POST' }),
   refreshSlotRfid: (slotId) => request(`/slots/${slotId}/refresh-rfid`, { method: 'POST' }),
+  adoptSlotAmount: (slotId, amountG) =>
+    request(`/slots/${slotId}/adopt-amount`, {
+      method: 'POST',
+      body: JSON.stringify({ amount_g: amountG }),
+    }),
   // CFS + History
   getCfs: () => request('/cfs'),
   getCfsSlots: () => request('/cfs/slots'),

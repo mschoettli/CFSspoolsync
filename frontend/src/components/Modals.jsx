@@ -207,7 +207,7 @@ export function AddSpoolModal({
   toDisplayTemperature = (value) => Number(value),
   toStorageTemperature = (value) => Number(value),
   tares, editing, targetSlot, cfsSnapshot, cfsConnected,
-  onClose, onSave, onOpenTares,
+  onClose, onSave, onAdoptAmount, onOpenTares,
 }) {
   const grossEstimateHintByLang = {
     de: 'Das Bruttogewicht wird aus Netto-Labelgewicht plus Tara-Standard geschÃ¤tzt. Manuelle Bruttoeingabe ist am genauesten.',
@@ -676,6 +676,15 @@ export function AddSpoolModal({
           {t.cancel}
         </button>
         <div className="flex gap-2">
+          {editing && targetSlot && (
+            <button
+              onClick={() => onAdoptAmount?.(targetSlot, +grossWeight)}
+              disabled={!Number.isFinite(+grossWeight) || +grossWeight < 0}
+              className="px-3 py-2 rounded-md bg-cyan-700 hover:bg-cyan-600 text-zinc-100 text-sm font-semibold disabled:opacity-40"
+            >
+              {t.adoptAmount || 'Menge übernehmen'}
+            </button>
+          )}
           {targetSlot && !editing ? (
             <>
               <button onClick={() => save(null)} disabled={!valid}

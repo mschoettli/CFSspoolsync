@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import CfsSlotSnapshot, CfsState, Slot, Spool
-from ..schemas import CfsSnapshotOut, SlotAssign, SlotOut
+from ..schemas import CfsSnapshotOut, SlotAdoptAmount, SlotAssign, SlotOut
 
 router = APIRouter(prefix="/slots", tags=["slots"])
 
@@ -84,14 +84,6 @@ def _sanitize_spool_for_slot(spool: Spool) -> bool:
 
 def _apply_snapshot_to_spool(spool: Spool, snap: CfsSlotSnapshot) -> None:
     """Overwrite spool metadata with RFID snapshot values."""
-    if snap.manufacturer:
-        spool.manufacturer = snap.manufacturer
-    if snap.material:
-        spool.material = snap.material
-    else:
-        code = (snap.material_code or "").strip()
-        spool.material = f"Unknown ({code})" if code else "Unknown"
-        spool.manufacturer = spool.manufacturer or "Creality"
     if snap.color_hex:
         spool.color_hex = snap.color_hex
         spool.color = snap.color_hex
@@ -131,6 +123,7 @@ def assign_spool(slot_id: int, payload: SlotAssign, db: Session = Depends(get_db
 
     slot.spool_id = spool.id
     slot.current_weight = spool.gross_weight
+    slot.weight_mode = "cfs_live"
     slot.is_printing = False
     slot.flow = 0
 
@@ -152,6 +145,7 @@ def unassign(slot_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Slot nicht gefunden")
     slot.spool_id = None
     slot.current_weight = 0
+    slot.weight_mode = "cfs_live"
     slot.is_printing = False
     slot.flow = 0
     db.commit()
@@ -176,6 +170,26 @@ def refresh_slot_rfid(slot_id: int, db: Session = Depends(get_db)):
         return _attach_snapshot(slot, db)
 
     _apply_snapshot_to_spool(spool, snap)
+    if snap.manufacturer:
+        spool.manufacturer = snap.manufacturer
+    if snap.material:
+        spool.material = snap.material
+    elif (snap.material_code or "").strip():
+        spool.material = f"Unknown ({(snap.material_code or '').strip()})"
+    db.commit()
+    db.refresh(slot)
+    return _attach_snapshot(slot, db)
+
+
+@router.post("/{slot_id}/adopt-amount", response_model=SlotOut)
+def adopt_slot_amount(slot_id: int, payload: SlotAdoptAmount, db: Session = Depends(get_db)):
+    slot = db.query(Slot).get(slot_id)
+    if not slot:
+        raise HTTPException(404, "Slot nicht gefunden")
+    if not slot.spool_id:
+        raise HTTPException(400, "Keine Spule im Slot zugewiesen")
+    slot.current_weight = float(payload.amount_g)
+    slot.weight_mode = "manual_fixed"
     db.commit()
     db.refresh(slot)
     return _attach_snapshot(slot, db)

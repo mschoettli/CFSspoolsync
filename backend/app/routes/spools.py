@@ -91,6 +91,7 @@ def create_spool(payload: SpoolCreate, db: Session = Depends(get_db)):
             raise HTTPException(400, "UngÃ¼ltiger Slot")
         slot.spool_id = spool.id
         slot.current_weight = spool.gross_weight
+        slot.weight_mode = "cfs_live"
         slot.is_printing = False
         slot.flow = 0
         db.commit()
@@ -131,13 +132,6 @@ def update_spool(spool_id: int, payload: SpoolUpdate, db: Session = Depends(get_
     db.commit()
     db.refresh(spool)
 
-    # if this spool is currently assigned: keep current_weight in sync
-    if payload.gross_weight is not None:
-        slot = db.query(Slot).filter(Slot.spool_id == spool_id).first()
-        if slot:
-            slot.current_weight = payload.gross_weight
-            db.commit()
-
     return spool
 
 
@@ -151,6 +145,7 @@ def delete_spool(spool_id: int, db: Session = Depends(get_db)):
     if slot:
         slot.spool_id = None
         slot.current_weight = 0
+        slot.weight_mode = "cfs_live"
         slot.is_printing = False
         slot.flow = 0
     db.delete(spool)

@@ -19,6 +19,7 @@ import asyncio
 import random
 from datetime import datetime
 from typing import Optional
+from urllib.parse import quote
 
 import httpx
 from sqlalchemy.orm import Session
@@ -50,6 +51,11 @@ class CfsBridge:
         self._last_filament_used_raw: Optional[float] = None
         self._last_cycle_was_printing: bool = False
         self._last_cycle_active_slot: Optional[int] = None
+        self._eta_last_file: str = ""
+        self._eta_last_remaining: Optional[float] = None
+        self._eta_last_total: Optional[float] = None
+        self._eta_last_ts: float = 0.0
+        self._estimated_time_cache: dict[str, float] = {}
 
     async def start(self) -> None:
         self._stop = False
@@ -275,25 +281,101 @@ class CfsBridge:
             }
 
         state = str(payload.get("state", "")).strip().lower()
+        filename = _normalize_print_title(payload.get("filename"))
         print_duration = max(0.0, _to_float(payload.get("print_duration"), 0.0))
         total_duration = _to_float(payload.get("total_duration"), -1.0)
         progress = _to_float(virtual_sd.get("progress"), -1.0)
-        if total_duration <= 0 and progress > 0 and progress <= 1:
-            total_duration = print_duration / progress
-        remaining_seconds: Optional[int] = None
-        total_seconds: Optional[int] = None
-        if total_duration > 0 and total_duration >= print_duration:
-            total_seconds = int(total_duration)
-            remaining_seconds = int(total_duration - print_duration)
+        estimated_meta = await self._get_estimated_seconds_from_metadata(filename)
+
+        progress_total = None
+        if progress > 0 and progress <= 1:
+            progress_total = print_duration / progress
+
+        hybrid_total: Optional[float] = None
+        if estimated_meta and progress_total:
+            # Hybrid from slicer estimate + live progress projection.
+            hybrid_total = (estimated_meta * 0.7) + (progress_total * 0.3)
+        elif estimated_meta:
+            hybrid_total = estimated_meta
+        elif progress_total:
+            hybrid_total = progress_total
+        elif total_duration > 0:
+            hybrid_total = total_duration
+
+        total_seconds, remaining_seconds = self._smooth_eta(
+            filename=filename,
+            total_seconds=hybrid_total,
+            elapsed_seconds=print_duration,
+            is_printing=(state == "printing"),
+        )
 
         return {
             "reachable": True,
             "is_printing": state == "printing",
-            "title": _normalize_print_title(payload.get("filename")),
+            "title": filename,
             "remaining_seconds": remaining_seconds,
             "total_seconds": total_seconds,
             "filament_used_raw": _to_float(payload.get("filament_used"), 0.0),
         }
+
+    async def _get_estimated_seconds_from_metadata(self, filename: str) -> Optional[float]:
+        if not filename:
+            return None
+        cached = self._estimated_time_cache.get(filename)
+        if cached is not None:
+            return cached
+        url = (
+            f"http://{settings.moonraker_host}:{settings.moonraker_port}"
+            f"/server/files/metadata?filename={quote(filename, safe='/')}"
+        )
+        try:
+            async with httpx.AsyncClient(timeout=2.5) as client:
+                response = await client.get(url)
+                if response.status_code != 200:
+                    return None
+                result = response.json().get("result", {})
+        except (httpx.HTTPError, ValueError):
+            return None
+        value = _to_float(result.get("estimated_time"), -1.0)
+        if value > 0:
+            self._estimated_time_cache[filename] = value
+            return value
+        return None
+
+    def _smooth_eta(
+        self,
+        filename: str,
+        total_seconds: Optional[float],
+        elapsed_seconds: float,
+        is_printing: bool,
+    ) -> tuple[Optional[int], Optional[int]]:
+        if not is_printing or not filename or total_seconds is None or total_seconds <= 0:
+            self._eta_last_file = filename if is_printing else ""
+            self._eta_last_remaining = None
+            self._eta_last_total = None
+            self._eta_last_ts = datetime.utcnow().timestamp()
+            return None, None
+
+        raw_remaining = max(0.0, total_seconds - elapsed_seconds)
+        now_ts = datetime.utcnow().timestamp()
+        if self._eta_last_file != filename:
+            self._eta_last_file = filename
+            self._eta_last_remaining = raw_remaining
+            self._eta_last_total = total_seconds
+            self._eta_last_ts = now_ts
+            return int(max(elapsed_seconds, total_seconds)), int(raw_remaining)
+
+        dt = max(1.0, now_ts - self._eta_last_ts)
+        prev_remaining = self._eta_last_remaining if self._eta_last_remaining is not None else raw_remaining
+        min_allowed = max(0.0, prev_remaining - dt * 2.0)
+        max_allowed = prev_remaining + dt * 0.3
+        smoothed_remaining = max(min_allowed, min(max_allowed, raw_remaining))
+        smoothed_total = max(elapsed_seconds, smoothed_remaining + elapsed_seconds)
+
+        self._eta_last_remaining = smoothed_remaining
+        self._eta_last_total = smoothed_total
+        self._eta_last_ts = now_ts
+        return int(smoothed_total), int(smoothed_remaining)
 
     def _resolve_printing_state(self, probe: dict, now_ts: float) -> bool:
         """Keep the last print state for a short grace window."""
@@ -405,7 +487,7 @@ class CfsBridge:
             snap.updated_at = datetime.utcnow()
 
     def _sync_assigned_spools_from_rfid(self, db: Session) -> None:
-        """Force assigned spool metadata to follow RFID snapshot on every tick."""
+        """Keep technical fields in sync; manual brand/material wins."""
         slots = db.query(Slot).order_by(Slot.id).all()
         for slot in slots:
             if not slot.spool_id:
@@ -414,15 +496,6 @@ class CfsBridge:
             spool = db.query(Spool).get(slot.spool_id)
             if snap is None or spool is None or not snap.present:
                 continue
-
-            if snap.manufacturer:
-                spool.manufacturer = snap.manufacturer
-            if snap.material:
-                spool.material = snap.material
-            else:
-                code = (snap.material_code or "").strip()
-                spool.material = f"Unknown ({code})" if code else "Unknown"
-                spool.manufacturer = spool.manufacturer or "Creality"
 
             if snap.color_hex:
                 spool.color_hex = snap.color_hex
@@ -451,6 +524,8 @@ class CfsBridge:
             if skip_slot_id and slot.id == skip_slot_id:
                 continue
             if not slot.spool_id:
+                continue
+            if (getattr(slot, "weight_mode", "cfs_live") or "cfs_live") == "manual_fixed":
                 continue
             snap = db.query(CfsSlotSnapshot).get(slot.id)
             sp = db.query(Spool).get(slot.spool_id)
@@ -505,6 +580,8 @@ class CfsBridge:
 
         slot = next((item for item in slots if item.id == active_slot_id), None)
         if slot is None or not slot.spool_id:
+            return 0.0
+        if (getattr(slot, "weight_mode", "cfs_live") or "cfs_live") == "manual_fixed":
             return 0.0
         spool = db.query(Spool).get(slot.spool_id)
         if spool is None:
@@ -607,6 +684,7 @@ def _serialize_live(cfs: CfsState, slots: list, db: Session, print_job: dict) ->
             "id": s.id,
             "spool_id": s.spool_id,
             "current_weight": round(s.current_weight, 2),
+            "weight_mode": getattr(s, "weight_mode", "cfs_live") or "cfs_live",
             "is_printing": s.is_printing,
             "flow": s.flow,
             "spool": _spool_dict(sp) if sp else None,

@@ -108,6 +108,22 @@ def _migrate_add_columns() -> None:
                 """
             )
         )
+        conn.execute(
+            text(
+                """
+                UPDATE spools
+                SET manufacturer = COALESCE(NULLIF(TRIM(manufacturer), ''), NULLIF(TRIM(material), ''), 'Unknown')
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                UPDATE spools
+                SET color = COALESCE(NULLIF(TRIM(color), ''), 'Unknown')
+                """
+            )
+        )
 
         if "remaining_weight" in cols:
             conn.execute(
@@ -135,6 +151,27 @@ def _migrate_add_columns() -> None:
                     """
                 )
             )
+
+        # Enforce non-breaking values for response model validation.
+        conn.execute(
+            text(
+                """
+                UPDATE spools
+                SET tare_weight = COALESCE(tare_weight, 0)
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                UPDATE spools
+                SET gross_weight = CASE
+                    WHEN gross_weight IS NULL OR gross_weight <= 0 THEN 1
+                    ELSE gross_weight
+                END
+                """
+            )
+        )
 
 
 app = FastAPI(

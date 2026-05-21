@@ -106,7 +106,9 @@ class CfsBridge:
                     cfs.temperature = parsed["temperature"]
                     cfs.humidity = parsed["humidity"]
                     self._write_snapshots(db, parsed["slots"])
-                    self._last_active_slot = self._detect_active_slot(parsed["slots"])
+                    detected_slot = self._detect_active_slot(parsed["slots"])
+                    if detected_slot is not None:
+                        self._last_active_slot = detected_slot
                 else:
                     cfs.connected = False
             else:
@@ -146,7 +148,7 @@ class CfsBridge:
 
             # ---------- 3. Update slot weights live ----------
             weight_active_slot = self._infer_active_slot_from_weight_delta(slots)
-            active_slot = self._choose_active_slot(db, slots, weight_active_slot) if is_printing else None
+            active_slot = self._choose_active_slot(db, slots, weight_active_slot, now_ts) if is_printing else None
             self._sync_assigned_spools_from_rfid(db)
             self._update_slot_weights(db, skip_slot_id=active_slot if is_printing else None)
             consumed_g = self._apply_live_consumption_from_print_stats(db, slots, print_probe, is_printing, active_slot)
@@ -441,12 +443,20 @@ class CfsBridge:
             if most_negative[0] < -0.01:
                 self._last_active_signal_ts = datetime.utcnow().timestamp()
                 return most_negative[1]
-        return self._last_active_slot
+        return None
 
-    def _choose_active_slot(self, db: Session, slots: list[Slot], weight_candidate: Optional[int]) -> Optional[int]:
+    def _choose_active_slot(
+        self,
+        db: Session,
+        slots: list[Slot],
+        weight_candidate: Optional[int],
+        now_ts: float,
+    ) -> Optional[int]:
         """Resolve a printing slot using detected slot and safe fallbacks."""
         candidate_ids = {slot.id for slot in slots if slot.spool_id}
-        if self._last_active_slot in candidate_ids:
+        # Trust CFS remain-delta candidate only when the signal is fresh.
+        last_signal_fresh = (now_ts - self._last_active_signal_ts) <= 45.0
+        if last_signal_fresh and self._last_active_slot in candidate_ids:
             return self._last_active_slot
         if weight_candidate in candidate_ids:
             self._last_active_slot = weight_candidate

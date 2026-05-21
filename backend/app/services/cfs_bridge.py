@@ -440,7 +440,7 @@ class CfsBridge:
         self._last_remain_pct = current_remains
         if deltas:
             most_negative = min(deltas, key=lambda item: item[0])
-            if most_negative[0] < -0.01:
+            if most_negative[0] < -0.001:
                 self._last_active_signal_ts = datetime.utcnow().timestamp()
                 return most_negative[1]
         return None
@@ -462,11 +462,6 @@ class CfsBridge:
             self._last_active_slot = weight_candidate
             return self._last_active_slot
 
-        previous_printing = next((slot.id for slot in slots if slot.is_printing and slot.spool_id), None)
-        if previous_printing in candidate_ids:
-            self._last_active_slot = previous_printing
-            return self._last_active_slot
-
         present_with_spool: list[int] = []
         for slot in slots:
             if not slot.spool_id:
@@ -475,19 +470,13 @@ class CfsBridge:
             if snapshot and snapshot.present:
                 present_with_spool.append(slot.id)
 
-        if len(present_with_spool) == 1:
-            self._last_active_slot = present_with_spool[0]
-            return self._last_active_slot
         if len(candidate_ids) == 1:
             self._last_active_slot = next(iter(candidate_ids))
             return self._last_active_slot
-        if present_with_spool:
-            # Keep last known or inferred candidates first; avoid hard slot-1 bias.
-            self._last_active_slot = present_with_spool[-1]
+        if len(present_with_spool) == 1:
+            self._last_active_slot = present_with_spool[0]
             return self._last_active_slot
-        if candidate_ids:
-            self._last_active_slot = sorted(candidate_ids)[-1]
-            return self._last_active_slot
+        # Ambiguous case: do not force a potentially wrong slot.
         return None
 
     def _infer_active_slot_from_weight_delta(self, slots: list[Slot]) -> Optional[int]:

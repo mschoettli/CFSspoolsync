@@ -461,6 +461,10 @@ class CfsBridge:
         if weight_candidate in candidate_ids:
             self._last_active_slot = weight_candidate
             return self._last_active_slot
+        # Keep the last confirmed printing slot briefly to avoid badge flicker.
+        if self._last_cycle_active_slot in candidate_ids:
+            self._last_active_slot = self._last_cycle_active_slot
+            return self._last_active_slot
 
         present_with_spool: list[int] = []
         for slot in slots:

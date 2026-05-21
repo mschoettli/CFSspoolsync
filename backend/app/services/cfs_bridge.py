@@ -284,29 +284,28 @@ class CfsBridge:
             }
 
         state = str(payload.get("state", "")).strip().lower()
-        filename = _normalize_print_title(payload.get("filename"))
+        filename_raw = str(payload.get("filename") or "").strip().replace("\\", "/")
+        filename = _normalize_print_title(filename_raw)
         print_duration = max(0.0, _to_float(payload.get("print_duration"), 0.0))
         total_duration = _to_float(payload.get("total_duration"), -1.0)
         progress = _to_float(virtual_sd.get("progress"), -1.0)
-        estimated_meta = await self._get_estimated_seconds_from_metadata(filename)
+        estimated_meta = await self._get_estimated_seconds_from_metadata(filename_raw)
 
         progress_total = None
-        if progress > 0 and progress <= 1:
+        if progress > 0.01 and progress <= 1:
             progress_total = print_duration / progress
 
         hybrid_total: Optional[float] = None
-        if estimated_meta and progress_total:
-            # Hybrid from slicer estimate + live progress projection.
-            hybrid_total = (estimated_meta * 0.7) + (progress_total * 0.3)
-        elif estimated_meta:
+        # Prefer slicer metadata when available (typically most stable).
+        if estimated_meta:
             hybrid_total = estimated_meta
         elif progress_total:
             hybrid_total = progress_total
-        elif total_duration > 0:
+        elif total_duration > print_duration:
             hybrid_total = total_duration
 
         total_seconds, remaining_seconds = self._smooth_eta(
-            filename=filename,
+            filename=filename_raw or filename,
             total_seconds=hybrid_total,
             elapsed_seconds=print_duration,
             is_printing=(state == "printing"),
@@ -322,27 +321,34 @@ class CfsBridge:
         }
 
     async def _get_estimated_seconds_from_metadata(self, filename: str) -> Optional[float]:
+        filename = str(filename or "").strip().replace("\\", "/")
         if not filename:
             return None
         cached = self._estimated_time_cache.get(filename)
         if cached is not None:
             return cached
-        url = (
-            f"http://{settings.moonraker_host}:{settings.moonraker_port}"
-            f"/server/files/metadata?filename={quote(filename, safe='/')}"
-        )
-        try:
-            async with httpx.AsyncClient(timeout=2.5) as client:
-                response = await client.get(url)
-                if response.status_code != 200:
-                    return None
-                result = response.json().get("result", {})
-        except (httpx.HTTPError, ValueError):
-            return None
-        value = _to_float(result.get("estimated_time"), -1.0)
-        if value > 0:
-            self._estimated_time_cache[filename] = value
-            return value
+        candidates = [filename]
+        if "/" not in filename:
+            # Some Moonraker setups store gcode files under `gcodes/`.
+            candidates.append(f"gcodes/{filename}")
+        for candidate in candidates:
+            url = (
+                f"http://{settings.moonraker_host}:{settings.moonraker_port}"
+                f"/server/files/metadata?filename={quote(candidate, safe='/')}"
+            )
+            try:
+                async with httpx.AsyncClient(timeout=2.5) as client:
+                    response = await client.get(url)
+                    if response.status_code != 200:
+                        continue
+                    result = response.json().get("result", {})
+            except (httpx.HTTPError, ValueError):
+                continue
+            value = _to_float(result.get("estimated_time"), -1.0)
+            if value > 0:
+                self._estimated_time_cache[filename] = value
+                self._estimated_time_cache[candidate] = value
+                return value
         return None
 
     def _smooth_eta(

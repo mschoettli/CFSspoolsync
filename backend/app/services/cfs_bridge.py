@@ -51,6 +51,7 @@ class CfsBridge:
         self._last_filament_used_raw: Optional[float] = None
         self._last_cycle_was_printing: bool = False
         self._last_cycle_active_slot: Optional[int] = None
+        self._last_slot_weights: dict[int, float] = {}
         self._eta_last_file: str = ""
         self._eta_last_remaining: Optional[float] = None
         self._eta_last_total: Optional[float] = None
@@ -142,9 +143,10 @@ class CfsBridge:
                 # when we still receive strong CFS slot activity signals.
                 is_printing = True
             print_job = self._resolve_print_job(print_probe, is_printing, now_ts)
-            active_slot = self._choose_active_slot(db, slots) if is_printing else None
 
             # ---------- 3. Update slot weights live ----------
+            weight_active_slot = self._infer_active_slot_from_weight_delta(slots)
+            active_slot = self._choose_active_slot(db, slots, weight_active_slot) if is_printing else None
             self._sync_assigned_spools_from_rfid(db)
             self._update_slot_weights(db, skip_slot_id=active_slot if is_printing else None)
             consumed_g = self._apply_live_consumption_from_print_stats(db, slots, print_probe, is_printing, active_slot)
@@ -155,6 +157,7 @@ class CfsBridge:
             for slot in slots:
                 slot.is_printing = bool(active_slot and slot.id == active_slot)
                 slot.flow = round(consumed_g / max(1.0, float(settings.consumption_tick_s)), 3) if slot.is_printing else 0.0
+                self._last_slot_weights[slot.id] = float(slot.current_weight)
 
             db.commit()
             self._last_cycle_was_printing = bool(is_printing)
@@ -434,10 +437,18 @@ class CfsBridge:
                 return most_negative[1]
         return self._last_active_slot
 
-    def _choose_active_slot(self, db: Session, slots: list[Slot]) -> Optional[int]:
+    def _choose_active_slot(self, db: Session, slots: list[Slot], weight_candidate: Optional[int]) -> Optional[int]:
         """Resolve a printing slot using detected slot and safe fallbacks."""
         candidate_ids = {slot.id for slot in slots if slot.spool_id}
         if self._last_active_slot in candidate_ids:
+            return self._last_active_slot
+        if weight_candidate in candidate_ids:
+            self._last_active_slot = weight_candidate
+            return self._last_active_slot
+
+        previous_printing = next((slot.id for slot in slots if slot.is_printing and slot.spool_id), None)
+        if previous_printing in candidate_ids:
+            self._last_active_slot = previous_printing
             return self._last_active_slot
 
         present_with_spool: list[int] = []
@@ -455,14 +466,29 @@ class CfsBridge:
             self._last_active_slot = next(iter(candidate_ids))
             return self._last_active_slot
         if present_with_spool:
-            # Firmware can expose multiple "present" slots while only one prints.
-            # Keep UI responsive by picking a deterministic fallback.
-            self._last_active_slot = sorted(present_with_spool)[0]
+            # Keep last known or inferred candidates first; avoid hard slot-1 bias.
+            self._last_active_slot = present_with_spool[-1]
             return self._last_active_slot
         if candidate_ids:
-            self._last_active_slot = sorted(candidate_ids)[0]
+            self._last_active_slot = sorted(candidate_ids)[-1]
             return self._last_active_slot
         return None
+
+    def _infer_active_slot_from_weight_delta(self, slots: list[Slot]) -> Optional[int]:
+        best_slot: Optional[int] = None
+        best_delta = 0.0
+        for slot in slots:
+            if not slot.spool_id:
+                continue
+            previous = self._last_slot_weights.get(slot.id)
+            if previous is None:
+                continue
+            current = float(slot.current_weight)
+            delta = previous - current
+            if delta > best_delta and delta > 0.05:
+                best_delta = delta
+                best_slot = slot.id
+        return best_slot
 
     # ---------- DB helpers ----------
     def _write_snapshots(self, db: Session, cfs_slots: list[dict]) -> None:
